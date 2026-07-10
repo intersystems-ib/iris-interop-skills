@@ -41,7 +41,9 @@ either, because the tool names are identical:**
   [intersystems-community/iris-agentic-dev](https://github.com/intersystems-community/iris-agentic-dev).
 - **`iris-interop-dev`** (streamlined interop fork) — a 20-tool, interop-focused profile with fixed
   `iris_execute` (real output capture), `iris_query` (SQL/table hints), and `iris_production`
-  (works over HTTP, no Docker).
+  (works over HTTP, no Docker). Download from
+  [intersystems-ib/iris-interop-dev/releases](https://github.com/intersystems-ib/iris-interop-dev/releases/latest)
+  (`iris-interop-dev-windows-x64.exe`, `…-macos-arm64`, `…-linux-x64`).
 
 Register **one** of them in your `.mcp.json` (whichever binary you have). Each is a single
 self-contained binary.
