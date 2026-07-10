@@ -31,7 +31,7 @@ correctly reported it), it is **not** reportable.
 | Problem | Default target |
 |---|---|
 | MCP tool defect | the IRIS MCP repo (`intersystems-community/iris-agentic-dev`, or the fork in use) |
-| Skill content / routing / hook | the skills repo (`PYDuquesnoy/iris-interop-skills`) |
+| Skill content / routing / hook | the skills repo (`intersystems-ib/iris-interop-skills`) |
 | Workshop exercise / material | the workshop repo |
 
 Confirm the target with the user if unsure. Requires the GitHub CLI (`gh`) authenticated in the session.

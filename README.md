@@ -98,7 +98,7 @@ self-contained binary.
 1. **Add the marketplace + install the plugin:**
 
    ```text
-   /plugin marketplace add PYDuquesnoy/iris-interop-skills
+   /plugin marketplace add intersystems-ib/iris-interop-skills
    /plugin install iris-interop-skills@iris-interop-skills
    ```
 
