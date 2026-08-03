@@ -1,8 +1,19 @@
 #!/bin/sh
 # SessionStart bootstrap (iris-interop-skills) — inject the core interop conventions up front so a weak
 # model has them without needing to call the Skill tool. Thin wrapper: exec the .py. Resolves
-# python3 -> python -> py (Windows has no `python3`); exit 0 (no injection) if none is on PATH.
-PY=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || command -v py 2>/dev/null)
+# python3 -> python -> py (Windows has no real `python3`, only a Store stub that must be rejected); exit 0 (no injection) if none is on PATH.
+PY=
+for _cand in python3 python py; do
+    _path=$(command -v "$_cand" 2>/dev/null) || continue
+    # Being on PATH is not the same as working. Windows ships a 0-byte Microsoft Store
+    # stub named python3.exe in %LOCALAPPDATA%\Microsoft\WindowsApps: `command -v` finds
+    # it, exec'ing it prints "Python was not found" and exits non-zero. Taking the first
+    # name that resolves made every hook fail on a machine that had a perfectly good
+    # python.exe one PATH entry away. Run the candidate before trusting it.
+    "$_path" -c '' >/dev/null 2>&1 || continue
+    PY=$_path
+    break
+done
 [ -n "$PY" ] || exit 0
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$PY" "$DIR/interop_bootstrap.py"
