@@ -40,6 +40,10 @@ Class MyApp.BO.WriteCensusToSQL Extends Ens.BusinessOperation
 Parameter ADAPTER = "EnsLib.SQL.OutboundAdapter";
 Parameter INVOCATION = "Queue";
 
+/// Re-declare Adapter with the concrete type so `..Adapter.<method>` resolves to the
+/// adapter's own API instead of the generic Ens.OutboundAdapter.
+Property Adapter As EnsLib.SQL.OutboundAdapter;
+
 XData MessageMap
 {
 <MapItems>
