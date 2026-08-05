@@ -115,6 +115,118 @@ When using `EnsLib.RecordMap.Service.FileService` with a generated Record Map cl
 - **Quoted fields with embedded delimiters**: configure the Record Map's `Quote Character` (typically `"`) so the parser respects RFC-4180 quoting. `"García, hijo"` is one field with a literal comma; a `$PIECE`-by-comma hand-rolled parser corrupts it.
 - **Use the pre-built `FileService` class directly** — declare `ClassName="EnsLib.RecordMap.Service.FileService"` on the production item and set the `RecordMap`, `FilePath`, `Charset`, and `HeaderCount` settings (the last three on target `Adapter`; `RecordMap`, `HeaderCount`, `TargetConfigNames` on target `Host`). Don't subclass unless you genuinely need to override behaviour. See the canonical pattern above for the subclass case (custom BS that wraps Record Mapper output into a project-specific message).
 
+### Authoring the `XData RecordMap` block — the exact schema the validator accepts
+
+This is the **only** part you write by hand. Everything else in the class — `GetObject`,
+`PutObject`, `GetRecord`, `PutRecord`, `GetGeneratedClasses`, `getType`, `Parameter OBJECTNAME`
+and the whole `.Record` class — is written by the generator (next section). Write the skeleton
+plus the XData, generate, then `iris_doc get` the result back.
+
+A delimited CSV (comma-separated, UTF-8, LF line endings, `"` quoting), verbatim from a working
+production:
+
+```objectscript
+Class MyApp.RecordMap.Censo Extends EnsLib.RecordMap.RecordMap [ Not ProcedureBlock ]
+{
+
+XData RecordMap [ XMLNamespace = "http://www.intersystems.com/Ensemble/RecordMap" ]
+{
+<Record xmlns="http://www.intersystems.com/Ensemble/RecordMap"
+        name="MyApp.RecordMap.Censo"
+        type="delimited"
+        char_encoding="UTF-8"
+        recordTerminator="&#xA;"
+        targetClassname="MyApp.RecordMap.Censo.Record"
+        escaping="quote"
+        escapeSequence="&quot;">
+  <Separators>
+    <Separator>,</Separator>
+  </Separators>
+  <annotation>Censo de pacientes leído desde CSV.</annotation>
+  <Field name="ID"     datatype="%String" />
+  <Field name="Nombre" datatype="%String" />
+  <Field name="Planta" datatype="%String" />
+</Record>
+}
+
+}
+```
+
+**`fieldSeparator` is the trap that costs the most attempts.** For `type="delimited"` the
+attribute must be **absent**. Setting it to the obvious `fieldSeparator=","` fails with:
+
+```
+ERROR <EnsRecordMap>ErrInvalidRecordProp: Invalid value for property 'fieldSeparator' in Record of type delimited
+```
+
+which reads as "your value is malformed" but actually means "this property must not be set for
+this type at all". The IRIS validator is explicit — anything that is not `fixedwidth` must leave
+it empty:
+
+```objectscript
+If '(..type = "fixedwidth") {
+    If ..fieldSeparator '= "" Quit $$$ERROR($$$EnsRecordMapErrInvalidRecordProp, ..type, "fieldSeparator")
+```
+
+The separator for a delimited record goes in `<Separators>`, as one `<Separator>` element per
+nesting level (one element for a flat CSV).
+
+| What gets written | What the schema wants |
+|---|---|
+| `fieldSeparator=","` / `separator=","` attribute | **omit it**; use `<Separators><Separator>,</Separator></Separators>` |
+| `<Field type="%String"/>` | `datatype="%String"` |
+| `<Field>` outside `<Record>` | every `<Field>` nested inside `<Record>`; a `<Record>` with none fails `#5661 Collection property 'EnsLib.RecordMap.Model.Record::Contents' is required` |
+| `<RecordMap>` as the root element | the root is `<Record>` |
+| `recordTerminator="\n"` | an XML entity: `&#xA;` (or `&#10;`) for LF, `&#xD;&#xA;` for CRLF |
+| `[ DependsOn = MyApp.RecordMap.Censo.Record ]` on the first write | leave it off until the `.Record` exists — otherwise `#5373 Class '…Record', used by '…:dependson', does not exist` and the class is skipped. The generator adds it. |
+
+**`targetClassname` is the class the generator will create**, and it is free — it does not have to
+be `<RecordMap class>.Record`. Both conventions are in production use: a `.Record` suffix on the
+map's own name (`MyApp.RecordMap.Censo` → `MyApp.RecordMap.Censo.Record`), or a sibling package
+(`REDSA.RecordMap.Ifa` → `REDSA.Record.Ifa`). `name` is the record's identifier; it commonly
+mirrors either the map class or `targetClassname`.
+
+**On `xmlns`**: the `XMLNamespace` on the `XData` header is what matters. Repeating it as
+`xmlns=` on `<Record>` is optional — hand-written maps routinely omit it and generate fine, and
+the generator adds it when it rewrites the block, which is why classes read back from IRIS show
+it. Both `http://www.intersystems.com/recordmap` and
+`http://www.intersystems.com/Ensemble/RecordMap` are accepted.
+
+### Fixed-width instead of delimited
+
+`type="fixedWidth"` — **camelCase**. No `<Separators>`; every `<Field>` carries `position` (1-based,
+absolute within the record) and `width`. Verbatim from a running production, one of eight
+fixed-width maps generated at container start:
+
+```objectscript
+Class REDSA.RecordMap.Ifa Extends EnsLib.RecordMap.RecordMap
+{
+
+XData RecordMap [ XMLNamespace = "http://www.intersystems.com/recordmap" ]
+{
+<Record name="REDSA.Record.Ifa" type="fixedWidth" recordTerminator="&#10;" targetClassname="REDSA.Record.Ifa">
+  <Field name="TipoReg"       datatype="%String" position="1"   width="3"  />
+  <Field name="NumFactura"    datatype="%String" position="4"   width="15" />
+  <Field name="NumAlbaran"    datatype="%String" position="19"  width="15" />
+  <Field name="FechaFactura"  datatype="%String" position="34"  width="8"  />
+  <Field name="NumLinea"      datatype="%String" position="594" width="7"  />
+</Record>
+}
+
+}
+```
+
+Positions are absolute and must be contiguous with the widths — field N starts at
+`position(N-1) + width(N-1)`. Gaps you don't care about still need a field; the common idiom is a
+trailing `FILLER` that pads the record to its declared length (600 chars here).
+
+**Multi-record-type files** (a header type, N detail types, a trailer — discriminated by a type
+code at a fixed offset) need **one RecordMap class per record type**, not one map with variants.
+Before reaching for `EnsLib.RecordMap.Service.ComplexBatchFileService`, know that it — like
+`BatchFileService` — emits **one message per whole file**, not one per logical sub-batch. If you
+need a message per invoice/episode/block, no native ARM service does that: write a custom BS that
+reads the lines and assembles the sub-batch itself.
+
 ### Generating the Record Map (the `.Record` class + GetObject) — **a plain compile does NOT do this**
 
 The Record Map's `<Map>.Record` class **and** the `GetObject`/`PutObject`/`GetRecord`/`PutRecord` method bodies are written by the **wizard / generator into the source**, exactly like a generated SOAP client. A normal `iris_compile` (or `iris_doc put` with `compile=true`) of a Record Map class that contains only the XData block compiles green but produces **no working `GetObject`** — at runtime the FileService dies with `<METHOD DOES NOT EXIST>GetObject ... ^EnsLib.RecordMap.Service.Base.1`.
@@ -131,6 +243,10 @@ ClassMethod GenerateRecordMap(pRM As %String) As %String [ SqlProc ]
 
 Invoke with `SELECT Pkg_Bootstrap_GenerateRecordMap('Pkg.RecordMap.X')`. Notes:
 - `GenerateObject` errors `#5768 Class already exists` if the `.Record` already exists — delete it first, then regenerate.
+- **`GetObject` lives on the RecordMap class, not on `.Record`.** Verifying with
+  `##class(Pkg.RecordMap.X.Record).GetObject(...)` raises the same `<METHOD DOES NOT EXIST>` as
+  a missing generation, and sends you chasing the wrong cause. Check
+  `##class(Pkg.RecordMap.X).GetObject(...)`, or assert on the existence of the `.Record` class.
 - The generated `.Record` extends `(%Persistent, %XML.Adaptor, Ens.Request, EnsLib.RecordMap.Base)` with `Parameter INCLUDETOPFIELDS = 1`. It IS the source class for the routing rule and DTL.
 - **Disk is the source of truth**: after generating, `iris_doc get` both the Record Map class (now carrying the method bodies) and the `.Record`, and write them to `src/` — the generated code must be committed, not just live in IRIS. Regenerate whenever you edit the XData.
 
