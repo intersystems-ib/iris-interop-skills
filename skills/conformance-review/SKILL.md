@@ -1,6 +1,6 @@
 ---
 name: conformance-review
-description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. Use after building/modifying components, before declaring done, or whenever the user asks "is this implemented correctly / per best practices / conforme". This skill is the single source of truth for the conformance criteria (CR-1…CR-11); the `conformance-reviewer` agent and the `conformance-prescan` hook both check against it. Triggers EN: review, conformance, best practices, is this correct, code review, ready to ship. Triggers ES: revisar, conformidad, buenas prácticas, está bien implementado, cumple, revisión.
+description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. Use after building/modifying components, before declaring done, or whenever the user asks "is this implemented correctly / per best practices / conforme". This skill is the single source of truth for the conformance criteria (CR-1…CR-12); the `conformance-reviewer` agent and the `conformance-prescan` hook both check against it. Triggers EN: review, conformance, best practices, is this correct, code review, ready to ship. Triggers ES: revisar, conformidad, buenas prácticas, está bien implementado, cumple, revisión.
 ---
 
 # IRIS Interoperability — Conformance Review
@@ -30,9 +30,19 @@ re-plan from scratch and it never rewrites silently.
 2. **Load the relevant skills** so you judge against their guidance, not memory: `iris-interop-skills:interop`
    (router/naming), plus the component skills in play (`:bpl`, `:business-services`, `:transformations`,
    `:alerting`, `:hl7-schemas`, `:messages`, `:tdd`).
-3. **Check every criterion below** (CR-1…CR-11) against the actual code. Cite `file:line` and the exact
+3. **Check every criterion below** (CR-1…CR-12) against the actual code. Cite `file:line` and the exact
    best-practice it meets or breaks.
 4. **Re-verify tests for real** (CR-7): run `iris_test` on the test class; record the genuine result.
+4b. **Compare the namespace against the source tree** (CR-12). This is the one check that cannot be
+   done by reading code — it needs both sides:
+
+   ```
+   iris_symbols(query="<Pkg>.*", namespace="<NS>", limit=500)   ← default limit is 20; raise it
+   Glob("**/src/**/*.cls")                                       ← the tree
+   ```
+
+   Normalise both to class names (`src/Pkg/BO/Name.cls` → `Pkg.BO.Name`) and diff **in both
+   directions**. Report anything present in one and not the other.
 5. **Emit the report** (severity-tagged) → **a scoped remediation plan** → offer to **apply the safe
    fixes** (P0/P1 with an unambiguous canonical fix) only after the user confirms. Leave defensible
    choices as notes, not edits.
@@ -44,7 +54,7 @@ re-plan from scratch and it never rewrites silently.
 - **P2** — idiomatic gap that works but loses tooling/robustness (declarative vs procedural; missing alerts).
 - **P3** — cosmetic / naming / hardcoded paths.
 
-## Criteria (CR-1 … CR-11)
+## Criteria (CR-1 … CR-12)
 
 Items marked **⚙ pre-scannable** are also detected mechanically by the `conformance-prescan` hook from a
 single file's text; the rest need the agent's cross-file/semantic judgment.
@@ -62,6 +72,7 @@ single file's text; the rest need the agent's cross-file/semantic judgment.
 | **CR-9** | P3 | Naming: classes not `<Pkg>.<Tipo>.<Nombre>` (`.BS`/`.BP`/`.BO`/`.DT`/`.RUL`/`.MSG`), or production **Item Name** not `<Tipo>.<Nombre>`; Category ≠ package root. | Apply the interop naming convention; Category = package root; fixed `Ens.Alerts`. | `interop` |
 | **CR-10** ⚙ | P3 | A `.cls` with a **hardcoded absolute path** (`C:\…`, `/tmp/…`) instead of resolving relative to the install/source dir. | Parametrize via a Setting, or resolve with `##class(%Library.File).TempFilename`/`InstallDirectory`. | `production-lifecycle` |
 | **CR-11** ⚙ | P2 | An **object property of a message resolved to a `%Persistent` class with no delete cascade** — no `Trigger [ Event = DELETE ]` and no `%OnDelete` on the referencing message, no `OnDelete = Cascade` on the link. `Ens.Util.Tasks.Purge` then deletes the message and orphans the child rows, silently, forever. | Make it `%SerialObject` in `<Pkg>.DAT.<Name>` if it's a value object owned by the message (the default); if it must be `%Persistent` (shared / queried on its own / recursive / large), add the delete cascade to the **referencing** message class. | `messages` |
+| **CR-12** | **P1** | **A class exists in the IRIS namespace but not in `src/`** (or the reverse). The namespace is not version-controlled, not reviewable, and does not survive the instance — so work that lives only there is already lost, it just hasn't been noticed yet. Check both directions: a class only on disk was never compiled, or was deleted from the namespace, and the running production does not contain what the tree says it does. | `iris_doc(mode=get)` the namespace-only classes and write them to `src/` in the Atelier nested layout; compile or delete the disk-only ones so the two agree. Then fix the cause: hand-written classes go **`Write` → `iris_doc(mode=put)`** (a PreToolUse gate enforces it), wizard/generator output goes **generate → `iris_doc(mode=get)` → `Write`** (`soap-bo`, `messages`, `business-services`). | `production-lifecycle`, `soap-bo` |
 
 ## Output template
 

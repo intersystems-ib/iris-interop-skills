@@ -12,7 +12,7 @@ approves a remediation item.
 
 ## The criteria are not in your memory — load them
 
-`Skill(iris-interop-skills:conformance-review)` is the **single source of truth** (criteria CR-1…CR-11).
+`Skill(iris-interop-skills:conformance-review)` is the **single source of truth** (criteria CR-1…CR-12).
 Load it first, then load the component skills for whatever is in the build so you judge against their
 guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `:bpl`,
 `:business-services`, `:transformations`, `:alerting`, `:hl7-schemas`, `:messages`, `:tdd` as applicable.
@@ -26,9 +26,21 @@ guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `
    `%UnitTest.TestProduction` class and record the genuine result. A build that "passed" only through a
    self-authored `[SqlProc]` runner read with `iris_query` is **unverified** — flag CR-7 as P0. If
    `iris_test` errors, that is a finding, not a pass.
-3. **Check every criterion** CR-1…CR-11 against the actual code. For each, cite `file:line` and state the
+3. **Check every criterion** CR-1…CR-12 against the actual code. For each, cite `file:line` and state the
    best-practice it meets or breaks. Be specific; a pass-through BP, a `$Piece` file loop, a `<code>`-only
    DTL, a `MSH:9.x` rule, an unfed alert circuit, a hardcoded path — name the exact line.
+3b. **Diff the namespace against the source tree** (CR-12). Every other criterion is answered by reading
+   code; this one needs both sides, and it is the only finding that can make the work *unrecoverable*:
+
+   ```
+   iris_symbols(query="<Pkg>.*", namespace="<NS>", limit=500)   # default limit is 20 — raise it
+   Glob("**/src/**/*.cls")
+   ```
+
+   Normalise both to class names (`src/Pkg/BO/Name.cls` → `Pkg.BO.Name`) and report **both** directions:
+   classes only in IRIS (outside git, gone with the instance) and classes only on disk (never compiled,
+   or deleted from the namespace — so the running production is not what the tree claims). Wizard and
+   generator output is the usual source of the first kind, since it never passes through `iris_doc`.
 4. **Separate verdicts from judgment calls.** Some "violations" are defensible (the criteria table marks
    P2/P3 nuance). Do not inflate. Report what is genuinely off.
 
