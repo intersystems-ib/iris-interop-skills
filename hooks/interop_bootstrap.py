@@ -25,7 +25,12 @@ MSG = (
     "(6) ALWAYS pass namespace= to iris_production / iris_production_item / iris_credential_* / "
     "iris_lookup_* — it is documented as optional but omitting it fails ~95% of the time, with an "
     "internal error that never names the cause (<CLASS DOES NOT EXIST> Ens.Director, or Table "
-    "'ENS_CONFIG.CREDENTIALS' not found). check_config lists the namespaces on this connection."
+    "'ENS_CONFIG.CREDENTIALS' not found). check_config lists the namespaces on this connection; "
+    "(7) THE FILESYSTEM IS THE SOURCE OF TRUTH — never let a class exist only in the IRIS "
+    "namespace. Write src/<Pkg>/<Tipo>/<Name>.cls FIRST, then iris_doc(mode=put) the same "
+    "content; a PreToolUse gate BLOCKS a put whose class has no file on disk. Classes generated "
+    "by IRIS (RecordMap .Record, SOAP WSC.*) are the exception — export them with "
+    "iris_doc(mode=get) right after generating."
 )
 
 
