@@ -119,7 +119,7 @@ System Default Settings are the **only** layer that does NOT migrate via a produ
 | Production class structure, start/stop, settings, deployment, migration | `iris-interop-skills:production-lifecycle` |
 | Custom HL7 schemas, Z-segments, schema editor | `iris-interop-skills:hl7-schemas` |
 | Lookup tables (creating, loading, using in DTL) | `iris-interop-skills:lookup-tables` |
-| Searching messages, Visual Trace, Event Log, debugging, testing live components, SOAP tracing, purge | `iris-interop-skills:message-search-debug` |
+| **Looking at a RUNNING production for any reason** — did it arrive, how many rows landed, what did session N do, resend a message, queue depth, Visual Trace, Event Log, testing live components, SOAP tracing, purge. **Verifying a run that worked counts — not just debugging one that didn't.** | **`iris-interop-skills:message-search-debug`** — load it *before* writing any query against `Ens.MessageHeader` / `Ens_Util.Log` |
 | **FHIR work** — Façade vs Repository, OAuth2 PKCE, FHIR R4 Bundles, FHIR SQL Builder | `iris-interop-skills:fhir` |
 | **Securing endpoints** — SAML 2.0 / 1.1, OAuth 2.0 server + LDAP, SSL/TLS chain, internal account hygiene | `iris-interop-skills:security` |
 | **Alert circuit** — `Ens.Alert` router, dedup function set, ProductionMonitorService, per-BO alert settings | `iris-interop-skills:alerting` |
@@ -150,7 +150,8 @@ involved, issue several `Skill(...)` calls in the same turn.
 - Non-SOAP Business Operation → `Skill(iris-interop-skills:business-operations)`; SOAP BO → `Skill(iris-interop-skills:soap-bo)`.
 - Production class / start-stop / settings / deploy → `Skill(iris-interop-skills:production-lifecycle)`.
 - Custom HL7 schema → `Skill(iris-interop-skills:hl7-schemas)`; lookup tables → `Skill(iris-interop-skills:lookup-tables)`.
-- Searching/debugging live messages → `Skill(iris-interop-skills:message-search-debug)`.
+- **Any look at a running production** — verifying a run landed, searching messages, tracing a session,
+  resending → `Skill(iris-interop-skills:message-search-debug)`. Checking your own work counts.
 - FHIR → `Skill(iris-interop-skills:fhir)`; endpoint security → `Skill(iris-interop-skills:security)`;
   alert circuit → `Skill(iris-interop-skills:alerting)`; DICOM → `Skill(iris-interop-skills:dicom)`.
 

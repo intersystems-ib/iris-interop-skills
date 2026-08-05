@@ -1,15 +1,23 @@
 ---
 name: message-search-debug
-description: Visual Trace, Event Log, message search, debug. Routed from interop. Triggers: Message Viewer, Visual Trace, Event Log, message search, buscar mensaje, depurar, debug, resend, reenviar, troubleshoot, traza.
+description: Verify a run end-to-end, search messages, Visual Trace, Event Log, resend. Routed from interop. Load it whenever you are about to LOOK AT a running production — confirming a run worked counts, not only diagnosing a failure. Triggers EN: did it arrive, how many rows landed, verify end-to-end, check the run, Message Viewer, Visual Trace, Event Log, message search, resend, troubleshoot, queue depth. Triggers ES: verificar, comprobar, ha llegado, cuántos mensajes, ha funcionado, buscar mensaje, reenviar, depurar, traza, cola.
 ---
 
 # Message Search & Debug
 
-Operational troubleshooting on an IRIS Interop production. Four tools cover 95% of the work (Message Viewer, Visual Trace, Event Log, Production Status); the remaining 5% is per-BO SOAP tracing, retention/purge tuning, and bulk-resend recipes.
+Everything you do **after** a message enters a running production: confirming it arrived, following where it went, and resending it. Four tools cover 95% of the work (Message Viewer, Visual Trace, Event Log, Production Status); the remaining 5% is per-BO SOAP tracing, retention/purge tuning, and bulk-resend recipes.
 
 ## When to use this skill
 
-The user is troubleshooting: a message didn't arrive, a transformation produced wrong output, a BO is red, the Event Log is full of warnings, etc. **Or** the user wants to manually test a single component live (Management Portal "Test" link on a BS/BO/BP) without writing automated tests. For automated unit tests, see `unit-tests` instead.
+**Not only when something is broken.** The most common use is verifying a run that went *fine*: "did the 13 rows land", "how many messages did the BS send", "show me what session 103 did". If you are about to query a production's runtime state for any reason, this is the skill.
+
+Also: the user is troubleshooting (a message didn't arrive, a transform produced wrong output, a BO is red), or wants to manually test a single component live (Management Portal "Test" link on a BS/BO/BP) without writing automated tests. For automated unit tests, see `unit-tests` instead.
+
+> **Why the framing matters.** Measured over one workshop cohort day: 18 students ran **295
+> hand-written SQL queries** against `Ens.MessageHeader` / `Ens_Util.Log` versus 113 typed
+> `iris_interop_query` calls, producing 57 `%qaqqt` errors on the way. **56% of that SQL was
+> counting/verifying** and 41% plain listing. They were not debugging — they were checking their
+> own work, so nobody thought to load a skill called "debug". Zero loads across the cohort.
 
 ## The four tools (and when to use which)
 
@@ -48,6 +56,21 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 
 If you do fall back to raw `iris_query` and hit "table not found", **read the `hint`** it returns — it names the typed tool for that exact case.
 
+### Where raw SQL IS the right answer
+
+`iris_interop_query` returns **rows of headers and log entries**. It does not aggregate and it does
+not join to the message body. For these, a plain `iris_query` is correct — not a fallback:
+
+| Need | Why the typed tool can't |
+|---|---|
+| `SELECT COUNT(*) … GROUP BY TargetConfigName, Status` — how many landed where | no aggregation |
+| Join `Ens.MessageHeader` to the message-body class to see business fields (`PacienteId`, …) | returns headers only |
+| `COUNT(*) FROM Ens_Util.Log WHERE Type = 2` — how many errors, by component | no aggregation |
+
+Everything else — listing a session's messages, tailing the Event Log, following one message end to
+end, queue depths — has a typed call, and the typed call is one round trip against a table name you
+would otherwise guess. Use the table above; drop to SQL only for the three cases here.
+
 ## Searching by message body content
 
 Searchable when:
@@ -61,6 +84,27 @@ Not efficiently searchable when:
 ## Resending
 
 From the Message Viewer, a message can be **resent** to its original target or to a new target. Useful after a fix on a downstream system. Resend creates a new session — the old session stays as an audit trail.
+
+### Headless resend — there is no MCP tool for this
+
+`iris_interop_query` has no resend mode (`what` accepts only `logs`, `queues`, `messages`, `trace`,
+`partners`). Without the Portal, resend one message by header ID with:
+
+```objectscript
+Set newId = "", sc = ##class(Ens.MessageHeader).ResendDuplicatedMessage(<headerId>, .newId)
+// sc = %Status; newId = the header ID of the new message
+```
+
+Run it through `iris_execute`; it persists (this is a runtime side effect, not class generation, so
+it does not hit the objectgenerator no-op trap). Verified on IRIS 2026.1: resending header `102`
+returned `$$$OK` and `newId = 171`, and the new session appeared in `Ens.MessageHeader` immediately.
+
+**`docs_introspect` will not help you find this method** — asking for
+`Ens.MessageHeader::ResendDuplicatedMessage` returns `{"methods":[],"properties":[],"success":true}`,
+an empty result that reads as "no such method". It exists; the introspection just doesn't surface it.
+
+Confirm the resend landed by header ID, not by re-listing everything:
+`iris_query("SELECT ID, SessionId, TargetConfigName, Status FROM Ens.MessageHeader WHERE ID >= <newId>")`.
 
 For bulk resends (a batch failed during an outage), filter Message Viewer to the affected window + status `Error`, select all, resend. Before bulk-resending: verify **idempotency** on the downstream BO. A non-idempotent BO will create duplicates — fix that first or use a manual loop with deduplication logic in the BP.
 
