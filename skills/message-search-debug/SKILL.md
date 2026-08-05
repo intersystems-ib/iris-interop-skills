@@ -1,15 +1,23 @@
 ---
 name: message-search-debug
-description: Visual Trace, Event Log, message search, debug. Routed from interop. Triggers: Message Viewer, Visual Trace, Event Log, message search, buscar mensaje, depurar, debug, resend, reenviar, troubleshoot, traza.
+description: Verify a run end-to-end, search messages, Visual Trace, Event Log, resend. Routed from interop. Load it whenever you are about to LOOK AT a running production — confirming a run worked counts, not only diagnosing a failure. Triggers EN: did it arrive, how many rows landed, verify end-to-end, check the run, Message Viewer, Visual Trace, Event Log, message search, resend, troubleshoot, queue depth. Triggers ES: verificar, comprobar, ha llegado, cuántos mensajes, ha funcionado, buscar mensaje, reenviar, depurar, traza, cola.
 ---
 
 # Message Search & Debug
 
-Operational troubleshooting on an IRIS Interop production. Four tools cover 95% of the work (Message Viewer, Visual Trace, Event Log, Production Status); the remaining 5% is per-BO SOAP tracing, retention/purge tuning, and bulk-resend recipes.
+Everything you do **after** a message enters a running production: confirming it arrived, following where it went, and resending it. Four tools cover 95% of the work (Message Viewer, Visual Trace, Event Log, Production Status); the remaining 5% is per-BO SOAP tracing, retention/purge tuning, and bulk-resend recipes.
 
 ## When to use this skill
 
-The user is troubleshooting: a message didn't arrive, a transformation produced wrong output, a BO is red, the Event Log is full of warnings, etc. **Or** the user wants to manually test a single component live (Management Portal "Test" link on a BS/BO/BP) without writing automated tests. For automated unit tests, see `unit-tests` instead.
+**Not only when something is broken.** The most common use is verifying a run that went *fine*: "did the 13 rows land", "how many messages did the BS send", "show me what session 103 did". If you are about to query a production's runtime state for any reason, this is the skill.
+
+Also: the user is troubleshooting (a message didn't arrive, a transform produced wrong output, a BO is red), or wants to manually test a single component live (Management Portal "Test" link on a BS/BO/BP) without writing automated tests. For automated unit tests, see `unit-tests` instead.
+
+> **Why the framing matters.** Measured over one workshop cohort day: 18 students ran **295
+> hand-written SQL queries** against `Ens.MessageHeader` / `Ens_Util.Log` versus 113 typed
+> `iris_interop_query` calls, producing 57 `%qaqqt` errors on the way. **56% of that SQL was
+> counting/verifying** and 41% plain listing. They were not debugging — they were checking their
+> own work, so nobody thought to load a skill called "debug". Zero loads across the cohort.
 
 ## The four tools (and when to use which)
 
@@ -48,6 +56,90 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 
 If you do fall back to raw `iris_query` and hit "table not found", **read the `hint`** it returns — it names the typed tool for that exact case.
 
+### Where raw SQL IS the right answer
+
+`iris_interop_query` returns **rows of headers and log entries**. It does not aggregate and it does
+not join to the message body. For these, a plain `iris_query` is correct — not a fallback:
+
+| Need | Why the typed tool can't |
+|---|---|
+| `SELECT COUNT(*) … GROUP BY TargetConfigName, Status` — how many landed where | no aggregation |
+| Join `Ens.MessageHeader` to the message-body class to see business fields (`PacienteId`, …) | returns headers only |
+| `COUNT(*) FROM Ens_Util.Log WHERE Type = 2` — how many errors, by component | no aggregation |
+
+Everything else — listing a session's messages, tailing the Event Log, following one message end to
+end, queue depths — has a typed call, and the typed call is one round trip against a table name you
+would otherwise guess. Use the table above; drop to SQL only for the three cases here.
+
+## Searching by message content — the two joins
+
+`Ens.MessageHeader` holds no business data: it carries `MessageBodyClassName` (which class) and
+`MessageBodyId` (which row). To search on what the message *says*, join to the body.
+
+### Join 1 — header to a custom message class
+
+The join key is always `h.MessageBodyId = <BodyClass>.ID`. The SQL name of the body class is its
+package with dots turned into underscores **except the last** — `Ejercicio3.MSG.MenuReq` becomes
+`Ejercicio3_MSG.MenuReq`:
+
+```sql
+SELECT TOP 5 h.ID, h.SessionId, h.SourceConfigName, h.Status, r.PacienteId, r.FechaNacimiento
+FROM   Ens.MessageHeader h
+JOIN   Ejercicio3_MSG.MenuReq r ON h.MessageBodyId = r.ID
+WHERE  h.SourceConfigName = 'Router.Censo'
+ORDER  BY h.ID DESC
+```
+
+Filter on a body property to find every message about one entity —
+`WHERE h.TargetConfigName='BO.Menus' AND r.PacienteId='4003'`. **Read `MessageBodyClassName` first**:
+one production carries several body classes, and each needs its own join. Alerts are
+`Ens.AlertRequest` (`a.AlertText`) — `LEFT JOIN` it, since non-alert rows have no match. There is no
+`EnsLib_Messaging.AlertRequest`; guessing it costs a round trip.
+
+Only worth doing when the body class is `%Persistent` with the property indexed — see `messages`.
+A body sitting in `Ens.MessageBodyD` without a typed class is a full-table scan.
+
+### Join 2 — header to a Search Table (HL7 and other virtual documents)
+
+An HL7 body has no columns to join to, so **Search Tables** are the indexed path. A developer writes
+**one subclass per use case** (`Hospital.Search.HL7 Extends EnsLib.HL7.SearchTable`, with an
+`XData SearchSpec` naming the fields), but — this is the part that surprises people — **the subclass
+gets no table of its own**. Every HL7 search table in the namespace stores its rows in the shared
+base extent `EnsLib_HL7.SearchTable`:
+
+| Table | Columns |
+|---|---|
+| `EnsLib_HL7.SearchTable` | `ID`, `DocId`, `PropId`, `PropValue` — `DocId` **is** `Ens.MessageHeader.MessageBodyId` |
+| `Ens_Config.SearchTableProp` | `ID`, `Name`, `PropId`, `ClassExtent`, `ClassDerivation`, `PropType`, `IndexType`, … |
+
+So you select a search table's fields by **`PropId`**, never by table name:
+
+```sql
+SELECT TOP 10 h.ID, h.SessionId, h.SourceConfigName, p.Name, st.PropValue
+FROM   Ens.MessageHeader h
+JOIN   EnsLib_HL7.SearchTable st ON st.DocId = h.MessageBodyId
+JOIN   Ens_Config.SearchTableProp p
+       ON p.PropId = st.PropId AND p.ClassExtent = 'EnsLib.HL7.SearchTable'
+WHERE  p.Name = 'PatientID' AND st.PropValue = '16284718'
+```
+
+- **Join the catalogue on `PropId`, not on `ID`.** `Ens_Config.SearchTableProp.ID` is composite —
+  `EnsLib.HL7.SearchTable||Medication` — so `ON p.ID = st.PropId` compiles, returns zero rows, and
+  looks like "no data".
+- **`PropId` is unique only within a `ClassExtent`.** Without the `ClassExtent` predicate you match
+  X12/EDIFACT/ASTM/XML props that share the number.
+- **`ClassDerivation` tells you which subclass declared a prop** — `Hospital.Search.HL7~EnsLib.HL7.SearchTable`.
+  Filter `p.ClassDerivation LIKE 'Hospital.Search.HL7~%'` to scope to one use case.
+- Built-in HL7 props occupy the low ids (`MSHControlID`=1, `MSHTypeName`=2, `PatientAcct`=3,
+  `PatientID`=4, `PatientName`=5); custom ones are appended (`Medication`=12).
+- A field only becomes searchable **after** `SearchTableClass` is set on the BS/BO item, target
+  `Host` — and only for messages received from that point on. Existing messages are not back-indexed.
+
+Non-HL7 virtual documents follow the same shape with their own base extent
+(`EnsLib_EDI_X12.SearchTable`, `EnsLib_EDI_XML.SearchTable`, …). Custom non-VDoc search tables
+extend `Ens.CustomSearchTable`, whose own extent is `Ens.CustomSearchTable` with the same
+`DocId` key.
+
 ## Searching by message body content
 
 Searchable when:
@@ -61,6 +153,27 @@ Not efficiently searchable when:
 ## Resending
 
 From the Message Viewer, a message can be **resent** to its original target or to a new target. Useful after a fix on a downstream system. Resend creates a new session — the old session stays as an audit trail.
+
+### Headless resend — there is no MCP tool for this
+
+`iris_interop_query` has no resend mode (`what` accepts only `logs`, `queues`, `messages`, `trace`,
+`partners`). Without the Portal, resend one message by header ID with:
+
+```objectscript
+Set newId = "", sc = ##class(Ens.MessageHeader).ResendDuplicatedMessage(<headerId>, .newId)
+// sc = %Status; newId = the header ID of the new message
+```
+
+Run it through `iris_execute`; it persists (this is a runtime side effect, not class generation, so
+it does not hit the objectgenerator no-op trap). Verified on IRIS 2026.1: resending header `102`
+returned `$$$OK` and `newId = 171`, and the new session appeared in `Ens.MessageHeader` immediately.
+
+**`docs_introspect` will not help you find this method** — asking for
+`Ens.MessageHeader::ResendDuplicatedMessage` returns `{"methods":[],"properties":[],"success":true}`,
+an empty result that reads as "no such method". It exists; the introspection just doesn't surface it.
+
+Confirm the resend landed by header ID, not by re-listing everything:
+`iris_query("SELECT ID, SessionId, TargetConfigName, Status FROM Ens.MessageHeader WHERE ID >= <newId>")`.
 
 For bulk resends (a batch failed during an outage), filter Message Viewer to the affected window + status `Error`, select all, resend. Before bulk-resending: verify **idempotency** on the downstream BO. A non-idempotent BO will create duplicates — fix that first or use a manual loop with deduplication logic in the BP.
 
