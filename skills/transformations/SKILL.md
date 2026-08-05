@@ -126,6 +126,37 @@ When transforming CDA documents (HL7 CDA R2 XML), DTL is awkward because of deep
 
 In those cases either embed a single `code` action that calls a class method, or replace the DTL with a method on a BP.
 
+### ObjectScript inside XData is XML text — escape it
+
+A DTL lives in an `XData` block, so everything inside `<code>`, `<assign value=…>` and
+`<if condition=…>` is parsed as **XML first, ObjectScript second**. The operators that collide are
+exactly the ones ObjectScript uses most:
+
+| ObjectScript | Inside XData |
+|---|---|
+| `&&` | `&amp;&amp;` |
+| `&` | `&amp;` |
+| `<`, `<=` | `&lt;`, `&lt;=` |
+| `>` | `&gt;` (required inside attribute values) |
+
+```xml
+<!-- breaks: ERROR #6301 SAX XML Parser Error: expected entity name for reference -->
+<code>Quit:(tipo="")&&(val="")</code>
+
+<!-- works -->
+<code>Quit:(tipo="")&amp;&amp;(val="")</code>
+
+<!-- or wrap it, which survives copy-paste and later edits better -->
+<code><![CDATA[Quit:(tipo="")&&(val="")]]></code>
+```
+
+**`expected entity name for reference` always means an unescaped `&`.** The parser reports a line and
+offset **into the XData stream**, not into your source file, so the numbers will not match your editor
+— go looking for the `&`, not for line 10. Measured over a workshop cohort: **16 of 18 students** hit
+`#6301`.
+
+The same rule governs routing-rule XData and any hand-written `XData ProductionDefinition` — see `bpl`.
+
 ## Where per-record validation belongs — the DTL, with `Valido`/`ErrorMotivo` flags
 
 When an inbound flow must **validate each record and route valid vs invalid differently** (persist the good ones, send the bad ones to an error folder + alert), put the validation **in the DTL**, writing the outcome onto the target message as two properties — `Valido` (`%Boolean`) and `ErrorMotivo` (`%String`) — rather than failing the transform.

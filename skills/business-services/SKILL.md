@@ -52,6 +52,27 @@ Method OnProcessInput(pInput As EnsLib.RecordMap.Base, Output pOutput As %Regist
 }
 ```
 
+### `OnProcessInput`'s signature is fixed by the base class — there is not one shape
+
+The skeleton above is the **RecordMap / File** shape. Other base classes require a different argument
+list, and the compiler rejects anything else outright:
+
+```
+ERROR #5478: Keyword signature error in MyApp.BS.PacientesREST:Method:OnProcessInput,
+keyword 'method argument/s signature' must be
+'%Library.RegisteredObject,%Library.RegisteredObject,%Library.String' or its subclass
+  > ERROR #5030: An error occurred while compiling class 'MyApp.BS.PacientesREST'
+```
+
+Read that message literally: it **states the exact signature required** and is the authoritative answer
+for that superclass — match it instead of reasoning about what the arguments ought to be. Types may be
+narrowed to a subclass (`pInput As EnsLib.RecordMap.Base` in a `%RegisteredObject` slot), but the
+**arity cannot change**.
+
+Measured over a workshop cohort: **8 of 18 students** hit `#5478`, mostly by carrying the two-argument
+RecordMap shape onto a REST or HTTP service. When unsure, `docs_introspect` the base class's
+`OnProcessInput` before writing the override.
+
 ## Production naming — `Tipo.Nombre`
 
 Every BS/BO/Router/Util item has a name in the production XML. Use the convention `<Type>.<Name>` consistently across the production:
