@@ -17,7 +17,7 @@ This skill turns a confirmed problem into a **draft** issue and proposes it to t
 
 ## What's reportable
 
-- **Compliance / best-practice** (from `conformance-review`): a *confirmed* P0/P1 finding (CR-1…CR-10).
+- **Compliance / best-practice** (from `conformance-review`): a *confirmed* P0/P1 finding (CR-1…CR-11).
   Not P2/P3 nits, not unconfirmed/defensible calls.
 - **MCP / skill defect**: a *reproducible* tool malfunction in the deployed version — a tool that returns a
   wrong/empty result, an error_code that doesn't match reality, a crash, a skill that misroutes. Must have a

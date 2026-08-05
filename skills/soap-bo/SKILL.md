@@ -30,6 +30,10 @@ When the WSDL declares a string type **without a length facet**, the wizard-gene
 
 ## Storage decision: %SerialObject vs %Persistent for payloads
 
+> The general rule for **any** object property inside a message — not just wizard output — lives in
+> `messages` (**Complex properties**): `%SerialObject` by default, `%Persistent` only for a reason,
+> and a delete cascade whenever it is `%Persistent`. This section is the SOAP-specific slice.
+
 The wizard generates payload classes (the WSDL types). By default these are `%SerialObject` — embedded inside the carrying request/response, no separate storage. **Change to `%Persistent` when:**
 
 | Symptom / situation | Use %Persistent + delete trigger |
@@ -54,7 +58,7 @@ Trigger DeleteCascade [ Event = DELETE, Foreach = row/object ]
 }
 ```
 
-Or, equivalently, override `%OnDelete` on the carrier to clean up the payload references explicitly. The wizard does NOT generate this for you — you have to add it after switching to `%Persistent`.
+Or, equivalently, override `%OnDelete` on the carrier to clean up the payload references explicitly. **The wizard does NOT generate this for you** — you have to add it after switching to `%Persistent`. That is the SOAP-specific trap: the rest of the reasoning, and the reference-property form of the trigger, are in `messages`.
 
 ## Properties on the carrier vs the payload
 

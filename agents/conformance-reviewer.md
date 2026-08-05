@@ -12,7 +12,7 @@ approves a remediation item.
 
 ## The criteria are not in your memory — load them
 
-`Skill(iris-interop-skills:conformance-review)` is the **single source of truth** (criteria CR-1…CR-10).
+`Skill(iris-interop-skills:conformance-review)` is the **single source of truth** (criteria CR-1…CR-11).
 Load it first, then load the component skills for whatever is in the build so you judge against their
 guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `:bpl`,
 `:business-services`, `:transformations`, `:alerting`, `:hl7-schemas`, `:messages`, `:tdd` as applicable.
@@ -26,7 +26,7 @@ guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `
    `%UnitTest.TestProduction` class and record the genuine result. A build that "passed" only through a
    self-authored `[SqlProc]` runner read with `iris_query` is **unverified** — flag CR-7 as P0. If
    `iris_test` errors, that is a finding, not a pass.
-3. **Check every criterion** CR-1…CR-10 against the actual code. For each, cite `file:line` and state the
+3. **Check every criterion** CR-1…CR-11 against the actual code. For each, cite `file:line` and state the
    best-practice it meets or breaks. Be specific; a pass-through BP, a `$Piece` file loop, a `<code>`-only
    DTL, a `MSH:9.x` rule, an unfed alert circuit, a hardcoded path — name the exact line.
 4. **Separate verdicts from judgment calls.** Some "violations" are defensible (the criteria table marks

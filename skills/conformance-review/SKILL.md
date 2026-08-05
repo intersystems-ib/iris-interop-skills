@@ -1,6 +1,6 @@
 ---
 name: conformance-review
-description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. Use after building/modifying components, before declaring done, or whenever the user asks "is this implemented correctly / per best practices / conforme". This skill is the single source of truth for the conformance criteria (CR-1…CR-10); the `conformance-reviewer` agent and the `conformance-prescan` hook both check against it. Triggers EN: review, conformance, best practices, is this correct, code review, ready to ship. Triggers ES: revisar, conformidad, buenas prácticas, está bien implementado, cumple, revisión.
+description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. Use after building/modifying components, before declaring done, or whenever the user asks "is this implemented correctly / per best practices / conforme". This skill is the single source of truth for the conformance criteria (CR-1…CR-11); the `conformance-reviewer` agent and the `conformance-prescan` hook both check against it. Triggers EN: review, conformance, best practices, is this correct, code review, ready to ship. Triggers ES: revisar, conformidad, buenas prácticas, está bien implementado, cumple, revisión.
 ---
 
 # IRIS Interoperability — Conformance Review
@@ -23,7 +23,7 @@ re-plan from scratch and it never rewrites silently.
 2. **Load the relevant skills** so you judge against their guidance, not memory: `iris-interop-skills:interop`
    (router/naming), plus the component skills in play (`:bpl`, `:business-services`, `:transformations`,
    `:alerting`, `:hl7-schemas`, `:messages`, `:tdd`).
-3. **Check every criterion below** (CR-1…CR-10) against the actual code. Cite `file:line` and the exact
+3. **Check every criterion below** (CR-1…CR-11) against the actual code. Cite `file:line` and the exact
    best-practice it meets or breaks.
 4. **Re-verify tests for real** (CR-7): run `iris_test` on the test class; record the genuine result.
 5. **Emit the report** (severity-tagged) → **a scoped remediation plan** → offer to **apply the safe
@@ -37,7 +37,7 @@ re-plan from scratch and it never rewrites silently.
 - **P2** — idiomatic gap that works but loses tooling/robustness (declarative vs procedural; missing alerts).
 - **P3** — cosmetic / naming / hardcoded paths.
 
-## Criteria (CR-1 … CR-10)
+## Criteria (CR-1 … CR-11)
 
 Items marked **⚙ pre-scannable** are also detected mechanically by the `conformance-prescan` hook from a
 single file's text; the rest need the agent's cross-file/semantic judgment.
@@ -54,6 +54,7 @@ single file's text; the rest need the agent's cross-file/semantic judgment.
 | **CR-8** | P2 | HL7/REST message fields typed as non-`%String` (forced by `EnsLib.HL7`/REST string semantics), except genuinely typed synthetic fields. | Type HL7/REST-sourced message properties `As %String`. | `messages` |
 | **CR-9** | P3 | Naming: classes not `<Pkg>.<Tipo>.<Nombre>` (`.BS`/`.BP`/`.BO`/`.DT`/`.RUL`/`.MSG`), or production **Item Name** not `<Tipo>.<Nombre>`; Category ≠ package root. | Apply the interop naming convention; Category = package root; fixed `Ens.Alerts`. | `interop` |
 | **CR-10** ⚙ | P3 | A `.cls` with a **hardcoded absolute path** (`C:\…`, `/tmp/…`) instead of resolving relative to the install/source dir. | Parametrize via a Setting, or resolve with `##class(%Library.File).TempFilename`/`InstallDirectory`. | `production-lifecycle` |
+| **CR-11** ⚙ | P2 | An **object property of a message resolved to a `%Persistent` class with no delete cascade** — no `Trigger [ Event = DELETE ]` and no `%OnDelete` on the referencing message, no `OnDelete = Cascade` on the link. `Ens.Util.Tasks.Purge` then deletes the message and orphans the child rows, silently, forever. | Make it `%SerialObject` in `<Pkg>.DAT.<Name>` if it's a value object owned by the message (the default); if it must be `%Persistent` (shared / queried on its own / recursive / large), add the delete cascade to the **referencing** message class. | `messages` |
 
 ## Output template
 

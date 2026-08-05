@@ -2,8 +2,8 @@
 """PostToolUse conformance pre-scan for Write|Edit of IRIS .cls (iris-interop-skills).
 
 Cheap, deterministic pre-screen: when an interop class is written, scan that ONE file's
-text for the mechanically-detectable anti-patterns (the ⚙ criteria CR-1/2/4/5/7/10 in the
-conformance-review skill). If any match, nudge the model to run the conformance-reviewer
+text for the mechanically-detectable anti-patterns (the ⚙ criteria CR-1/2/4/5/7/10/11 in
+the conformance-review skill). If any match, nudge the model to run the conformance-reviewer
 agent for the real (cross-file, semantic) review. Advisory only — never blocks, only emits
 additionalContext, and stays silent when nothing matches. The agent, not this hook, is the
 source of the verdict; this only decides whether a review is worth running.
@@ -49,6 +49,16 @@ CHECKS = [
     ("CR-10", "hardcoded absolute path in a class",
      [r'"[A-Za-z]:\\|"/tmp/|"/usr/'],
      []),
+    # CR-11 fires on the PAYLOAD class, not on the message that carries it. The message is
+    # undecidable from one file: `Property Address As MyApp.DAT.Address` is the same text
+    # whether Address is %SerialObject (correct) or %Persistent (leaks) — the type lives in
+    # another file, so checking there would flag the correct, common case on every write.
+    # The payload itself IS decidable, and being declared %Persistent is the moment the
+    # decision goes wrong. Cross-file confirmation (is it referenced by a message at all?
+    # does that message cascade?) is the reviewer agent's job, not this hook's.
+    ("CR-11", "persistent message payload with no delete cascade — purge will orphan its rows",
+     [r"Class\s+[\w.]*\.(?:DAT|MSG)\.[\w.]+\s+Extends\s*[\s(][^{]*%Persistent"],
+     [r"Ens\.(?:Request|Response|Business|DataTransform)", r"\bTrigger\s+\w+", r"%OnDelete"]),
 ]
 
 
