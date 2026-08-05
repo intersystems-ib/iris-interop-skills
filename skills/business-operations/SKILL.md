@@ -65,6 +65,11 @@ Method InsertCensus(pRequest As MyApp.Msg.PatientCensusRequest, Output pResponse
 ```
 
 Key elements:
+- **`INVOCATION` on a BO is `"Queue"` — not the BP's `"Queued"`.** The parameter is valid on a
+  Business Operation; the *value vocabulary* differs from `Ens.BusinessProcess` (`InProc` /
+  `Queued`). Copying a BP template verbatim yields `<Ens>ErrParameterInvocationInvalid`, which
+  reads as "this parameter doesn't belong here" and sends you to delete the line — when the fix
+  is one letter.
 - `MessageMap` dispatches the right method per incoming request type.
 - `Adapter.*` calls do the protocol work; the method does the message-shape work.
 - Always parameterize SQL — never concatenate values.
