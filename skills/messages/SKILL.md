@@ -141,6 +141,13 @@ Alternatives that **fail**:
 
 Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch03_cda/cda-from-xsd-persistence-pattern.cls`.
 
+**Export what the wizard generated.** A CDA XSD produces dozens of classes, all of them written
+straight into the namespace — the source-of-truth gate never sees them, because the wizard does
+not go through `iris_doc(mode=put)`. `iris_doc(mode=get)` the generated package and write it to
+`src/` before doing anything else; the three settings above are edits *on top of* generated code,
+and losing them means re-deriving them from a 60-second serialisation failure. Same rule for
+SOAP-wizard output (`soap-bo`) and for the RecordMap generator (`business-services`).
+
 **Stylesheet security note**: the standard HL7 CDA stylesheet (`cda.xsl`) had multiple security holes before April 2014 — XSS via `nonXMLBody` rendered inside an `<iframe>`, illegal table attributes (`onmouseover`), image URIs to hostile sites. Use only the patched version from the HL7 Structured Documents Working Group.
 
 ## Comanda / Resposta inheritance for one-of-N payload subtypes
