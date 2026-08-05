@@ -36,6 +36,26 @@ BS_BO_SEGS = {"BS", "BO", "Service", "Operation", "BusinessService", "BusinessOp
 # for Load*/Import*/Compile* only — Delete/DeletePackage/Export are intentionally NOT matched.
 OBJ_BYPASS = re.compile(r"(?i)SYSTEM\.OBJ\)?\.(Load|Import|Compile)")
 
+# Tools whose `namespace` is documented as OPTIONAL but is effectively REQUIRED: they resolve
+# Ens.Director / Ens_Config.* in whatever namespace the connection defaults to, and if that one
+# is not interop-enabled the call dies with an internal error that never names the cause
+# (`<CLASS DOES NOT EXIST> Ens.Director`, `Table 'ENS_CONFIG.CREDENTIALS' not found`).
+#
+# Measured over a full workshop cohort (18 students, 15,079 tool calls): omitting `namespace`
+# on these failed 37 of 39 times (95%), against 16% when it was passed.
+#     iris_credential_list   14/14 failed      iris_production_item   7/7 failed
+#     iris_production        15/17 failed      iris_lookup_manage      1/1 failed
+#
+# Deliberately NOT listed, because the same capture proves they are fine without it:
+# `check_config` (0/41 failures) and `iris_get_log` (0/40). A blanket rule would be wrong.
+# Also not listed: iris_doc / iris_compile / iris_query / iris_execute / iris_test /
+# iris_interop_query — every observed call already passed `namespace`, so there is no evidence
+# either way and the gate does not guess.
+NS_REQUIRED = {
+    "iris_production", "iris_production_item", "iris_credential_list",
+    "iris_credential_manage", "iris_lookup_manage", "iris_lookup_transfer",
+}
+
 
 def deny(reason):
     print(json.dumps({"hookSpecificOutput": {
@@ -67,6 +87,22 @@ def main():
     ti = data.get("tool_input", {}) or {}
     names = collect_names(ti)
     content = ti.get("content") if isinstance(ti.get("content"), str) else ""
+
+    # (4) interop tool called without `namespace` — 95% of these fail, and the error that comes
+    # back names Ens.Director or a missing ENS_* table instead of the namespace. Cheaper to stop
+    # here: adding an explicit namespace is never wrong, so a false positive costs one parameter.
+    tool = str(data.get("tool_name") or "").split("__")[-1]
+    if tool in NS_REQUIRED and not ti.get("namespace"):
+        deny(
+            "`" + tool + "` was called without `namespace`. The parameter is documented as optional, "
+            "but it resolves Ens.Director / Ens_Config.* in the connection's default namespace — and "
+            "when that one is not interop-enabled the call fails with an internal error that never "
+            "names the cause (`<CLASS DOES NOT EXIST> Ens.Director`, `Table 'ENS_CONFIG.CREDENTIALS' "
+            "not found`). Measured over a workshop cohort: 37 of 39 such calls failed (95 percent), "
+            "against 16 percent when namespace was passed. Retry with the production's namespace, "
+            "e.g. `" + tool + "(namespace=\"<NS>\", ...)`. `check_config` lists the namespaces "
+            "available on this connection."
+        )
 
     # (3) iris_execute used to load/compile/import classes — bypasses iris_doc/iris_compile + this gate.
     code = ti.get("code") if isinstance(ti.get("code"), str) else ""
