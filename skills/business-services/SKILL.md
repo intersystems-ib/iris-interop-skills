@@ -176,14 +176,56 @@ nesting level (one element for a flat CSV).
 | `fieldSeparator=","` / `separator=","` attribute | **omit it**; use `<Separators><Separator>,</Separator></Separators>` |
 | `<Field type="%String"/>` | `datatype="%String"` |
 | `<Field>` outside `<Record>` | every `<Field>` nested inside `<Record>`; a `<Record>` with none fails `#5661 Collection property 'EnsLib.RecordMap.Model.Record::Contents' is required` |
-| `xmlns` only on the `XData` header | **both**: `XData RecordMap [ XMLNamespace = "…" ]` *and* `xmlns="…"` on `<Record>` |
-| `recordTerminator="\n"` | an XML entity: `&#xA;` for LF, `&#xD;&#xA;` for CRLF |
-| `name="Censo"` | the **full class name** of the RecordMap: `name="MyApp.RecordMap.Censo"` |
-| `targetClassname` invented | exactly `<RecordMap class name>.Record` |
+| `<RecordMap>` as the root element | the root is `<Record>` |
+| `recordTerminator="\n"` | an XML entity: `&#xA;` (or `&#10;`) for LF, `&#xD;&#xA;` for CRLF |
 | `[ DependsOn = MyApp.RecordMap.Censo.Record ]` on the first write | leave it off until the `.Record` exists — otherwise `#5373 Class '…Record', used by '…:dependson', does not exist` and the class is skipped. The generator adds it. |
 
-Fixed-width instead of delimited: `type="fixedwidth"`, no `<Separators>`, and each `<Field>`
-carries its own width.
+**`targetClassname` is the class the generator will create**, and it is free — it does not have to
+be `<RecordMap class>.Record`. Both conventions are in production use: a `.Record` suffix on the
+map's own name (`MyApp.RecordMap.Censo` → `MyApp.RecordMap.Censo.Record`), or a sibling package
+(`REDSA.RecordMap.Ifa` → `REDSA.Record.Ifa`). `name` is the record's identifier; it commonly
+mirrors either the map class or `targetClassname`.
+
+**On `xmlns`**: the `XMLNamespace` on the `XData` header is what matters. Repeating it as
+`xmlns=` on `<Record>` is optional — hand-written maps routinely omit it and generate fine, and
+the generator adds it when it rewrites the block, which is why classes read back from IRIS show
+it. Both `http://www.intersystems.com/recordmap` and
+`http://www.intersystems.com/Ensemble/RecordMap` are accepted.
+
+### Fixed-width instead of delimited
+
+`type="fixedWidth"` — **camelCase**. No `<Separators>`; every `<Field>` carries `position` (1-based,
+absolute within the record) and `width`. Verbatim from a running production, one of eight
+fixed-width maps generated at container start:
+
+```objectscript
+Class REDSA.RecordMap.Ifa Extends EnsLib.RecordMap.RecordMap
+{
+
+XData RecordMap [ XMLNamespace = "http://www.intersystems.com/recordmap" ]
+{
+<Record name="REDSA.Record.Ifa" type="fixedWidth" recordTerminator="&#10;" targetClassname="REDSA.Record.Ifa">
+  <Field name="TipoReg"       datatype="%String" position="1"   width="3"  />
+  <Field name="NumFactura"    datatype="%String" position="4"   width="15" />
+  <Field name="NumAlbaran"    datatype="%String" position="19"  width="15" />
+  <Field name="FechaFactura"  datatype="%String" position="34"  width="8"  />
+  <Field name="NumLinea"      datatype="%String" position="594" width="7"  />
+</Record>
+}
+
+}
+```
+
+Positions are absolute and must be contiguous with the widths — field N starts at
+`position(N-1) + width(N-1)`. Gaps you don't care about still need a field; the common idiom is a
+trailing `FILLER` that pads the record to its declared length (600 chars here).
+
+**Multi-record-type files** (a header type, N detail types, a trailer — discriminated by a type
+code at a fixed offset) need **one RecordMap class per record type**, not one map with variants.
+Before reaching for `EnsLib.RecordMap.Service.ComplexBatchFileService`, know that it — like
+`BatchFileService` — emits **one message per whole file**, not one per logical sub-batch. If you
+need a message per invoice/episode/block, no native ARM service does that: write a custom BS that
+reads the lines and assembles the sub-batch itself.
 
 ### Generating the Record Map (the `.Record` class + GetObject) — **a plain compile does NOT do this**
 
