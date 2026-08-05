@@ -77,6 +77,44 @@ Stepping over 1-2-3 ("just write the DTL first") is the most common anti-pattern
 
 > "I'll write the test first. It defines what 'done' means, and we'll know we're done when it passes."
 
+### Step 3 is the load-bearing one — a test that never went red proves nothing
+
+**If the first run of a test class is green, TDD did not happen.** The test was written against
+code that already existed, so its assertions describe what the code *does* rather than what the
+spec *requires* — and a bug in the code gets faithfully encoded as the expected result. No count
+of assertions can detect this.
+
+Measured over a workshop cohort: **67 of 103 test classes (65%) were green on their first ever
+run**, while assertion density looked perfectly healthy — 5.3 `Test*` methods per class, 2.8
+asserts per method. The tests were plentiful and shallow at the same time. "Write more
+assertions" would not have fixed one of them.
+
+Recovery when you find a green-on-first-run test is not to delete it: add one case that **fails
+right now**, against the implementation as it stands. If you cannot write one, you are not yet
+testing the spec.
+
+## How much test is enough — the completeness checklist
+
+A component is covered when, for its spec, the test class has:
+
+| | What | Why it is not optional |
+|---|---|---|
+| 1 | **The happy path, asserting on values** — not merely on `$$$ISOK` | A green `%Status` says the code ran, not that it was right |
+| 2 | **One rejection case per validation rule in the spec** | Each rule is a claim; an untested rule is a guess |
+| 3 | **Boundary values** — empty, maximum length, zero, first and last valid item | `MAXLEN` truncation and off-by-one live exactly here, and both fail *silently* |
+| 4 | **The malformed inputs the spec says to reject**, asserting the *rejection* | "Rejected cleanly" and "blew up" are different outcomes; only one is correct |
+| 5 | **One case per branch you wrote** — each `if`, each `switch` case, each `<when>` of a rule | An unexercised branch is untested code under a passing suite |
+
+The fixtures usually *are* the checklist in disguise. A CSV censo flow whose spec says *dates are
+`DD/MM/YYYY`*, *allergies are `|`-separated and empty means SQL NULL*, *a quoted comma is one
+field*, *`ñ` and accents are preserved* has **four** edge cases named in the spec itself — and a
+date like `32/13/1990` sitting in the sample data is not a nuisance, it is test case 4 handed to
+you.
+
+Anti-pattern worth naming: a `Test*` method whose only assertion is `$$$AssertStatusOK(sc)`. That
+asserts the component did not error. It does not assert it did the right thing, and it passes
+against an implementation that silently drops every field.
+
 ## What's testable in IRIS Interop — decision table
 
 | Component | Test approach |
