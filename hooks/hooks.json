@@ -12,7 +12,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "mcp__.*__iris_doc|iris_doc|mcp__.*__iris_compile|iris_compile|mcp__.*__iris_execute|iris_execute",
+        "matcher": "mcp__.*__iris_doc|iris_doc|mcp__.*__iris_compile|iris_compile|mcp__.*__iris_execute|iris_execute|mcp__.*__iris_production|iris_production|mcp__.*__iris_production_item|iris_production_item|mcp__.*__iris_credential_list|iris_credential_list|mcp__.*__iris_credential_manage|iris_credential_manage|mcp__.*__iris_lookup_manage|iris_lookup_manage|mcp__.*__iris_lookup_transfer|iris_lookup_transfer",
         "hooks": [
           {
             "type": "command",

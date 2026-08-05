@@ -21,7 +21,11 @@ MSG = (
     "(4) reach IRIS ONLY through the MCP (iris_doc/iris_compile/iris_test) — never iris.exe / "
     "iris session / $SYSTEM.OBJ.Load / $SYSTEM.OBJ.Compile; "
     "(5) TDD: a component is done only when its %UnitTest.TestProduction actually runs GREEN via "
-    "iris_test (NO_TESTS_FOUND means compile the test first and pass the exact class name)."
+    "iris_test (NO_TESTS_FOUND means compile the test first and pass the exact class name); "
+    "(6) ALWAYS pass namespace= to iris_production / iris_production_item / iris_credential_* / "
+    "iris_lookup_* — it is documented as optional but omitting it fails ~95% of the time, with an "
+    "internal error that never names the cause (<CLASS DOES NOT EXIST> Ens.Director, or Table "
+    "'ENS_CONFIG.CREDENTIALS' not found). check_config lists the namespaces on this connection."
 )
 
 
