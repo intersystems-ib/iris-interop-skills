@@ -32,7 +32,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|mcp__.*__iris_doc|iris_doc",
         "hooks": [
           {
             "type": "command",
@@ -50,6 +50,15 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/docker-detect.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__iris_test|iris_test",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/tdd-first-green.sh"
           }
         ]
       }
