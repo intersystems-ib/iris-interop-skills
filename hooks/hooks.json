@@ -19,6 +19,15 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/interop-conformance-gate.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*__iris_doc|iris_doc",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/src-before-iris.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

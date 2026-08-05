@@ -11,6 +11,48 @@ The Production is the runtime container. It's a class extending `Ens.Production`
 
 **Code lives on disk and gets pushed to IRIS, not the other way around.** A workshop is shipped over git; the `.cls` files in `src/` are canonical. IRIS is a runtime mirror — reinstall it tomorrow and you should be able to reload everything from disk.
 
+> **Enforced, not merely advised.** A PreToolUse gate **denies** `iris_doc(mode=put)` when the
+> class has no file under the project: write `src/<Pkg>/<Tipo>/<Name>.cls` first, then put the
+> same content. Classes generated *by* IRIS — RecordMap `.Record`, SOAP-wizard `WSC.*` — are
+> exempt, and their rule is the mirror image: `iris_doc(mode=get)` them into `src/` immediately
+> after generating.
+
+### Drift is silent — check it before calling the work done
+
+Nothing in the toolchain compares the namespace against the source tree, so the two diverge with
+no symptom at all. Audited on one real VM at the end of a workshop:
+
+```
+28 classes on disk · 29 in IRIS · only 22 in common
+```
+
+**Seven existed only in the namespace** — and not scratch work: an entire HL7 canonical flow
+(`DT.HL7ToCanonico` → `MSG.PacienteCanonico` → `DT.CanonicoToMenu` / `DT.CanonicoToSOAP`, plus
+`DT.AL1ToString` and its test), written straight to IRIS in the closing hours and never exported.
+**Six existed only on disk** — written but never compiled, or compiled and later deleted from the
+namespace. Both directions had happened, and nothing made it visible.
+
+The check is cheap:
+
+```objectscript
+ClassMethod DriftReport(pPkg As %String, pSrcDir As %String) As %String [ SqlProc ]
+{
+    Set onlyIris = "", n = $Length(pPkg) + 1, k = ""
+    For {
+        Set k = $Order(^oddCOM(k))  Quit:k=""
+        Continue:$Extract(k, 1, n) '= (pPkg _ ".")
+        Set f = pSrcDir _ "/" _ $Replace(k, ".", "/") _ ".cls"
+        If '##class(%Library.File).Exists(f) {
+            Set onlyIris = onlyIris _ $Select(onlyIris="":"", 1:", ") _ k
+        }
+    }
+    Quit $Select(onlyIris="":"in sync", 1:"ONLY IN IRIS: " _ onlyIris)
+}
+```
+
+Run it before declaring a production done, and after any session that used the Management Portal
+or a wizard — those write straight into the namespace and never touch disk.
+
 Layout (VS Code ObjectScript plugin convention — **Atelier-style nested**, NOT flat dotted filenames):
 
 ```
