@@ -199,7 +199,7 @@ call (e.g. `check_config`) runs without a prompt.
 | `message-search-debug` | Message search, Visual Trace, the Event Log. |
 | `tdd` | TDD-first workflow (companion skill — load it alongside the others). |
 | `unit-tests` | `%UnitTest` framework reference. |
-| `conformance-review` | Post-build best-practice review (criteria CR-1…CR-10) — run it once a build is TDD-green. |
+| `conformance-review` | Post-build best-practice review (criteria CR-1…CR-11) — run it once a build is TDD-green. |
 | `report-issue` | Optionally propose a **deduped, user-confirmed** GitHub issue for a confirmed compliance violation or a reproducible MCP/skill defect (never auto-files; batches findings). |
 
 ### Agents (`agents/`)
@@ -212,7 +212,7 @@ Claude delegate based on the task description:
 | `interop-builder` | Build/modify any interop component end-to-end with TDD — loads the right skills, writes the test first, implements via the MCP, returns only when it compiles and the test is green. |
 | `deploy-smoke-test` | Start a production, feed a sample input, and verify the message actually flowed (Event Log + Message Header + downstream target). |
 | `introspect-dont-guess` | Resolve real class/table/column/config names from the live IRIS catalog instead of guessing (prevents nonexistent-table errors). |
-| `conformance-reviewer` | After a build is TDD-green, review it against the best-practice criteria (CR-1…CR-10) — re-verifies tests via the real `iris_test` (not a self-graded `[SqlProc]`), reports findings + a scoped remediation plan, applies only unambiguous fixes after you confirm. |
+| `conformance-reviewer` | After a build is TDD-green, review it against the best-practice criteria (CR-1…CR-11) — re-verifies tests via the real `iris_test` (not a self-graded `[SqlProc]`), reports findings + a scoped remediation plan, applies only unambiguous fixes after you confirm. |
 
 The agents are **MCP-server-agnostic** (no server name pinned in their tools), so they work with either
 the `iris-agentic-dev` or `iris-interop-dev` MCP.

@@ -24,6 +24,9 @@ Is the data HL7 v2.x?
     │   │         wrapped in an Ens.Request/Response carrier.
     │   └── NO
     │       └── Custom payload → persistent message (see below)
+    │           └── Any property an object rather than a scalar?
+    │               → see "Complex properties" below — the sub-object's
+    │                 class type is a decision, not a detail.
 ```
 
 ## Canonical pattern — custom persistent message
@@ -43,6 +46,72 @@ Storage Default { /* lives in MyApp.Msg.PatientCensusRequestD, not Ens.MessageBo
 
 Pair Request with a Response class extending `(Ens.Response, %Persistent)`. If the operation is fire-and-forget, return `Ens.Response` directly — no custom Response class needed.
 
+## Complex properties — what class for an object inside a message
+
+The canonical example above is all scalars. As soon as a property is an **object** — an `Address`
+inside a `Person`, a `Coverage` inside a `Claim` — you are choosing a storage model, and the wrong
+choice fails silently months later.
+
+**Default to `%SerialObject`.** `Address` has no life of its own: it isn't queried on its own, isn't
+shared between messages, and dies with its `Person`. A `%SerialObject` serialises **inline into the
+message's own row**, so purging the message takes the address with it. Nothing else to wire.
+
+Name it per the existing convention (`interop`, naming table): internal `%SerialObject` data classes
+go in the **`.DAT`** sub-package.
+
+```objectscript
+Class MyApp.DAT.Address Extends (%SerialObject, %XML.Adaptor)
+{
+Property Calle    As %String(MAXLEN = 200);
+Property Ciudad   As %String(MAXLEN = 100);
+Property CodPostal As %String(MAXLEN = 10);
+}
+
+Class MyApp.MSG.PersonReq Extends (Ens.Request, %Persistent)
+{
+Property Nombre  As %String(MAXLEN = 100);
+Property Address As MyApp.DAT.Address;   // embedded — purged with the message
+}
+```
+
+**Switch to `%Persistent` only for a reason.** There are four, and "it felt more real" is not one:
+
+| Situation | Type | What else is required |
+|---|---|---|
+| Value object, owned by one message (`Address`, `Contact`, `Amount`) | `%SerialObject` | Nothing — purge is automatic |
+| **Shared** by several messages, or referenced after the message is purged | `%Persistent` | Delete cascade on the carrier (below) |
+| Must be **queried on its own** (SQL, `message-search-debug`, reporting) | `%Persistent` | Delete cascade + indexes |
+| **Recursive** (`Component` containing `Component` — CDA sections) | `%Persistent` | Delete cascade — a recursive `%SerialObject` won't even compile (cyclic reference) |
+| **Large** (>100 KB serialised) and retained in volume | `%Persistent` | Delete cascade — keeps `Ens.MessageBodyD` from bloating |
+
+### If it is `%Persistent`, the delete cascade is not optional
+
+A `%Persistent` sub-object gets **its own row**. `Ens.Util.Tasks.Purge` deletes `Ens.MessageHeader`
+and the message row — it does **not** know about the child. The child rows accumulate forever, with
+no error and nothing in the Event Log; you find out when the table is the biggest thing in the
+namespace.
+
+The cascade goes on the class that **references** the object — the message — not on the child:
+
+```objectscript
+Class MyApp.MSG.PersonReq Extends (Ens.Request, %Persistent)
+{
+Property Address As MyApp.DAT.Address;   // %Persistent in this variant
+
+Trigger DeleteCascade [ Event = DELETE, Foreach = row/object ]
+{
+    Do ##class(MyApp.DAT.Address).%DeleteId({Address})
+}
+}
+```
+
+Equivalent alternatives: override `%OnDelete` on the message and clean the references explicitly, or
+— for parent-child hierarchies generated from an XSD — declare `OnDelete = Cascade` on the link (see
+the CDA-from-XSD section below).
+
+This is the same rule the SOAP wizard case runs into; `soap-bo` covers the wizard-specific angle
+(it generates `%SerialObject` payloads and never generates the trigger for you).
+
 ## Canonical pattern — HL7 message
 
 Don't create a class. Use `EnsLib.HL7.Message` everywhere a message body is referenced:
@@ -55,7 +124,7 @@ The DocType (e.g. `2.5:ADT_A01`) controls structure; it's set on the BS adapter 
 
 ## Canonical pattern — SOAP-wizard messages
 
-SOAP wizard output: payload classes typically `%SerialObject` (embedded, no separate storage). For very complex SOAP messages — e.g. a CDA wrapped in SOAP, with deeply recursive structures — switch the payload to `%Persistent` so each instance gets its own storage and the recursion doesn't blow up `Ens.MessageBodyD`. Add a delete trigger so child rows are cleaned up on parent purge.
+SOAP wizard output: payload classes typically `%SerialObject` (embedded, no separate storage) — the same default as any hand-written sub-object. For very complex SOAP messages — e.g. a CDA wrapped in SOAP, with deeply recursive structures — switch the payload to `%Persistent` so each instance gets its own storage and the recursion doesn't blow up `Ens.MessageBodyD`, and add the delete cascade per **Complex properties** above. The wizard does not generate the trigger for you.
 
 ## CDA-from-XSD persistence pattern
 
@@ -118,7 +187,8 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/xml-p
 - **Putting business properties on the carrier instead of the payload** in SOAP scenarios → wizard regeneration overwrites them.
 - **Missing pair**: Request without matching Response when the operation is synchronous and the BP expects a typed response.
 - **Forgetting indexes** on properties used by `message-search-debug` — message search is fast only on indexed properties.
-- **Recursive properties on a `%SerialObject`** (e.g. CDA's nested sections) → switch to `%Persistent` and add a delete trigger.
+- **An object property typed `%Persistent` "to be safe", with no delete cascade** → the child rows survive every purge. No error, nothing in the Event Log, the table just grows forever. Either make it `%SerialObject` (the default for a value object) or add the trigger — see **Complex properties**.
+- **Recursive properties on a `%SerialObject`** — a class that contains itself (CDA's nested sections are the classic case) → cyclic-reference compile error; switch to `%Persistent` and add the delete cascade.
 - **Adding `SourceFilename` / `SourceLine` to a message that comes from a Record Mapper Record** for CSV-line forensics → Record Mapper doesn't fill those properties at runtime, even if you declare them. If you need this correlation, propagate from the BS adapter (e.g. `Ens.MessageHeader` carries `%Source` / `%FileName` from the file adapter) instead of adding properties that stay empty.
 
 ## Testing / how to verify
@@ -181,6 +251,11 @@ SELECT COUNT(*) FROM <Pkg>_Msg.<Parent>_AlergiasList WHERE <Parent> = :id
 
 Don't substitute a pipe-string property for a typed collection if downstream consumers want collection semantics — the conversion belongs in the DTL one time, not in every consumer.
 
+For `list Of <ObjectClass>`, the `<ObjectClass>` follows the same rule as any object property — see
+**Complex properties**: `%SerialObject` unless one of the four reasons applies, and a delete cascade
+if it ends up `%Persistent`. A collection multiplies the leak: N orphaned child rows per message
+instead of one.
+
 ## When NOT to use this skill — fall back to docs
 
 - Designing FHIR resources (use `HS.FHIR.*` patterns — different from generic Interop messages).
@@ -194,3 +269,5 @@ Don't substitute a pipe-string property for a typed collection if downstream con
 - `hl7-schemas` — when the HL7 message needs a custom Z-segment schema
 - `soap-bo` — SOAP wizard customisations, including `xsi:type` suppression and other generated-proxy patches
 - `fhir` — FHIR resources are not generic Interop messages; different rules apply
+- `message-search-debug` — where the purge that exposes a missing delete cascade actually runs
+- `production-lifecycle` — `Ens.Util.Tasks.Purge` belongs in the production from day one
