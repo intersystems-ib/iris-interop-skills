@@ -48,12 +48,32 @@ Avoid the documentation-default `RunTest` invocation that loads from `^UnitTestR
 |---|---|
 | **`do ##class(MyApp.Tests.X).Run()`** | Default for Interop work. Same-process, returns a status, no docker exec required. No load/delete of test source — but still requires `^UnitTestRoot` set to an existing dir (see above). |
 | **`do ##class(%UnitTest.Manager).DebugRunTestCase("", "MyApp.Tests.X", "/noload/norecursive/nodelete")`** | When you need the manager's full lifecycle (suite tracking, log granularity) but not its load-and-delete behaviour. Use **boolean qualifiers** only (see pitfall below). |
-| **SqlProc wrapper around `DebugRunTestCase` invoked via `iris_query`** | MCP-friendly path when `iris_test` isn't available (it requires `IRIS_CONTAINER` / docker exec — fails on Windows-host IRIS). See the wrapper template below. |
+| **SqlProc wrapper around `DebugRunTestCase` invoked via `iris_query`** | **Legacy fallback only** — see the warning below. `iris_test` runs over HTTP and needs no container; prefer it whenever the MCP is present. |
 | **`%UnitTest.Portal` UI** | Visual, navigable; for inspecting results, not driving runs. |
 
-### MCP-friendly runner: the SqlProc wrapper
+### The SqlProc wrapper — legacy fallback, and how it silently lies
 
-When driving IRIS from MCP, wrap `DebugRunTestCase` in a SqlProc the bootstrap class exposes, then call via `iris_query`:
+> **Prefer `iris_test`.** This wrapper existed because `iris_test` used to require `IRIS_CONTAINER` /
+> docker exec. It no longer does — it works over HTTP against a Windows-host IRIS. `conformance-review`
+> **CR-7 flags a `[SqlProc]`-returned "PASS" as unverified**, and the reason is below.
+
+**A runner that counts assert rows cannot detect a test that crashed.** If a method raises before its
+first `$$$Assert*` — an `<UNDEFINED>` on an uninitialised variable is the common case — it writes **zero
+assert rows**. A loop that scans the asserts looking for a failure finds none, and counts the method as
+**passed**. Verified on IRIS for Health 2026.1:
+
+```
+LogStateStatus:0:TestRevienta: ERROR #5002: <UNDEFINED>… <<==== **FAILED**
+TestRevienta failed
+…
+passed=2 failed=0          ← what an assert-counting wrapper reported for that same run
+```
+
+The framework itself is right — `%UnitTest` records the method as failed and `iris_test` reports it red.
+Only the hand-rolled summary is wrong.
+
+**The fix is to read the method node's own verdict**, not its assert children. `$LISTGET(node,1)` is the
+framework's own pass/fail flag and it is already correct for both failure modes:
 
 ```objectscript
 ClassMethod RunTestClass(pClassName As %String) As %String [ SqlProc ]
@@ -69,9 +89,10 @@ ClassMethod RunTestClass(pClassName As %String) As %String [ SqlProc ]
         Set m = ""
         For {
             Set m = $O(^UnitTest.Result(resultId, suite, pClassName, m))  Quit:m=""
-            Set ok = 1, s = ""
-            For { Set s = $O(^UnitTest.Result(resultId, suite, pClassName, m, s))  Quit:s=""
-                  If $LISTGET($G(^UnitTest.Result(resultId, suite, pClassName, m, s)), 1) = 0 Set ok = 0 }
+            // The METHOD node carries the framework's own verdict. Do NOT scan the assert
+            // children: a method that crashed before its first assert has none, and an
+            // "any child failed?" loop then reports it as passed.
+            Set ok = +$LISTGET($G(^UnitTest.Result(resultId, suite, pClassName, m)), 1)
             If ok { Set passed = passed + 1 }
             Else  { Set failed = failed + 1, failedList = failedList _ $S(failedList="":"", 1:", ") _ m }
         }
@@ -79,6 +100,10 @@ ClassMethod RunTestClass(pClassName As %String) As %String [ SqlProc ]
     Quit "passed="_passed_" failed="_failed_$S(failed>0:" | failures: "_failedList, 1:"")_" | rid="_resultId
 }
 ```
+
+Verified on IRIS for Health 2026.1 against a class with one passing method, one failing assert and one
+`<UNDEFINED>` crash: `passed=1 failed=2 | failures: TestAssertFalla, TestRevienta`. The previous
+assert-scanning form reported `passed=2 failed=0` on the same class.
 
 Invoke from MCP:
 
@@ -142,7 +167,9 @@ Results land in:
 - `success` is `1` for pass, `0` for fail.
 - `description` is the assert message.
 
-The SqlProc wrapper above traverses this global to compute the pass/fail summary. The portal renders the same data graphically.
+The SqlProc wrapper above traverses this global to compute the pass/fail summary — reading each
+**method node's** own flag, not its assert children, for the reason given in that section. The portal
+renders the same data graphically.
 
 ## Error handling inside test methods
 
