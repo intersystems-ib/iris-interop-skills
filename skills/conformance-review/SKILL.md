@@ -15,6 +15,13 @@ re-plan from scratch and it never rewrites silently.
 > not a `%UnitTest` result. The review MUST re-run the real `iris_test` tool against the
 > `%UnitTest.TestProduction` class and confirm genuine asserts pass before trusting any "tests green"
 > claim (see CR-7). If `iris_test` itself errors, that is a finding, not a pass.
+>
+> This is stronger than "don't mark your own homework": such a runner has a failure mode it **cannot
+> detect by construction**. A test method that raises before its first `$$$Assert*` writes **zero assert
+> rows**, so any "did any assert fail?" scan finds nothing and counts the method as passed. Measured on
+> IRIS for Health 2026.1: on a class where `%UnitTest` printed `**FAILED**` and `iris_test` reported red,
+> an assert-scanning wrapper reported `passed=2 failed=0`. See `unit-tests` for the fix if you must keep
+> such a wrapper — read the **method node's** own flag, never its assert children.
 
 ## How to run a review
 
