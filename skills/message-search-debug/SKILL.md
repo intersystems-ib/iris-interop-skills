@@ -71,6 +71,75 @@ Everything else — listing a session's messages, tailing the Event Log, followi
 end, queue depths — has a typed call, and the typed call is one round trip against a table name you
 would otherwise guess. Use the table above; drop to SQL only for the three cases here.
 
+## Searching by message content — the two joins
+
+`Ens.MessageHeader` holds no business data: it carries `MessageBodyClassName` (which class) and
+`MessageBodyId` (which row). To search on what the message *says*, join to the body.
+
+### Join 1 — header to a custom message class
+
+The join key is always `h.MessageBodyId = <BodyClass>.ID`. The SQL name of the body class is its
+package with dots turned into underscores **except the last** — `Ejercicio3.MSG.MenuReq` becomes
+`Ejercicio3_MSG.MenuReq`:
+
+```sql
+SELECT TOP 5 h.ID, h.SessionId, h.SourceConfigName, h.Status, r.PacienteId, r.FechaNacimiento
+FROM   Ens.MessageHeader h
+JOIN   Ejercicio3_MSG.MenuReq r ON h.MessageBodyId = r.ID
+WHERE  h.SourceConfigName = 'Router.Censo'
+ORDER  BY h.ID DESC
+```
+
+Filter on a body property to find every message about one entity —
+`WHERE h.TargetConfigName='BO.Menus' AND r.PacienteId='4003'`. **Read `MessageBodyClassName` first**:
+one production carries several body classes, and each needs its own join. Alerts are
+`Ens.AlertRequest` (`a.AlertText`) — `LEFT JOIN` it, since non-alert rows have no match. There is no
+`EnsLib_Messaging.AlertRequest`; guessing it costs a round trip.
+
+Only worth doing when the body class is `%Persistent` with the property indexed — see `messages`.
+A body sitting in `Ens.MessageBodyD` without a typed class is a full-table scan.
+
+### Join 2 — header to a Search Table (HL7 and other virtual documents)
+
+An HL7 body has no columns to join to, so **Search Tables** are the indexed path. A developer writes
+**one subclass per use case** (`Hospital.Search.HL7 Extends EnsLib.HL7.SearchTable`, with an
+`XData SearchSpec` naming the fields), but — this is the part that surprises people — **the subclass
+gets no table of its own**. Every HL7 search table in the namespace stores its rows in the shared
+base extent `EnsLib_HL7.SearchTable`:
+
+| Table | Columns |
+|---|---|
+| `EnsLib_HL7.SearchTable` | `ID`, `DocId`, `PropId`, `PropValue` — `DocId` **is** `Ens.MessageHeader.MessageBodyId` |
+| `Ens_Config.SearchTableProp` | `ID`, `Name`, `PropId`, `ClassExtent`, `ClassDerivation`, `PropType`, `IndexType`, … |
+
+So you select a search table's fields by **`PropId`**, never by table name:
+
+```sql
+SELECT TOP 10 h.ID, h.SessionId, h.SourceConfigName, p.Name, st.PropValue
+FROM   Ens.MessageHeader h
+JOIN   EnsLib_HL7.SearchTable st ON st.DocId = h.MessageBodyId
+JOIN   Ens_Config.SearchTableProp p
+       ON p.PropId = st.PropId AND p.ClassExtent = 'EnsLib.HL7.SearchTable'
+WHERE  p.Name = 'PatientID' AND st.PropValue = '16284718'
+```
+
+- **Join the catalogue on `PropId`, not on `ID`.** `Ens_Config.SearchTableProp.ID` is composite —
+  `EnsLib.HL7.SearchTable||Medication` — so `ON p.ID = st.PropId` compiles, returns zero rows, and
+  looks like "no data".
+- **`PropId` is unique only within a `ClassExtent`.** Without the `ClassExtent` predicate you match
+  X12/EDIFACT/ASTM/XML props that share the number.
+- **`ClassDerivation` tells you which subclass declared a prop** — `Hospital.Search.HL7~EnsLib.HL7.SearchTable`.
+  Filter `p.ClassDerivation LIKE 'Hospital.Search.HL7~%'` to scope to one use case.
+- Built-in HL7 props occupy the low ids (`MSHControlID`=1, `MSHTypeName`=2, `PatientAcct`=3,
+  `PatientID`=4, `PatientName`=5); custom ones are appended (`Medication`=12).
+- A field only becomes searchable **after** `SearchTableClass` is set on the BS/BO item, target
+  `Host` — and only for messages received from that point on. Existing messages are not back-indexed.
+
+Non-HL7 virtual documents follow the same shape with their own base extent
+(`EnsLib_EDI_X12.SearchTable`, `EnsLib_EDI_XML.SearchTable`, …). Custom non-VDoc search tables
+extend `Ens.CustomSearchTable`, whose own extent is `Ens.CustomSearchTable` with the same
+`DocId` key.
+
 ## Searching by message body content
 
 Searchable when:
