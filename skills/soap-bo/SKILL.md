@@ -24,6 +24,30 @@ Output:
 - A BO class extending `Ens.BusinessOperation` with one method per WSDL operation, plus `MessageMap` dispatch.
 - One request class and one response class per operation, plus shared type classes.
 
+### Export the generated classes to `src/` — the wizard writes only to the namespace
+
+**The wizard is the largest single producer of namespace-only classes in this toolset.** One
+WSDL yields the proxy, the BO, `WSC.*`, `SOAPENC.*`, and a request/response pair per operation
+— none of which pass through disk. The PreToolUse source-of-truth gate cannot help here: it
+watches `iris_doc(mode=put)`, and the wizard bypasses that entirely.
+
+So the rule for generated code is the mirror image of the rule for hand-written code:
+
+```
+hand-written:  Write src/… .cls   →  iris_doc(mode=put)      (gate enforces this order)
+generated:     run the wizard     →  iris_doc(mode=get)  →  Write src/… .cls
+```
+
+Immediately after the wizard runs, `iris_doc(mode=get)` **every** class it created and write it
+to `src/` in the Atelier nested layout. Do it before you start patching them — the patches
+below (`OUTPUTTYPEATTRIBUTE`, dropped `[ Required ]`, widened `MAXLEN`, the
+`wsp:PolicyReference` removal) are exactly the edits you cannot afford to lose, and they are
+invisible to anyone reading the WSDL.
+
+Measured on a workshop VM: 28 classes on disk, 29 in IRIS, only 22 in common — with drift in
+**both** directions, including generated SOAP classes that existed on disk but no longer in the
+namespace. See `production-lifecycle` for the `DriftReport` check.
+
 ## Review the generated payloads — the `MAXLEN=50` truncation trap
 
 When the WSDL declares a string type **without a length facet**, the wizard-generated property comes out as a **bounded `%String` with the default `MAXLEN=50`** — longer values are then **silently truncated** on save (no error). Always audit the generated payload classes after running the wizard and **widen** affected string properties to `%String(MAXLEN="")` (unbounded, ~3.6 MB ceiling) or `%Stream.GlobalCharacter` for large content. Same trap, longer treatment in `messages` (`%String` length section).

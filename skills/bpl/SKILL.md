@@ -267,6 +267,13 @@ A class that compiled fine on an older Caché/Ensemble may report `Missing BPL D
 
 **Fix**: paste the original BPL XML back into the `XData BPL` block and recompile. **Prevention**: source-control the BPL class as-text on disk, not just as a portal-edited class — see `production-lifecycle` for the disk-as-source-of-truth principle.
 
+**The BPL editor and the rule editor both write straight into the namespace.** The PreToolUse
+source-of-truth gate cannot see them — it watches `iris_doc(mode=put)`, and a Portal edit
+bypasses it. After any editing session in the Portal, `iris_doc(mode=get)` the BPL class and the
+`Ens.Rule.Definition` class and write them to `src/`. This is what makes the regression above
+recoverable: with the XData on disk, restoring a stripped `XData BPL` is a copy-paste; without
+it, the process definition is gone.
+
 ## Canonical routing / BPL shapes
 
 Four shapes cover most orchestration needs. Reach for the closest match before authoring from scratch:
