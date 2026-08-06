@@ -124,6 +124,7 @@ The user-stated principle: a BS that needs a setting should refuse to start if t
 - **Skipping `OnInit` validation** → bugs surface at first message instead of at production start.
 - **Multiple targets in one chain** → if you fan out to multiple operations, route through a Message Router; don't list them in `TargetConfigNames` for orchestration.
 - **Pool size of 1 for high-volume sources** → set Pool Size to expected concurrency. (Default `PoolSize=1` is correct for everything until you measure a bottleneck — don't raise it preemptively.)
+- **Diagnosing an FTPS `Unexpected SSL EOF` as a TLS problem** → it is often a failed `LIST *.csv` against a server that doesn't glob. Set `MLSD=1` — and then rewrite `FileSpec` as a regex (see the FTPS section below).
 - **Forcing `SourceFilename` / `SourceLine` onto a Record Mapper-generated `.Record`** → Record Mapper doesn't emit those properties; a manual subclass that adds them won't get them populated at runtime either. If you need CSV-line forensics, capture the filename in a **custom BS** (not Record Mapper) or read it from `Ens.MessageHeader` propagated by the adapter (`%Source` / `%FileName`).
 
 ## Record Mapper — file gotchas
@@ -279,6 +280,32 @@ The spec often calls for the CSV to arrive over **FTPS**, while you develop/test
 - `EnsLib.RecordMap.Service.FTPService` — FTP/FTPS (adapter `EnsLib.FTP.InboundAdapter`); for TLS set the adapter `SSLConfig` to an SSL/TLS configuration name plus `FTPServer`/`FTPPort`/`Credentials`.
 
 Both share the **same `RecordMap`** and should point at the **same Router**. Pattern when the spec mandates FTPS but no FTPS server exists yet: register **two BS items at the same Router** — the `FTPService` one (`Enabled="false"`, faithful to the spec) and a `FileService` one (`Enabled="true"`, for local drop-a-file verification). This keeps the solution spec-compliant and testable without inventing infrastructure.
+
+#### FTPS against a real server — `MLSD=1`, and `FileSpec` becomes a regex
+
+The FTP adapter's directory listing is **`LIST <FileSpec>`** — e.g. `LIST *.csv` — and it expects
+the *server* to expand the glob. `vsftpd`, IIS and `curl` do; `pyftpdlib` and others treat the
+pattern as a literal path and answer `550 Invalid argument`. The symptom is misleading: what you
+actually see is an **`Unexpected SSL EOF`** on the data channel, which sends you diagnosing TLS.
+TLS is fine — the transfer never started, because the listing failed.
+
+The working configuration against a non-globbing server:
+
+1. Set **`MLSD=1`** on the adapter. IRIS then lists the directory with `MLSD` (no pattern) and
+   filters client-side.
+2. **With `MLSD=1`, `FileSpec` is evaluated as a REGULAR EXPRESSION, not a glob.** Use
+   `.*\.csv`; keeping `*.csv` fails with `#8311 Syntax error in regexp pattern`. This reversal is
+   the part nobody guesses.
+3. IRIS still issues `LIST <pattern>` for `getSize`, so the server must at least tolerate the
+   command.
+
+TLS client side: create the SSL configuration with `Security.SSLConfigs.Create(name, .props)`
+using `Type=0` (client) and `VerifyPeer=0` for a self-signed certificate, then point the
+adapter's `SSLConfig` at it — the adapter does AUTH TLS + PROT P from there.
+
+The two facts worth remembering, because neither is discoverable from the error messages: *"SSL
+EOF" can mean a failed LIST, not a TLS problem*, and *`FileSpec` flips from glob to regex when
+`MLSD=1`*.
 
 ## REST inbound — `EnsLib.REST.Service`
 
