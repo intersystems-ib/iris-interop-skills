@@ -176,6 +176,7 @@ Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Ut
 - **Validation lists / `In()` checks that don't tolerate diacritic and case variants** → `"Diabetica"` ≠ `"Diabética"` ≠ `"diabética"`. Spanish-language input drifts on tildes and casing constantly; a hardcoded literal list rejects legitimate input silently. Normalize **both sides** with `$ZCONVERT(...,"L")_$ZSTRIP(...,"*-CWE")` (see the `NormalizeKey` example in the FunctionSet section above) and compare normalized values, or accept every variant explicitly in the list. Same rule for lookup table keys — store the normalized form.
 - **Switch cases ordered generic-to-specific** → generic case matches first, specific cases never run.
 - **Foreach over the wrong group** in HL7 nested structures (e.g. iterating PIDgrp when you wanted PIDgrpgrp).
+- **Bounding a repeating-segment loop with `AL1Count`** → returns `""` on schema versions that don't expose it; `For i=1:1:""` runs zero times and the transform "succeeds" having processed nothing. Bounded loop + `Quit:'$IsObject(seg)` instead (see the iteration section below).
 - **DTL doing DB lookups in `code` actions** that block the BP — move to a method that can be cached.
 - **CDA in DTL** — almost always wrong; switch to XSLT.
 - **Hand-rolling date conversion in `<code>` blocks** (`$ZDATEH(source.X, 4, , , , , , , -1)` etc.) → prefer `ConvertDateTime` from the function picker, or wrap the logic in a project FunctionSet subclass (see above). Inline `$ZDATEH` with positional empty args is unreadable and not reusable.
@@ -209,6 +210,34 @@ Where is the segment in the schema tree?
     NOT resolve reliably when the segment is in a group — stick to numeric paths
     on the segment.
 ```
+
+### Iterating repeating segments — never bound the loop with `AL1Count`
+
+The obvious way to iterate a repeating segment silently does nothing:
+
+```objectscript
+Set n = source.GetValueAt("AL1Count")   // returns "" or 0
+For i = 1:1:n { ... }                    // loop body never runs, no error
+```
+
+`AL1Count` (and the `NK1`/`OBX`/`DG1` analogues) is not exposed by every schema version. Where it
+isn't, `GetValueAt` returns `""`, `For i=1:1:""` iterates zero times, and the transform completes
+"successfully" having processed zero repeats — the worst failure mode, because nothing surfaces.
+
+The safe pattern is a bounded loop with an `$IsObject` break:
+
+```objectscript
+For i = 1:1:20 {
+    Set seg = source.GetSegmentAt("AL1("_i_")")
+    Quit:'$IsObject(seg)
+    // ...
+}
+```
+
+Applies to any repeating segment — `AL1`, `NK1`, `OBX`, `DG1`. Mention `AL1Count` only as
+"verify it exists in your schema version first", never as the default. And when the named path
+itself doesn't resolve (segment inside a group — see the decision tree above), fall back to the
+`SegCount` + `seg.Name` index iteration, which needs no count either.
 
 ### `<code>` block vs `<assign>` element
 
