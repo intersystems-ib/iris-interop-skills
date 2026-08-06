@@ -149,6 +149,39 @@ Non-HL7 virtual documents follow the same shape with their own base extent
 extend `Ens.CustomSearchTable`, whose own extent is `Ens.CustomSearchTable` with the same
 `DocId` key.
 
+### Authoring a Search Table
+
+Everything above assumes someone already declared the fields. Authoring one is a single subclass
+plus one production setting:
+
+```objectscript
+Class MyApp.Search.HL7 Extends EnsLib.HL7.SearchTable
+{
+XData SearchSpec [ XMLNamespace = "http://www.intersystems.com/EnsSearchTable" ]
+{
+<Items>
+  <Item DocType="" PropName="PatientFirstName">[PID:5().2]</Item>
+</Items>
+}
+}
+```
+
+- **The XData namespace is `EnsSearchTable`** — literally
+  `http://www.intersystems.com/EnsSearchTable`. `EnsHL7SearchTable`, the form you'd guess by
+  analogy with the class name, does not work.
+- **`PropType`**: the only values observed in a live catalogue
+  (`Ens_Config.SearchTableProp.PropType` on a namespace carrying 257 real search-table rows) are
+  `String:CaseSensitive` and `String:CaseInsensitive`. Both `PropType="String"` and
+  `PropType="String:25"` fail with `ErrDatatypeValidationFailed`. **Omitting the attribute
+  entirely also works and is the safe default.** (`DateTime` / `Numeric` are unverified against
+  that catalogue — don't reach for them without checking.)
+- **A search table indexes nothing until it is assigned**: set `SearchTableClass` on the BS/BO
+  item, target **`Host`** — and only messages received from that point on are indexed. Nothing
+  back-indexes existing messages (same caveat as in the query section above).
+
+Once compiled and assigned, the rows land in the shared base extent `EnsLib_HL7.SearchTable` and
+are queried by `PropId` exactly as shown in Join 2 — the subclass never gets a table of its own.
+
 ## Searching by message body content
 
 Searchable when:
