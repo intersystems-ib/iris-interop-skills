@@ -100,9 +100,22 @@ ClassMethod RestartProduction(pName As %String) As %String [ SqlProc ]
     Hang 1
     Set sc = ##class(Ens.Director).StartProduction(pName)
     If $$$ISERR(sc) Quit "Start err: "_$SYSTEM.Status.GetErrorText(sc)
+    // StartProduction returns BEFORE the production is up — wait for Running
+    For i = 1:1:30 {
+        Quit:##class(Ens.Director).IsProductionRunning()
+        Hang 1
+    }
+    If '##class(Ens.Director).IsProductionRunning() Quit "Started but NOT Running after 30s"
     Quit "Restarted"
 }
 ```
+
+**Do not drop the wait-for-Running loop.** The start call returns before the production has come
+back up; a restart without the wait leaves the production observably **Stopped** for the next few
+seconds. Code that restarts and immediately continues — starts a component, sends a test message,
+queries status — sees a stopped production and reports a confusing *downstream* failure that looks
+nothing like "the restart wasn't finished". Same family of trap as "recompile doesn't reload the
+running job" above: the lifecycle call succeeded, the state you assumed from it wasn't there yet.
 
 Use `UpdateProduction` after **production XML** changes only. Use `RestartProduction` after **class code** changes. Treat the two as distinct lifecycle events.
 
@@ -111,6 +124,22 @@ Use `UpdateProduction` after **production XML** changes only. Use `RestartProduc
 Before `RestartProduction`, run a validator that catches references to classes / items that don't exist (typo in transform name, target BO renamed, helper class deleted). It's a SqlProc that iterates `Ens_Config.Item` and parses the Router's `XData RuleDefinition` to verify every `<send transform="X" target="Y"/>` resolves. Returns `OK` or `ISSUES: <list>`. The `bpl` skill has a worked example.
 
 This catches the entire class of "BP terminated with `<CLASS DOES NOT EXIST>`" bugs at edit time — without it, the first signal is the first message that hits the router after the broken edit.
+
+## Probing for an existing credential — `IDKeyExists()` does not exist
+
+Bootstrap code that checks for an existing credential with
+`##class(Ens.Config.Credentials).IDKeyExists(name)` fails at **runtime** (not compile time) with
+`<METHOD DOES NOT EXIST>` — the method simply isn't there, even though it's exactly what one
+reaches for by analogy with other `%Persistent` classes. The working probe is `%OpenId()` plus
+`$IsObject()`:
+
+```objectscript
+Set cred = ##class(Ens.Config.Credentials).%OpenId(pName)
+If '$IsObject(cred) { /* not there — create it */ }
+```
+
+Through the MCP, prefer `iris_credential_list` / `iris_credential_manage`, which handle the
+exists-then-create dance for you.
 
 ## Recovering from a wedged IRIS web stack
 
@@ -383,6 +412,8 @@ If the installer must run identically on Linux and Windows, prefer driving it fr
 
 - **Editing settings in the production XML directly** in TEST/PROD instead of using Default Site Settings → values get blown away on next deploy.
 - **Stop/Start when Update would do** → unnecessary downtime.
+- **Restart-then-act without waiting for Running** → `StartProduction` returns before the production is up; the next call sees a Stopped production and fails downstream. Poll `Ens.Director.IsProductionRunning()` after every restart (see the RestartProduction pattern above).
+- **Probing credentials with `IDKeyExists()`** → the method does not exist on `Ens.Config.Credentials`; runtime `<METHOD DOES NOT EXIST>`. Use `%OpenId()` + `$IsObject()`.
 - **Ignoring the rollback file** after a botched import → manual recovery is much harder.
 - **Items disabled in DEV that get re-enabled by import** because the export captured them as `Enabled=true`.
 - **Auditing `PoolSize=1` as a defect** → it's the correct default everywhere. Raise only with measured evidence.
