@@ -177,6 +177,8 @@ Sync vs Async: SOAP calls are usually synchronous (you want the response). But i
 - **No timeout on the SOAP outbound** → a hung remote endpoint blocks the BO pool indefinitely.
 - **Hardcoded WSDL URL in code** → use a setting (`SOAPClient.Endpoint` or similar) so DEV/TEST/PROD differ.
 - **Re-running the SOAP Wizard over modified generated classes** → wipes your changes. If you've customized, either don't re-run or use a subclass for customizations.
+- **`EnableStandardRequests` set on `Target="Host"`** → Portal accepts it silently; runtime fails with `<Ens>ErrSOAPNotEnabled`. The setting belongs on `Target="Adapter"` (see the production-item section below).
+- **Parsing a SOAP boolean with `=1`** → SOAP serialises booleans as `true`/`false`; the test is false for every response, silently. Compare against `"true"`.
 
 ## Testing / how to verify
 
@@ -231,6 +233,21 @@ fall back to hand-injecting an `Authorization: Basic` header by reaching into `.
 that's the anti-pattern this section exists to prevent; either generate the client (native `Credentials`) or
 set the adapter's `Credentials`/`SSLConfig` settings. Document the choice as a friction-log entry.
 
+### HTTP-manual client details that each cost a debug cycle
+
+Verified in a real integration using the hand-crafted-envelope pattern:
+
+- **SOAP booleans arrive as the literal strings `true`/`false`, not `1`/`0`.** Code that parses
+  the response by hand and tests `=1` silently treats **every** response as false. Compare
+  against `"true"`, or map to an IRIS boolean at the parse boundary.
+- `EnsLib.HTTP.OutboundAdapter.SendFormDataArray(.resp, "POST", httpReq, "", , url)` sends the
+  `%Net.HttpRequest`'s `EntityBody` as a **raw body** when `pFormVarNames=""` — that's how you
+  POST the envelope through the adapter.
+- The SOAPAction of an IRIS `%SOAP.WebService` is `{namespace}/{fullClassName}.{method}` — the
+  target namespace, a slash, then the fully-qualified class name, dot, method name.
+- Read the response with `tResp.Data.Rewind()` then `tResp.Data.Read()` — without the rewind the
+  stream reads empty.
+
 ## Server-side: hosting a SOAP service in an IRIS namespace
 
 When you're on the **other side** — exposing a SOAP service that an external client (or a sibling IRIS namespace) will call — `%SOAP.WebService`:
@@ -238,6 +255,23 @@ When you're on the **other side** — exposing a SOAP service that an external c
 - Web app config (Security.Applications): `AutheEnabled=96` (Password + Kerberos, accepts HTTP Basic) — **not** `4=Password` per the docs, which doesn't accept Basic in IRIS 2026.1. See `business-services` for the full table.
 - The authenticated user must have **read access to the system globals** the SOAP framework touches (`^ISCSOAP`). Granting `%All` to the service user is the simplest workshop pattern; production should grant `%DB_<TARGET>_DATA:RW` plus enough on `IRISSYS` to read `^ISCSOAP`. The error `<PROTECT> OnPage+9^%SOAP.WebService.1 ^ISCSOAP("LogMaxFileSize")` is the symptom of missing this read access.
 - `Parameter SERVICENAME` and `Parameter NAMESPACE` (the XML target namespace) drive the WSDL. They must match what clients expect from `<service name>` and `targetNamespace` respectively.
+
+### Registering the service as a production item — two silent misconfigurations
+
+- **`EnableStandardRequests` goes on target `Adapter`, not `Host`:**
+
+  ```xml
+  <Setting Target="Adapter" Name="EnableStandardRequests">1</Setting>
+  ```
+
+  The Portal accepts the `Target="Host"` misconfiguration silently; the first call then fails at
+  runtime with `ERROR <Ens>ErrSOAPNotEnabled: Adapter Setting EnableStandardRequests is not set`
+  — an error that names the setting but **not** the target it belongs on.
+
+- **The SOAP item's Name must equal the FQCN of the web-service class**
+  (`MyApp.WS.OperationWebService`, not `BS.X`) — URL dispatch resolves the production item by
+  class name, so a `Tipo.Nombre`-style name breaks WSDL resolution. Same rule as `component-map`
+  states it: *production item Name = class FQCN or the WSDL won't resolve*.
 
 ## When NOT to use this skill — fall back to docs
 
