@@ -256,6 +256,15 @@ For HL7 repeating fields (AL1*, NK1*), REST JSON arrays, or any multi-valued sou
 SELECT COUNT(*) FROM <Pkg>_Msg.<Parent>_AlergiasList WHERE <Parent> = :id
 ```
 
+**The child table lives in the parent's schema — that is the half people guess wrong.** The schema
+follows the normal class→table rule (package dots become `_`, last dot separates schema from
+table), and the property name is appended to the *table*: class `COCINA.MSG.MenuRecibido` with
+`Property Alergias As list Of %String` projects to `COCINA_MSG.MenuRecibido_Alergias` — not
+`COCINA.MenuRecibido_Alergias` (a guess that cost one workshop cohort 12 straight
+`SQLCODE -30 Table not found` round-trips). Before querying a projected table you did not just
+create, confirm the name with `iris_table_info` (or the `introspect-dont-guess` agent) — one call
+answers it.
+
 Don't substitute a pipe-string property for a typed collection if downstream consumers want collection semantics — the conversion belongs in the DTL one time, not in every consumer.
 
 For `list Of <ObjectClass>`, the `<ObjectClass>` follows the same rule as any object property — see

@@ -476,8 +476,13 @@ these IRIS-SQL specifics in mind:
   (`SELECT "Connection" FROM …`). Unquoted, you get SQLCODE -1/-12.
 - **ObjectScript is not SQL.** `iris_query` runs SQL SELECTs only. `set`/`write`/`do`/`##class(...)`,
   `&sql(...)`, and `^global` references are ObjectScript — run them with `iris_execute`, not `iris_query`.
-- **Discover, don't guess.** Before querying, use `iris_table_info` (or `docs_introspect`) to get the
-  real table/column names rather than guessing system-catalog tables.
+- **Discover, don't guess.** Before querying, use `iris_table_info` (or `docs_introspect`, or the
+  `introspect-dont-guess` agent) to get the real table/column names rather than guessing
+  system-catalog tables — and on `SQLCODE -30 Table not found`, the next call is introspection,
+  never a differently-guessed name. Collection properties on a RecordMap `.Record` or message
+  class project to a child table **in the parent's schema** (`COCINA.MSG.MenuRecibido` +
+  `Alergias` → `COCINA_MSG.MenuRecibido_Alergias`, not `COCINA.MenuRecibido_Alergias`) — see
+  `messages` (Collections).
 
 ## See also
 

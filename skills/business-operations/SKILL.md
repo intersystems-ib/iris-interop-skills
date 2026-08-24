@@ -150,6 +150,7 @@ Switch to UPSERT (`INSERT ... ON CONFLICT (paciente_id) DO NOTHING` / `DO UPDATE
 ## Common pitfalls
 
 - **Concatenating values into SQL strings** instead of parameterizing → injection + escaping bugs.
+- **Writing SQL from an assumed table name, then guessing a different name on `-30`** → resolve the real name first (`iris_table_info` / the `introspect-dont-guess` agent); after a not-found, the next call is introspection, never another guess. See "Resolve real table names BEFORE the first query".
 - **Forgetting `MessageMap`** → every request hits the default `OnMessage` method which then has to dispatch by type manually.
 - **PoolSize > 1 with order-sensitive HL7 receivers** → out-of-order delivery breaks downstream state.
 - **Hardcoding URLs/credentials** instead of using settings + credentials records → environment-specific deploys fail.
@@ -165,6 +166,32 @@ Switch to UPSERT (`INSERT ... ON CONFLICT (paciente_id) DO NOTHING` / `DO UPDATE
 3. From the Management Portal "Test" link on the BO, send a sample message. Or invoke from a Message Router.
 4. Use `message-search-debug` Visual Trace — confirm the BO received, attempted, and got an ACK/response from the destination.
 5. Negative test: stop the destination. Confirm the BO retries per its configured retry policy and surfaces a clear error.
+
+## Resolve real table names BEFORE the first query — introspect, don't guess
+
+Any SQL a BO (or its verification step) touches goes through this gate: **before the first
+`iris_query` / SQL statement against a table you did not create in this session, resolve the real
+name** — `iris_table_info` on the schema, or spawn the `introspect-dont-guess` agent. Never write
+the query from an assumed name.
+
+Measured over a workshop cohort: `iris_query` returned `SQL_ERROR` **127 times across 17/18
+students**, dominated by invented object names — and the recovery pattern made it worse: guess →
+`SQLCODE -30 Table not found` → guess a *different* name → `-30` again (or `-12`, malformed SQL
+written from the same guess), without ever calling the catalog. One introspection call would have
+answered each of these.
+
+The two most-guessed-wrong families:
+
+- **Projected child tables.** A collection property (`Property Alergias As list Of %String` on
+  `COCINA.MSG.MenuRecibido`) projects to a child table **in the parent's schema**:
+  `COCINA_MSG.MenuRecibido_Alergias`. Guessing `COCINA.MenuRecibido_Alergias` (wrong schema) cost
+  one cohort 12 straight failures. The scheme is predictable — which is exactly why
+  `iris_table_info` answers it in one call. See `messages` (Collections) for the projection rule.
+- **Invented system catalogs.** `%Library.SQLConnection`, `Config.config`, `Ens_Config.Setting` —
+  these do not exist as SQL tables. The typed tools (`check_config`, `iris_production_item`,
+  `iris_interop_query`) are the path; `message-search-debug` has the full table.
+
+**On `-30 Table not found`, the NEXT call is introspection — never another guessed name.**
 
 ## JDBC outbound — wiring checklist
 
