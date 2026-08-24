@@ -124,7 +124,7 @@ System Default Settings are the **only** layer that does NOT migrate via a produ
 | **Securing endpoints** — SAML 2.0 / 1.1, OAuth 2.0 server + LDAP, SSL/TLS chain, internal account hygiene | `iris-interop-skills:security` |
 | **Alert circuit** — `Ens.Alert` router, dedup function set, ProductionMonitorService, per-BO alert settings | `iris-interop-skills:alerting` |
 | **About to build *anything* (DTL, rule, BO method, BPL) — TDD workflow** | **`iris-interop-skills:tdd`** (entry point; non-negotiable) |
-| **Built it and TDD-green — is it idiomatic / per best practices?** (run before declaring done) | **`iris-interop-skills:conformance-review`** (criteria CR-1…CR-12; the `conformance-reviewer` agent runs it) |
+| **Built it and TDD-green — is it idiomatic / per best practices?** (run before declaring done) | **`iris-interop-skills:conformance-review`** (criteria CR-1…CR-12; the `conformance-reviewer` agent runs it). **Mechanically: FIRST open `skills/conformance-review/SKILL.md`** — via the Skill tool where available, else read the file — before writing any review output. |
 | %UnitTest framework toolbox (storage, runner flags, ^UnitTest.Result) | `iris-interop-skills:unit-tests` (lower-level reference; the TDD skill calls into it) |
 | Anything DICOM (C-STORE, C-FIND, C-MOVE, MWL, STOW-RS, modalities, PACS) | `iris-interop-skills:dicom` (architecture + wiring patterns; defers byte-level work to docs + vendored sample at `${CLAUDE_PLUGIN_ROOT}/BestPractices/external/workshop-iris-dicom-interop/`) |
 
@@ -152,6 +152,10 @@ involved, issue several `Skill(...)` calls in the same turn.
 - Custom HL7 schema → `Skill(iris-interop-skills:hl7-schemas)`; lookup tables → `Skill(iris-interop-skills:lookup-tables)`.
 - **Any look at a running production** — verifying a run landed, searching messages, tracing a session,
   resending → `Skill(iris-interop-skills:message-search-debug)`. Checking your own work counts.
+- **Any review / audit / conformance or best-practices check** of built interop work →
+  `Skill(iris-interop-skills:conformance-review)` — and in an environment without the Skill tool,
+  **FIRST read `skills/conformance-review/SKILL.md`**. The criteria live in that file only; a review
+  run from this router or the build skills alone is incomplete by construction.
 - FHIR → `Skill(iris-interop-skills:fhir)`; endpoint security → `Skill(iris-interop-skills:security)`;
   alert circuit → `Skill(iris-interop-skills:alerting)`; DICOM → `Skill(iris-interop-skills:dicom)`.
 
@@ -188,7 +192,7 @@ For a typical end-to-end interface, work in this order — it minimises rework b
 9. **Production wiring + settings** (`production-lifecycle`) — add `TestingEnabled="true"` for dev productions; choose deployment tool early
 10. **Security** (`security`) — only after components exist; SAML/OAuth/SSL added where the endpoints actually call out
 11. **Test, search, debug** (`message-search-debug`) — Visual Trace + Event Log for verifying end-to-end runs; purge task added
-12. **Conformance review** (`conformance-review`) — once built and TDD-green, review against the best-practice criteria (CR-1…CR-12) before declaring done; spawn the `conformance-reviewer` agent. It re-verifies tests via the real `iris_test` tool (never a self-graded `[SqlProc]`), reports findings with the canonical fix, and proposes a scoped remediation plan.
+12. **Conformance review** (`conformance-review`) — once built and TDD-green, review against the best-practice criteria (CR-1…CR-12) before declaring done; spawn the `conformance-reviewer` agent, or where no agent/Skill tool exists, FIRST read `skills/conformance-review/SKILL.md` and follow it. It re-verifies tests via the real `iris_test` tool (never a self-graded `[SqlProc]`), reports findings with the canonical fix, and proposes a scoped remediation plan.
 
 For FHIR-specific work, replace steps 4–7 with the `fhir` decision tree (Façade vs Repository, OAuth2 PKCE setup, FHIR R4 Bundle shape).
 
