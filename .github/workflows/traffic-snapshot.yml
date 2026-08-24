@@ -1,0 +1,38 @@
+# traffic-snapshot: persist GitHub clone/view stats past the API's 14-day window.
+# Data files live on the `traffic-data` branch (kept out of main's history).
+# Requires the TRAFFIC_TOKEN secret — see scripts/traffic_snapshot.py.
+
+name: traffic-snapshot
+
+on:
+  schedule:
+    - cron: '17 3 * * *'  # daily; 14-day API retention leaves ~13 days of retry headroom
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          ref: traffic-data
+          path: traffic-data
+
+      - name: Snapshot traffic
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: python3 scripts/traffic_snapshot.py traffic-data | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit history
+        run: |
+          cd traffic-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add clones.json views.json
+          git commit -m "traffic: snapshot $(date -u +%F)" || exit 0
+          git push origin traffic-data
