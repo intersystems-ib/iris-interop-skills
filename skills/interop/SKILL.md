@@ -73,6 +73,25 @@ Some package names are reserved for cross-cutting concerns. Do not put domain cl
 | `INFRAESTRUCTURA` | System management classes | |
 | `SOAPENC` | Auto-generated SOAP encoding side classes | Do not edit; regenerated on WSDL re-import. |
 
+## Namespace discipline — resolve once, pass on EVERY call
+
+Architecture (when to split an estate) is below; this is the **operational** rule, and it is
+non-negotiable:
+
+1. **Determine the target namespace from the task, ONCE, up front.** The task statement, the
+   production name, or the user names it. If genuinely absent, ask — don't assume.
+2. **Pass `namespace=` explicitly on EVERY MCP call.** Never rely on a tool schema's default:
+   **`USER` is almost never the interop namespace**, and the failure mode is the worst kind —
+   a run can complete *perfectly* in the wrong namespace, tests green, zero errors, deliverable
+   absent. (Observed verbatim: 21/21 calls with the schema default `USER`, 8/8 tests green,
+   nothing in the required namespace.) A PreToolUse gate blocks *some* tools when `namespace`
+   is missing, but `iris_doc` / `iris_compile` / `iris_query` / `iris_execute` / `iris_test`
+   pass through — the discipline is yours on every call.
+3. **Sanity-check before building**: `check_config` lists the namespaces on the connection —
+   confirm the target exists and is interop-enabled *before* the first write, not when a compile
+   dies with `<CLASS DOES NOT EXIST> Ens.Director`. (The tdd skill's `CheckEnvironment` catches
+   this at compile time — too late for calls already aimed at the wrong namespace.)
+
 ## When to split into multiple namespaces / productions
 
 Drivers for splitting an estate (vs. a single `INTEROP` namespace with categories per integration):

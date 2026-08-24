@@ -40,6 +40,13 @@ Two patterns:
 
    Pre-create the (empty) folder; the runner reads no files from it but checks for existence.
 
+   **`^UnitTestRoot` — like every file path a test touches — is resolved by the IRIS *server*,
+   not by you.** When IRIS runs in a container, your working directory does not exist there:
+   `set ^UnitTestRoot = "/home/me/project/tests"` fails with `#5007` even though the directory
+   plainly exists on your side, and a fixture file at an agent-side path reads as "file not
+   found" inside the test. Use a path *inside* the container (or the mounted data directory),
+   or ferry fixture content in via the MCP / inline it in the test class — see `tdd` (pitfalls).
+
 Avoid the documentation-default `RunTest` invocation that loads from `^UnitTestRoot` and deletes after run — that's the failure mode you want to prevent.
 
 ## Running tests — three options
