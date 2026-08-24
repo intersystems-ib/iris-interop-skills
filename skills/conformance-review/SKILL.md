@@ -1,9 +1,15 @@
 ---
 name: conformance-review
-description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. Use after building/modifying components, before declaring done, or whenever the user asks "is this implemented correctly / per best practices / conforme". This skill is the single source of truth for the conformance criteria (CR-1…CR-12); the `conformance-reviewer` agent and the `conformance-prescan` hook both check against it. Triggers EN: review, conformance, best practices, is this correct, code review, ready to ship. Triggers ES: revisar, conformidad, buenas prácticas, está bien implementado, cumple, revisión.
+description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. For ANY review, audit, or quality/conformance check of interop work, read THIS skill FIRST — the criteria (CR-1…CR-12) live here, not in the router or the build skills, and a review run without them is graded incomplete. Use after building/modifying components, before declaring done, or whenever the user asks whether the implementation is correct, idiomatic, or per best practices. The `conformance-reviewer` agent and the `conformance-prescan` hook both check against this file. Triggers EN: review, audit, conformance, best practices, is this correct, is this idiomatic, code review, quality check, check my production, validate the implementation, ready to ship. Triggers ES: revisar, auditar, auditoría, conformidad, buenas prácticas, está bien implementado, es correcto, cumple, revisión, control de calidad.
 ---
 
 # IRIS Interoperability — Conformance Review
+
+> **This file is the review.** However you arrived here — the Skill tool, a native-skill search,
+> or reading `skills/conformance-review/SKILL.md` directly — this document is self-contained:
+> follow its workflow and check its criteria. Do NOT run an interop review from the router or the
+> build skills alone; they do not carry the criteria, and a review without CR-1…CR-12 misses the
+> checks this plugin exists to make.
 
 A built production can **compile and "pass tests"** and still be non-idiomatic. This skill defines the
 criteria a finished interop build is checked against, and the **review workflow**: surface findings →
