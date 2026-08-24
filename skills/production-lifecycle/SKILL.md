@@ -264,6 +264,36 @@ Wildcards (`*`) work in Default Site Settings — apply a value to all File-adap
 
 `Update` is the workflow — it's almost always what you want during dev. Full Stop/Start is heavier and slower.
 
+## When the production will NOT start — the recovery ladder
+
+A `start` can be **refused because of leftover state**, and every one of these refusals is
+recoverable — but not by retrying. The cardinal rule:
+
+> **Never re-issue an identical `start` after a refusal. The state must change first.**
+> Measured over a workshop cohort: 105 start refusals across 18/18 students, dominated by the
+> same `iris_production(action="start", ...)` call repeated unchanged against a namespace that
+> could never accept it.
+
+Always begin with `iris_production(action=status, namespace=...)` — never start blind. Then match
+the error:
+
+| Refusal | What it actually means | Recovery |
+|---|---|---|
+| `<Ens>ErrInvalidProduction` | The production class is missing, not compiled, or the name doesn't resolve | Verify the class exists in that namespace and compiles clean (`iris_compile`), and that the name is the exact FQCN. Then start. |
+| `<Ens>ErrProductionSuspendedMismatch` | A **different** production was left suspended in this namespace; nothing else can start until it is cleared | **The error names the OLD production, not yours** — do not "fix" the name you typed. Stop/clear the suspended one (it is the namespace's registered production, so `Ens.Director.StopProduction(30, 1)` targets it), then start yours. |
+| `<Ens>ErrProductionNotShutdownCleanly` | The previous run died without a clean shutdown | Run the recovery path — `##class(Ens.Director).RecoverProduction()` — then start. A plain retry hits the same refusal forever. |
+
+`ErrProductionSuspendedMismatch` is the nastiest: because the message names the *old* production
+(`Production 'Cocina.Production' was suspended, a new production of a different name can not be
+started`), the reflex is to edit the production name you just passed and retry — which returns the
+identical error, indefinitely. The name in the message is the thing to **clear**, not the thing to
+type. Typical in shared/workshop namespaces where a previous exercise's production was left
+suspended.
+
+This ladder is about starts that are **refused outright**. The complementary trap — a start/restart
+that *succeeds* but returns before the production is actually `Running` — is covered by the
+wait-for-Running loop in the RestartProduction pattern above.
+
 ## Deployment: export → import
 
 1. **Production → Actions → Export.** Generates a single bundle XML containing: production definition, all BS/BP/BO classes (XML projections), HL7 message definitions, routing rules, lookup tables, custom schemas, DTLs.
@@ -413,6 +443,7 @@ If the installer must run identically on Linux and Windows, prefer driving it fr
 - **Editing settings in the production XML directly** in TEST/PROD instead of using Default Site Settings → values get blown away on next deploy.
 - **Stop/Start when Update would do** → unnecessary downtime.
 - **Restart-then-act without waiting for Running** → `StartProduction` returns before the production is up; the next call sees a Stopped production and fails downstream. Poll `Ens.Director.IsProductionRunning()` after every restart (see the RestartProduction pattern above).
+- **Re-issuing an identical `start` after a refusal** → `ErrProductionSuspendedMismatch` / `ErrProductionNotShutdownCleanly` / `ErrInvalidProduction` never clear on retry; the state must change first. Status first, then the recovery ladder (see "When the production will NOT start").
 - **Probing credentials with `IDKeyExists()`** → the method does not exist on `Ens.Config.Credentials`; runtime `<METHOD DOES NOT EXIST>`. Use `%OpenId()` + `$IsObject()`.
 - **Ignoring the rollback file** after a botched import → manual recovery is much harder.
 - **Items disabled in DEV that get re-enabled by import** because the export captured them as `Enabled=true`.
