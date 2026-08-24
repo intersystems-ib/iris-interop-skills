@@ -26,6 +26,8 @@ jobs:
       - name: Snapshot traffic
         env:
           TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        # explicit `shell: bash` gets -o pipefail, so a script failure isn't masked by tee
+        shell: bash
         run: python3 scripts/traffic_snapshot.py traffic-data | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Commit history
