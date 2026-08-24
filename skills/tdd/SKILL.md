@@ -63,6 +63,10 @@ If the conversation is purely about wiring components into a production (product
 ## The non-negotiable workflow
 
 ```
+0. NAMESPACE      Resolve the target namespace from the task and verify it with `check_config`
+                  (exists + interop-enabled) BEFORE writing the first test. Pass `namespace=` on
+                  every MCP call from here on — never the tool default (`USER` is almost never
+                  the interop namespace, and a green suite in the wrong namespace is a lost task).
 1. SPEC           Write the spec in one or two sentences in the conversation.
 2. TEST           Author Test* methods in a `%UnitTest.TestProduction` subclass, one per spec clause.
                   Each Test* method must have a /// comment describing what spec clause it verifies.
@@ -381,6 +385,7 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
 - **Forgetting to seed `..BaseLogId`** — `GetEventLog` returns nothing if `BaseLogId` is empty. Seed it in `OnBeforeAllTests` from `MAX(ID) FROM Ens_Util.Log`.
 - **Asserting on internal state** instead of public contract. Assert on what the next consumer (DTL, BO, downstream system) actually sees.
 - **No fixture strategy** — paste-in literals everywhere. Centralize sample inputs in a fixtures class (`MyApp.Tests.Fixtures.Censo`).
+- **File fixtures on a path only the agent can see.** A test that reads sample data from a file (`CopyFile`, an HL7 drop, a CSV) runs **inside IRIS** — and when IRIS is in a container, your working directory does not exist there. The red assert says "file not found" against a path that plainly exists on *your* side, and the fix is never to retry the path. Put server-read fixtures on a **server-visible path**: the container's mounted data directory, or ferry the content in via the MCP (`iris_execute` writing a temp file server-side, or inline the fixture as a string in the test class — the most portable option).
 - **`TestingEnabled="true"` left in a deployed production** — security/integrity risk. Treat it like a debug flag. (Note: `TestingEnabled="true"` is the **correct default** in dev/workshop productions — only flagged here for environments with deploy-to-prod automation.)
 - **Asserting only on `$$$LOGINFO` presence in the event log** ("INSERT OK paciente_id=...") instead of on the row's actual contents → the log proves the BO method ran, not that the destination has the right values. Add at least one assert that reads the side-effect back: a `SELECT` via psql/`Adapter` in `OnAfterAllTests`, or a small **verifier BO** callable via `..SendRequest(verifier, query, .resp, 1)` that returns the row for property-by-property asserts. The log is necessary but insufficient.
 - **Test methods without a description comment** — When a test fails, the first thing the user sees is the method name in the portal. A `///` comment on the method clarifies *what spec clause* the test verifies, not just *what code it exercises*. One line is enough: `/// Verifies that empty Alergias is marshalled to SQL NULL`.
