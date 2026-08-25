@@ -8,7 +8,7 @@ description: %UnitTest framework - runner, storage, results. Routed from interop
 > **Workflow note**: for the *order of work* (spec → test → red → implement → green → refactor) and for **the baseline class you must extend** (`%UnitTest.TestProduction`, not `%UnitTest.TestCase`), see **`tdd`**. That's the entry point when you're starting a new Interop component. This skill is the lower-level reference for **how the framework itself works**: where tests live on disk, how to invoke runners, where results land, how to inspect them.
 
 IRIS ships a built-in unit-test framework with two relevant classes:
-- **`%UnitTest.TestProduction`** — the Interop-flavoured superclass. **Use this for any Interop test.** Provides `Run()`, `SendRequest`, `GetEventLog`, `ChangeSetting`, `CreateCredentials`, file helpers, auto-properties (`BaseLogId`, `HL7InputDir`, etc.). Detail in `tdd`.
+- **`%UnitTest.TestProduction`** — the Interop-flavoured superclass. **Use this for any Interop test.** Provides `Run()`, `SendRequest`, `GetEventLog`, `ChangeSetting`, `CreateCredentials`, file helpers, auto-properties (`BaseLogId`, `HL7InputDir`, etc.). Detail in `tdd`. **Its `PRODUCTION` parameter is compile-time mandatory**: a method generator fails the compile of any subclass with a missing or empty value (`ERROR #5001: Parameter PRODUCTION must be specified`) — after which every runner correctly reports zero tests, because the class never compiled.
 - **`%UnitTest.TestCase`** — the generic base. **Only use directly for tests of pure utility code that has nothing to do with Interop** (and even then, extending TestProduction is fine if the namespace is Interop-enabled).
 
 ## When to use this skill
@@ -32,7 +32,7 @@ Two patterns:
    do ##class(MyApp.Tests.DT.X).Debug()    ; same-process, stops on failure for inspection
    ```
 
-   **`Run()` still requires `^UnitTestRoot` to point at an existing directory** — even though we're not loading from it, the manager calls "Finding directories" early and fails with `ERROR #5007` if the path is invalid. Workaround:
+   **`Run()` still requires `^UnitTestRoot` to point at an existing directory** — even though we're not loading from it, the manager calls "Finding directories" early and fails with `ERROR #5007` if the path is invalid. **The failure does not look like a path problem**: the `#5007` is only in the run's log output, and the manager still records a result — with **zero test cases**. Anything that reads only the recorded result (a harness, a wrapper, `^UnitTest.Result`) sees "run completed, no tests found", indistinguishable from a discovery or naming issue. (The MCP's `iris_test` sets `^UnitTestRoot` itself before running — this trap bites direct `Run()` / `DebugRunTestCase` invocations via `iris_execute`, the terminal, or external harnesses.) Workaround:
 
    ```objectscript
    set ^UnitTestRoot = "C:\Temp\unittest_fake"
@@ -238,7 +238,8 @@ For Interop-specific test skeletons (DTL / routing rule / BO method / BPL), see 
 ## Common pitfalls
 
 - **Tests stored where the runner deletes them after run** — pick a storage pattern that doesn't get cleaned up (see "Where to store" above).
-- **`Run()` failing with `ERROR #5007: Finding directories`** — `^UnitTestRoot` not set or points at a non-existent path. Set it to any existing directory; runner reads no files from it.
+- **`Run()` failing with `ERROR #5007: Finding directories`** — `^UnitTestRoot` not set or points at a non-existent path (server-side!). Set it to any existing directory; runner reads no files from it. Remember the symptom is usually **not** the `#5007` itself but a run that "completes" with zero test cases — check `^UnitTestRoot` before chasing discovery hypotheses.
+- **`#5001: Parameter PRODUCTION must be specified` at compile time** — every `%UnitTest.TestProduction` subclass must declare a **non-empty** `Parameter PRODUCTION` (a method generator enforces it; verified on IRIS 2026.1). The value need not name an existing production *to compile* — existence is asserted at runtime when the lifecycle starts the production. A class that hit this error never compiled, so a later `NO_TESTS_FOUND` is the correct answer about a missing class, not a discovery bug — re-read the compile output before touching anything else.
 - **Qualifier syntax `/noload=0`** → `#5001: can not mix negated form with value`. Boolean qualifiers are presence-only.
 - **`Quit <value>` inside `Try`** → `#1043`. Set tSC; exit Try; quit after.
 - **Asserting on internal state instead of public contract** — tests get brittle. Assert on what the next consumer (DTL, BO, downstream system) will actually see.
