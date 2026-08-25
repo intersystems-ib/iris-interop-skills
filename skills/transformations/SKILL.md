@@ -315,23 +315,7 @@ Do **not** assume "vendor A → vendor B" is passthrough without inspecting actu
 
 ## ObjectScript inside DTL `<code>` blocks — use the modern try/catch idiom
 
-When dropping to ObjectScript inside a DTL `<code>` activity, use the standard try/catch idiom so the DTL framework reports failures cleanly:
-
-```objectscript
-#DIM tSC As %Status = $$$OK
-#DIM errObj As %Exception.AbstractException
-try {
-    $$$THROWONERROR(tSC, ..<HelperMethod>(<args>))
-    // OR
-    set tSC = ..<HelperMethod>(<args>)
-    $$$ThrowOnError(tSC)
-} catch (errObj) {
-    set tSC = errObj.AsStatus()
-}
-// tSC is now either OK or an %Status carrying the diagnostic
-```
-
-Always return `%Status` from a helper method called from DTL — the framework expects it and surfaces errors correctly. Wizard-generated code often still uses older `$$$ISERR(...)`-style chains; new code standardises on try/catch with `$$$ThrowOnError`.
+When dropping to ObjectScript inside a DTL `<code>` activity (or a helper method it calls), wrap the work in try/catch, convert exceptions with `errObj.AsStatus()`, and always return `%Status` — the DTL framework expects it and surfaces errors correctly. Never `Quit <value>` inside the `Try` (`#1043`); standardise new code on `$$$ThrowOnError` rather than wizard-style `$$$ISERR(...)` chains. Full idiom: `unit-tests` §"Error handling inside test methods"; canonical copy-paste class: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/objectscript-trycatch.cls` (§5.4 in `examples/README.md`).
 
 ## When NOT to use this skill — fall back to docs
 

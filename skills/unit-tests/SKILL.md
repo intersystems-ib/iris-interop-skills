@@ -128,15 +128,12 @@ The `DebugRunTestCase` qualifier flags are **boolean** — write `/noload/norecu
 
 ```objectscript
 Set tSC = $$$OK
-Try {
-    ; ... possibly-raising work ...
-} Catch ex {
-    Set tSC = ex.AsStatus()
-}
+Try { Set tSC = ..PossiblyRaisingWork() }
+Catch ex { Set tSC = ex.AsStatus() }
 If $$$ISERR(tSC) Quit tSC
 ```
 
-Set the status inside the Try; exit the Try; then act on it. Same idiom applies in test method bodies (see "Error handling" below).
+Set the status inside the Try; exit the Try; then act on it. Full idiom (with `#DIM`s and `$$$ThrowOnError`) in §"Error handling inside test methods" below.
 
 ## Inspecting results — the `%UnitTest.Portal` web pages
 
@@ -197,9 +194,9 @@ Method TestSomething()
 }
 ```
 
-This is the same pattern used in production code (see `transformations` and `bpl`). Consistent error handling between tests and code means the framework's assertion message includes the real diagnostic chain — not "tSC was 0" with no further context.
+This is the same idiom to use in production code — BPL `<code>` blocks and DTL helper methods defer here (`bpl`, `transformations`). Canonical copy-paste class: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/objectscript-trycatch.cls` (§5.4 in `examples/README.md`). Consistent error handling between tests and code means the framework's assertion message includes the real diagnostic chain — not "tSC was 0" with no further context.
 
-Inside a `Try` block, `Quit <value>` is illegal (`#1043: QUIT argument not allowed`). Set the status, exit the Try, then act on it after — same as the runner-side rule above.
+Inside a `Try`, `Quit <value>` is illegal (`#1043`) — same rule as the runner-side section above.
 
 ## Canonical pattern — unit-testing a DTL
 

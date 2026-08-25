@@ -243,23 +243,7 @@ when MyApp.UTL.AlertFilterFunctions.AlreadyReportedErr(SourceConfigName, AlertTe
 
 ## ObjectScript error-handling idiom inside BPL code blocks
 
-When dropping to ObjectScript inside a BPL `<code>` activity (or in a custom `Ens.BusinessProcess` subclass), use the modern try/catch idiom — wizard-generated code often still uses `$$$ISERR`-style checks but new work should standardise:
-
-```objectscript
-#DIM tSC As %Status = $$$OK
-#DIM errObj As %Exception.AbstractException
-try {
-    $$$THROWONERROR(tSC, ..<MethodName>(<args>))
-    // OR
-    set tSC = ..<MethodName>(<args>)
-    $$$ThrowOnError(tSC)
-} catch (errObj) {
-    set tSC = errObj.AsStatus()
-}
-quit tSC
-```
-
-Always return `%Status`; the BPL framework expects it and surfaces errors correctly.
+When dropping to ObjectScript in a `<code>` activity (or a custom `Ens.BusinessProcess` subclass), wrap the work in try/catch, convert exceptions with `errObj.AsStatus()`, and always return `%Status` — the BPL framework expects it and surfaces errors correctly. Never `Quit <value>` inside the `Try` (`#1043`), and standardise new code on `$$$ThrowOnError` rather than wizard-style `$$$ISERR` chains. Full idiom: `unit-tests` §"Error handling inside test methods"; canonical copy-paste class: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/objectscript-trycatch.cls` (§5.4 in `examples/README.md`).
 
 ## BPL editor regression: `Missing BPL Data`
 
