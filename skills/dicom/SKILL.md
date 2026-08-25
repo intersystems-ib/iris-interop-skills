@@ -127,7 +127,7 @@ the JDBC driver/ELS prerequisites. Reference: `iris/src/DICOM/BP/WorkListProcess
 
 > **Note** — the vendored sample wires `EnsLib.JavaGateway.Service` as the JDBC
 > bridge. In IRIS 2026.1 this class is deprecated in favour of an External
-> Language Server (see `business-operations` friction #63). New
+> Language Server (see `business-operations` §"Java Gateway BO"). New
 > work should configure the ELS `%JDBC Server` and reference it via the BO
 > setting `JGService` instead of adding a JavaGateway production item.
 
@@ -189,8 +189,8 @@ Respond `HTTP 202 Accepted` (async forwarding). Reference:
 
 The web app for the REST endpoint must be registered separately (CSP web
 application + dispatch class). See `business-services` for the
-`/csp/<app>/` registration and `AutheEnabled` bitmask (friction #84 documents
-the 96/97 values that actually work in 2026.1).
+`/csp/<app>/` registration and the `AutheEnabled` bitmask (96/97 values
+verified on 2026.1).
 
 ## Pattern 5 — DICOM ↔ HL7 / FHIR gateway
 
@@ -264,10 +264,8 @@ to `security` for cert chain validation patterns.
 
 ## Common pitfalls
 
-- **AE Title mismatch** — #1 first-day failure. `LocalAET` and `RemoteAET` on
-  Service/Operation must match the peer's expectations; the pair must be
-  registered via `AssociationContext.AETExists` + `CreateAssociation` in
-  `OnStart` before any traffic flows.
+- **AE Title mismatch** — #1 first-day failure; register the pair in `OnStart`
+  and verify with `TraceVerbosity=2` — see §"AE Title configuration" above.
 - **Transfer syntax negotiation** — sender offers JPEG-lossless, IRIS only
   registered `IMPLICITVRLETRANSFERSYNTAX`. Association is rejected. List every
   syntax you intend to support in the `$lb(...)` passed to `CreateAssociation`.
