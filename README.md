@@ -1,6 +1,6 @@
 # iris-interop-skills
 
-A set of **19 Claude Code skills** for building **InterSystems IRIS For Health
+A set of **20 Claude Code skills** for building **InterSystems IRIS For Health
 Interoperability** productions — and a bank of worked examples and best practices
 distilled from real-world integration projects.
 
@@ -104,8 +104,9 @@ self-contained binary.
    /plugin install iris-interop-skills@iris-interop-skills
    ```
 
-   This installs everything that ships with the plugin: the **20 skills**, the four **hooks**
-   (silent-execute guard + TDD enforcement + docker-detect + conformance pre-scan — auto-enabled), and
+   This installs everything that ships with the plugin: the **20 skills**, the eight **hooks**
+   (a SessionStart conventions bootstrap, two PreToolUse gates that can block non-conformant calls,
+   and five PostToolUse guards — auto-enabled; see *Hooks* below), and
    the four **agents** (`interop-builder`, `deploy-smoke-test`, `introspect-dont-guess`,
    `conformance-reviewer` — auto-registered; see *Agents* below).
 
@@ -225,7 +226,7 @@ the `iris-agentic-dev` or `iris-interop-dev` MCP.
   for the trickier patterns, indexed by rule in `examples/README.md`. Several
   skills cite these as concrete worked examples.
 - `external/workshop-iris-dicom-interop/` — a vendored MIT snapshot of the
-  InterSystems Iberia DICOM-interop workshop, used by `iris-interop-dicom`.
+  InterSystems Iberia DICOM-interop workshop, used by the `dicom` skill.
 
 All customer-identifying provenance has been removed from this public edition;
 the patterns are vendor-neutral.
@@ -254,16 +255,23 @@ Raise the budget in your **own** settings — `~/.claude/settings.json` (user) o
 
 ## Hooks
 
-Four `PostToolUse` hooks ship in `hooks/` and auto-enable when the plugin is installed (wired via
-`hooks/hooks.json`, referenced from `plugin.json`). They are **advisory** (they never block) and
-need a Python interpreter on PATH — resolved as **`python3` → `python` → `py`** (so Windows, where
-the interpreter is `python`/`py` rather than `python3`, works too); if none is found they degrade to a no-op.
+Eight hooks ship in `hooks/` and auto-enable when the plugin is installed (wired via
+`hooks/hooks.json`, referenced from `plugin.json`). They need a Python interpreter on PATH —
+resolved as **`python3` → `python` → `py`** (so Windows, where the interpreter is `python`/`py`
+rather than `python3`, works too); if none is found they degrade to a no-op. The two `PreToolUse`
+gates can **block** a non-conformant call; the SessionStart bootstrap and the five `PostToolUse`
+guards are advisory.
 
-| Hook | Fires on | What it does |
-|---|---|---|
-| `silent-execute-guard` | `iris_execute` returning empty output (`success:true`, no captured output) | Reminds that HTTP CodeMode returns only what you `write`; wrap side-effecting code as a `[SqlProc]` and SELECT it, or verify with `iris_query`. |
-| `tdd-enforcement` | `Write`/`Edit` of a `*.BO.*` / `*.BP.*` / `*DTL*` / `*Rule*` `.cls` with no sibling `*Test*.cls` | Reminds to write the test first (spec → test → red → implement → green; tests extend `%UnitTest.TestProduction`). |
-| `docker-detect` | An interop tool returns `DOCKER_REQUIRED` | Reminds that the instance is native/remote — the tools work over HTTP; retry without `IRIS_CONTAINER`. |
+| Hook | Event | Fires on | What it does |
+|---|---|---|---|
+| `interop-bootstrap` | `SessionStart` | every session | Injects the core interop conventions (naming, adapter rule, router rule, MCP-only, TDD) so they hold even before any skill loads. |
+| `interop-conformance-gate` | `PreToolUse` (**blocking**) | IRIS write/execute tools (`iris_doc`, `iris_compile`, `iris_execute`, production / credential / lookup tools) | Blocks convention violations — wrong class naming, extending the adapter, hand-`OnRequest` routing — and class loads/compiles smuggled through `iris_execute`. |
+| `src-before-iris` | `PreToolUse` (**blocking**) | `iris_doc(mode=put)` | The filesystem is the source of truth: the class must exist under `src/` before it is pushed to the namespace. |
+| `silent-execute-guard` | `PostToolUse` | `iris_execute` returning empty output (`success:true`, no captured output) | Reminds that HTTP CodeMode returns only what you `write`; wrap side-effecting code as a `[SqlProc]` and SELECT it, or verify with `iris_query`. |
+| `tdd-enforcement` | `PostToolUse` | `Write`/`Edit`/`iris_doc(put)` of a `*.BO.*` / `*.BP.*` / `*DTL*` / `*Rule*` `.cls` with no sibling `*Test*.cls` | Reminds to write the test first (spec → test → red → implement → green; tests extend `%UnitTest.TestProduction`). |
+| `conformance-prescan` | `PostToolUse` | `Write`/`Edit`/`iris_doc(put)` of an interop `.cls` | Cheap, deterministic pre-screen of that one file against the `conformance-review` criteria. |
+| `docker-detect` | `PostToolUse` | An interop tool returns `DOCKER_REQUIRED` | Reminds that the instance is native/remote — the tools work over HTTP; retry without `IRIS_CONTAINER`. |
+| `tdd-first-green` | `PostToolUse` | `iris_test` | Detects test-after-code: a test class whose **first ever** run is green never went red, so it proves nothing — asks for one currently-failing case. |
 
 Not installing as a plugin? Add the equivalent `hooks` block to your `settings.json`, pointing at
 the `hooks/*.sh` wrappers.
@@ -278,7 +286,7 @@ the `hooks/*.sh` wrappers.
   ES/EN); and (b) the **bare-vs-qualified invocation trap** — `Skill("interop")` errors with
   "Unknown skill" while `Skill("iris-interop-skills:interop")` works (the router + CLAUDE.md now
   always use the qualified id, and the router lists the exact `Skill(...)` calls to make).
-- **No skill was removed.** All 17 are intentional.
+- **No skill was removed.** All 20 are intentional.
 
 ## License
 
