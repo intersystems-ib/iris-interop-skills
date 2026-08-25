@@ -18,7 +18,7 @@ The user mentioned BPL, Message Router, routing rules, BP context, BPL orchestra
 This is the **non-negotiable starting point** for any production. Each Business Service points its `TargetConfigNames` at its **own** dedicated `EnsLib.MsgRouter.RoutingEngine` item, configured with **one** `Ens.Rule.Definition` (the routing rule). Don't:
 
 - Combine origins (BS.Censo and BS.Lab feeding the same router) — routing logic from different sources tangles, troubleshooting collapses.
-- Combine channels (one rule sending to functional BO + an alert + a logger) into "one rich rule" — fan-out belongs in `Ens.Alerts` (separate router) or in multiple `<send>` actions within the same rule, not in elaborate combined logic.
+- Combine channels (one rule sending to functional BO + an alert + a logger) into "one rich rule" — fan-out belongs in `Ens.Alert` (separate router) or in multiple `<send>` actions within the same rule, not in elaborate combined logic.
 - Skip the router and target a BO directly from the BS — works, but you lose the rule-edit-without-recompile property, and you can't add a filter or a transform later without rewiring.
 
 A "trivial" router (single rule, single `<send>`) is **not** infrastructure waste — it's the seam where future routing changes will live. Audit it as good, not as gap.
