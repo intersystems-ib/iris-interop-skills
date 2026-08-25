@@ -11,7 +11,7 @@ description: TDD-first workflow for IRIS Interoperability — the non-negotiable
 
 **Test classes for Interop ALWAYS extend `%UnitTest.TestProduction`**, never plain `%UnitTest.TestCase`. The TestProduction superclass provides everything you'd otherwise reinvent:
 
-- **`Run()` / `Debug()` class methods**: invoke a single test class directly — `do ##class(My.Tests.X).Run()`. **Bypasses the directory-walker pitfall** of `%UnitTest.Manager.RunTest()` that requires `^UnitTestRoot`. No `/noload` gymnastics, no custom helper.
+- **`Run()` / `Debug()` class methods**: invoke a single test class directly — `do ##class(My.Tests.X).Run()`. No `/noload` gymnastics, no custom helper — but **no bypass of the manager either**: `Run()` is a four-line wrapper over `%UnitTest.Manager.DebugRunTestCase`, so **`^UnitTestRoot` must still point at a directory that exists on the IRIS server**. If it doesn't, the run *appears to complete* having discovered **zero test cases** — the `#5007` directory error is buried in the log, so the symptom looks like "no tests found", not like a path problem. See `unit-tests` for the workaround (point it at any existing server-side dir; the MCP's `iris_test` sets it for you).
 - **`SendRequest(name, req, .resp, getReply, timeout)`**: wrapper over `EnsLib.Testing.Service.SendTestRequest`. One line instead of manual `$$$EnsRuntimeAppData` polling.
 - **`GetEventLog(type, configName, baseId, .Log, .new)`**: pulls `Ens_Util.Log` entries into an array, incremental. Type can be `info`, `error`, `warning`, `infouser`, `trace`, `alert`, `assert`, `startstop`, `other`. Replaces hand-written SQL embedded.
 - **`ChangeSetting(production, configName, setting, value)`** / **`GetSetting(...)`**: read/modify production item settings with validation.
@@ -20,14 +20,34 @@ description: TDD-first workflow for IRIS Interoperability — the non-negotiable
 - **Auto-properties**: `MainDir`, `HL7InputDir`, `HL7OutputDir`, `HL7WorkDir`, `HL7ArchiveDir`, `MachineName`, `InstanceName`, `DSNToSamples`, `DSNToUser`, `BaseLogId`, `LastLogId`.
 - **`CheckEnvironment`**: refuses to compile if the namespace is not Interop/HealthShare-enabled (catches setup errors early).
 
-### Required parameters
+### Required parameters — `PRODUCTION` is COMPILE-TIME mandatory
 
 ```objectscript
 Class My.Tests.X Extends %UnitTest.TestProduction
 {
-Parameter PRODUCTION = "My.Production";   ; required by the superclass
+Parameter PRODUCTION = "My.Production";   ; compile fails without it — see below
 }
 ```
+
+The superclass enforces this with a method generator (`CheckParameterPRODUCTION`): a subclass
+whose `PRODUCTION` is **missing or empty (`= ""`)** does not compile:
+
+```
+ERROR #5001: Parameter PRODUCTION must be specified
+  > ERROR #5490: Error running generator for method 'CheckParameterPRODUCTION:...'
+```
+
+Two consequences that are easy to get wrong (verified on IRIS 2026.1):
+
+- **A class that hit `#5001` never compiled, so to the test runner it does not exist.** If you
+  miss the compile error, the *next* thing you see is `iris_test` answering `NO_TESTS_FOUND` —
+  which is a **correct answer about a class that was never created**, not a discovery or naming
+  problem. `%Dictionary.CompiledClass` can still list the class name, which is exactly why this
+  masquerades as a discovery bug. Never diagnose `NO_TESTS_FOUND` without re-reading the last
+  compile result first.
+- The value must be **non-empty**, but it need not name an *existing* production to compile —
+  existence is asserted at runtime when the lifecycle starts the production. Name the real
+  production anyway; a wrong name just moves the failure to run time.
 
 ### When the production is managed externally
 
@@ -135,7 +155,7 @@ against an implementation that silently drops every field.
 
 ## Where to store the tests
 
-`MyApp.Tests.*` package, compiled in the namespace alongside `MyApp.*`. Source-controlled in Git (VS Code ObjectScript export or `$system.OBJ.Export`). With `%UnitTest.TestProduction.Run()` you don't need `^UnitTestRoot` or `/noload` — invoke directly by class name.
+`MyApp.Tests.*` package, compiled in the namespace alongside `MyApp.*`. Source-controlled in Git (VS Code ObjectScript export or `$system.OBJ.Export`). With `%UnitTest.TestProduction.Run()` you don't need `/noload` gymnastics — invoke directly by class name. You **do** still need `^UnitTestRoot` pointing at an existing server-side directory: the manager's "Finding directories" step runs regardless, and an invalid path yields a **silent zero-test run** (see `unit-tests`). The MCP's `iris_test` sets `^UnitTestRoot` itself; the trap bites direct `Run()` / `DebugRunTestCase` invocations.
 
 ## Canonical skeletons (USE THESE AS TEMPLATES)
 
@@ -332,9 +352,12 @@ For runner mechanics — the `^UnitTestRoot` directory requirement, `DebugRunTes
 a compiled test class under the name you passed. Re-running the identical call will return the identical
 error. Work the cause instead, in this exact order:
 
-1. **Compile the test class FIRST, then run it.** The class must be compiled before `iris_test` can see
-   it. Push it with `iris_doc(mode=put, compile=true)` (or `iris_compile`) and confirm a clean compile —
-   a test class that failed to compile does not exist to the runner.
+1. **Re-read the last compile result, then compile the test class and confirm it is CLEAN.** The class
+   must be compiled before `iris_test` can see it. Push it with `iris_doc(mode=put, compile=true)` (or
+   `iris_compile`) and **read the compiler output — do not assume**: a test class that failed to compile
+   does not exist to the runner, even though `%Dictionary.CompiledClass` may still list its name. The
+   most common compile failure on a `TestProduction` subclass is
+   `ERROR #5001: Parameter PRODUCTION must be specified` — see "Required parameters" above.
 2. **Run `iris_test` with the EXACT compiled class name** — fully qualified, case-correct
    (`MyApp.Tests.DT.Censo2Menus`, not `Censo2Menus`, not `myapp.tests...`). An unqualified or
    mis-cased name is the most common cause.
@@ -345,8 +368,10 @@ error. Work the cause instead, in this exact order:
    and have at least one `Test*` method. A class that extends the wrong base, or whose methods are not
    prefixed `Test`, compiles but exposes zero tests.
 5. Only after 1–4 — if it still reports `NO_TESTS_FOUND` — STOP and report the blocker (see the agent's
-   iteration cap). Do not loop, and do not switch to `$SYSTEM.OBJ.Load` / the terminal to "work around"
-   it: that does not change what the runner sees.
+   iteration cap). Do not loop, and do not switch routes to "work around" it — not `$SYSTEM.OBJ.Load` /
+   the terminal, not `Run()` via `iris_execute`, not `RunTest(..., "/noload")`, not querying
+   `^UnitTest.Result` by hand hoping to find a result. Every one of those gives the same (correct)
+   answer about a class that never compiled; the only fix is upstream, at step 1.
 
 ### After running — show the portal URL (ALWAYS)
 
@@ -380,6 +405,7 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
 ## Pitfalls specific to Interop TDD
 
 - **Extending `%UnitTest.TestCase` instead of `%UnitTest.TestProduction`** — you lose `Run()`, `SendRequest`, `GetEventLog`, etc., and end up reinventing them with `$$$EnsRuntimeAppData` polling and embedded SQL. Don't.
+- **Omitting `Parameter PRODUCTION` (or leaving it `= ""`)** — the class fails to compile with `#5001`, and everything downstream (`iris_test` → `NO_TESTS_FOUND`, empty `^UnitTest.Result`) is a correct report about a class that doesn't exist. Measured across an eval campaign, this single omission accounted for **every** zero-tests-run failure while the class *looked* complete. Non-empty is the compile-time requirement; naming the real production is the runtime one.
 - **Stubbing the adapter in BO tests.** In conventional software you'd unit-test the BO method with a mocked adapter — in IRIS Interop that's an anti-pattern. The adapter boundary is exactly where the defects you care about live (auth, classpath, type marshalling, encoding, timeouts). Stubs make the test green while the real thing breaks. Use a real adapter against a real test endpoint.
 - **Forgetting to override `TestControl()`** — TestProduction will start/stop your production every time you `Run()`. Override to no-op when the production is managed externally.
 - **Forgetting to seed `..BaseLogId`** — `GetEventLog` returns nothing if `BaseLogId` is empty. Seed it in `OnBeforeAllTests` from `MAX(ID) FROM Ens_Util.Log`.
@@ -415,11 +441,11 @@ Default to **prefix** unless you have a concrete reason to escalate. Auditing a 
 
 ```
 Test classes:   extend %UnitTest.TestProduction (never plain TestCase).
-Parameter:      PRODUCTION = "MyApp.Production"
+Parameter:      PRODUCTION = "MyApp.Production"   — COMPILE-TIME mandatory; missing/empty = #5001, class never exists
 Lifecycle:      override TestControl() to no-op if production runs externally; seed ..BaseLogId in OnBeforeAllTests.
 Dispatch:       ..SendRequest(configName, req, .resp, getReply, timeout)
 Inspect:        ..GetEventLog(type, configName, baseId, .Log, .new)
-Run:            do ##class(MyApp.Tests.X).Run()
+Run:            do ##class(MyApp.Tests.X).Run()   — still needs ^UnitTestRoot → existing server dir (unit-tests)
 
 Spec → Test → Red → Implement → Green → Refactor.
 BS: from outside IRIS only (file drop, TCP, curl).
