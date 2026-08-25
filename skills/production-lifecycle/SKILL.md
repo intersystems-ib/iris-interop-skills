@@ -190,7 +190,7 @@ XData ProductionDefinition
   </Item>
 
   <!-- Default scaffold: alerts router + file logger. Wired even before any rule exists. -->
-  <Item Name="Ens.Alerts" Category="MyApp" ClassName="EnsLib.MsgRouter.RoutingEngine"
+  <Item Name="Ens.Alert" Category="MyApp" ClassName="EnsLib.MsgRouter.RoutingEngine"
         PoolSize="1" Enabled="true">
     <Setting Target="Host" Name="BusinessRuleName">MyApp.Rule.Alerts</Setting>
   </Item>
@@ -205,7 +205,7 @@ XData ProductionDefinition
 ```
 
 Naming and category conventions (apply to every item):
-- **`Item Name="Tipo.Nombre"`** — `BS.X`, `BO.X`, `Router.X`, `Util.X`, fixed `Ens.Alerts`. Don't break the pattern (`Java.Gateway` looks like `Tipo.Nombre` but `Java` isn't a component type → rename to `Util.JavaGateway` or similar).
+- **`Item Name="Tipo.Nombre"`** — `BS.X`, `BO.X`, `Router.X`, `Util.X`, fixed `Ens.Alert`. Don't break the pattern (`Java.Gateway` looks like `Tipo.Nombre` but `Java` isn't a component type → rename to `Util.JavaGateway` or similar).
 - **`Category="<Package>"`** on every item. Groups items in the portal and enables category-level filtering. Use the project package (`MyApp`, `Hospital`) or a finer-grained label if it helps the UI.
 - **Omit noise attributes** like `Schedule=""` and `LogTraceEvents="false"`. They duplicate defaults and clutter the XML — leave them off unless the value is non-default and meaningful.
 
@@ -236,7 +236,7 @@ Don't confuse "registered but disabled" (class exists, `Enabled="false"`) with "
 
 Beyond BS/Router/BO, every production should ship with:
 
-- **`Ens.Alerts` router** (`EnsLib.MsgRouter.RoutingEngine`) wired as the alert target. Without it, exceptions land in the Event Log but don't fan out.
+- **`Ens.Alert` router** (`EnsLib.MsgRouter.RoutingEngine`) wired as the alert target. Without it, exceptions land in the Event Log but don't fan out.
 - **Alert sink BO** — at minimum a file logger (`EnsLib.File.PassthroughOperation` writing to a dedicated alerts directory). Optional email BO (`EnsLib.EMail.OutboundAdapter`) for prod.
 - **`Ens.Util.Tasks.Purge` task** scheduled daily. Persistent messages accumulate forever otherwise; the message-class table grows unbounded. Set `NumDaysToKeep` per retention policy (typically 30–90).
 - **External Language Server reference** when JDBC is in use — the BO's `JGService` setting points to an item whose `%gatewayName` is the ELS name (`%JDBC Server` is the IRIS-shipped default). `EnsLib.JavaGateway.Service` works but is **deprecated in IRIS 2026.1** — the gateway class is being phased out in favour of ELS-direct references.
@@ -452,7 +452,7 @@ If the installer must run identically on Linux and Windows, prefer driving it fr
 - **Forgetting custom utility classes** in the export bundle → import succeeds, runtime breaks.
 - **Using `EnsLib.JavaGateway.Service` as a production item for JDBC** → deprecated in IRIS 2026.1; reference the ELS from the BO's `JGService` setting — see §"Default scaffolds" above.
 - **Item name that breaks `Tipo.Nombre`** (`Java.Gateway`, `Censo`, `myBS`) → rename to fit the pattern (`Util.JavaGateway`, `BS.Censo`). Cosmetic but it affects portal grouping and search.
-- **Missing `Ens.Alerts` router** → exceptions die in the Event Log with no fan-out — scaffold rule in §"Default scaffolds" above.
+- **Missing `Ens.Alert` router** → exceptions die in the Event Log with no fan-out — scaffold rule in §"Default scaffolds" above.
 - **No purge task scheduled** → message tables grow forever; add `Ens.Util.Tasks.Purge` at creation time — see §"Default scaffolds" above.
 - **Adding `Schedule=""` and `LogTraceEvents="false"` to every item** → those are defaults; setting them explicitly to the default value adds noise to the XML and to diffs. Leave them off.
 

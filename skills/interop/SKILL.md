@@ -60,7 +60,7 @@ The production component's `Category` attribute MUST equal the package root (cas
 
 **Why** the discipline matters: without it, production gets clobbered on deploy, patched system classes get lost on IRIS upgrade, DataTransform-Wizard auto-suggestions break, and exported bundles miss dependencies.
 
-**Production Item Name** follows `<Tipo>.<Nombre>` (`BS.Census`, `BO.SQL`, `Router.Census`, `Util.JDBCGateway`, fixed `Ens.Alerts`). Items whose name breaks the pattern (`Java.Gateway`, `Censo`, `myBS`) get renamed before merge — cosmetic but it affects portal grouping, search, and category-level operations.
+**Production Item Name** follows `<Tipo>.<Nombre>` (`BS.Census`, `BO.SQL`, `Router.Census`, `Util.JDBCGateway`, fixed `Ens.Alert`). Items whose name breaks the pattern (`Java.Gateway`, `Censo`, `myBS`) get renamed before merge — cosmetic but it affects portal grouping, search, and category-level operations.
 
 ## Reserved package names
 

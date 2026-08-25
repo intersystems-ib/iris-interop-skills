@@ -83,9 +83,9 @@ Every BS/BO/Router/Util item has a name in the production XML. Use the conventio
 | Business Operation | `BO.` | `BO.WriteCensusToSQL` |
 | Message Router / BP | `Router.` | `Router.Census` |
 | Utility (gateway, scheduler) | `Util.` | `Util.JDBCGateway` |
-| Alert router | **fixed: `Ens.Alerts`** | `Ens.Alerts` — the framework looks up this exact name |
+| Alert router | **fixed: `Ens.Alert`** | `Ens.Alert` — the framework looks up this exact name |
 
-`Ens.Alerts` is **non-negotiable** — `Ens.Alerting` discovers the alert router by name. Other prefixes are convention, but consistent application makes the Management Portal much easier to scan. See `iris-interop` §1.1 for the project-wide naming convention.
+`Ens.Alert` is **non-negotiable** — the framework dispatches `Ens.AlertRequest` to the production item with this exact name (verified in `Ens.Host` source, IRIS 2026.1). Other prefixes are convention, but consistent application makes the Management Portal much easier to scan. See `interop` for the project-wide naming convention.
 
 ## Sync vs Async dispatch
 
