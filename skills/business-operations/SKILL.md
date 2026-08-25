@@ -114,24 +114,17 @@ Without a finite timeout, in-flight retries against an unreachable target accumu
 
 ### Timeout precedence — BO timeouts MUST be smaller than calling BP
 
-A BO's `Response Timeout` and `Failure Timeout` MUST be smaller than the calling BP's wait timeout. Whoever times out first owns the error context:
-
-- BO times out first → BO raises `Ens.AlertRequest` with diagnostic detail; BP gets the failure and can decide.
-- BP times out first → BO is still processing, never gets to mark its own error; the BP sees a generic timeout with no diagnostic chain.
-
-Set BO timeouts last, after the calling BP's timeout is fixed. See `bpl` for the BP-side view.
+A BO's `Response Timeout` and `Failure Timeout` MUST be strictly smaller than the calling BP's wait timeout — whoever times out first owns the error context, and only a BO-first timeout carries diagnostic detail up the chain. Set BO timeouts last, after the calling BP's timeout is fixed. Mechanism and the BP-side view: see `bpl` §"Timeouts".
 
 ### `ReplyCodeActions` defaults can swallow application errors (HL7 BO)
 
-The default HL7 BO `ReplyCodeActions` (`:?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C`) leaves application-level errors as **Suspended** messages. For integrations that **intentionally** return negative ACKs (rejected admissions, business-rule denials), this turns every business rejection into a suspended message requiring manual operator action.
-
-For HL7 BOs whose calling BP wants to inspect the ACK/NACK itself, override to:
+The default HL7 BO `ReplyCodeActions` (`:?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C`) leaves application-level errors as **Suspended** messages — so an integration that intentionally returns negative ACKs drowns operators in suspended messages. For HL7 BOs whose calling BP wants to inspect the ACK/NACK itself, override to:
 
 ```
 :?R=C,:?E=C,:~=C,:?A=C,:*=C,:I?=C
 ```
 
-This **Completes** the message regardless of reply code; the BP receives the response and decides what to do. See `alerting` for the full decision matrix.
+This **Completes** the message regardless of reply code; the BP receives the response and decides. Symbol meanings + full decision matrix: see `alerting`.
 
 ## Transactions — single row vs batch
 
@@ -150,7 +143,7 @@ Switch to UPSERT (`INSERT ... ON CONFLICT (paciente_id) DO NOTHING` / `DO UPDATE
 ## Common pitfalls
 
 - **Concatenating values into SQL strings** instead of parameterizing → injection + escaping bugs.
-- **Writing SQL from an assumed table name, then guessing a different name on `-30`** → resolve the real name first (`iris_table_info` / the `introspect-dont-guess` agent); after a not-found, the next call is introspection, never another guess. See "Resolve real table names BEFORE the first query".
+- **Writing SQL from an assumed table name, then guessing again on `-30`** → see §"Resolve real table names BEFORE the first query" above.
 - **Forgetting `MessageMap`** → every request hits the default `OnMessage` method which then has to dispatch by type manually.
 - **PoolSize > 1 with order-sensitive HL7 receivers** → out-of-order delivery breaks downstream state.
 - **Hardcoding URLs/credentials** instead of using settings + credentials records → environment-specific deploys fail.
@@ -304,7 +297,7 @@ When a third-party library is only available as Java (legacy SAML modules, custo
 3. Write a BO that extends `EnsLib.JavaGateway.AbstractOperation` and calls the proxy via `obj.<javaMethod>(...)`.
 4. Add the JAR to the JavaGateway classpath via the production component's "Additional parameters" setting.
 
-In 2025+, prefer **External Language Server** references over `EnsLib.JavaGateway.Service` (the gateway class is deprecated in IRIS 2026.1 in favour of ELS-direct references). The JavaGateway BO pattern itself still works but flag it as "use sparingly" — most legacy use cases now have native ObjectScript alternatives (e.g. SAML via `intersystems-ib/SAML-COS` instead of a Java SAML module).
+In 2025+, prefer **External Language Server** references over `EnsLib.JavaGateway.Service` (deprecated in IRIS 2026.1 — deprecation policy in `production-lifecycle` §"Default scaffolds"). Use sparingly: most legacy use cases now have native ObjectScript alternatives (e.g. SAML via `intersystems-ib/SAML-COS`).
 
 Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/javagateway-bo.cls`.
 
@@ -316,7 +309,7 @@ When integrating with a lab analyzer / device vendor (any modality where HL7 v2 
 - Segment re-ordering (the receiver keys on segment position).
 - Field copying between segments (the receiver's primary key lives in a non-standard field).
 
-Do not assume "vendor A → vendor B" is passthrough without inspecting the actual payloads. Document the DT per direction; see `iris-interop-transformations §2.4`.
+Do not assume "vendor A → vendor B" is passthrough without inspecting the actual payloads. Document the DT per direction; mechanism and concrete cases: `transformations` §"Lab device integration".
 
 Also: document the port pairs per environment in a single integration table, not just in BS/BO settings. Lab integrations are notoriously asymmetric (different ports for PRE vs PRO, different ports for inbound vs outbound) — discovery without a table is painful.
 

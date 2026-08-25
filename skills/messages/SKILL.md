@@ -194,9 +194,9 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/xml-p
 - **Putting business properties on the carrier instead of the payload** in SOAP scenarios → wizard regeneration overwrites them.
 - **Missing pair**: Request without matching Response when the operation is synchronous and the BP expects a typed response.
 - **Forgetting indexes** on properties used by `message-search-debug` — message search is fast only on indexed properties.
-- **An object property typed `%Persistent` "to be safe", with no delete cascade** → the child rows survive every purge. No error, nothing in the Event Log, the table just grows forever. Either make it `%SerialObject` (the default for a value object) or add the trigger — see **Complex properties**.
-- **Recursive properties on a `%SerialObject`** — a class that contains itself (CDA's nested sections are the classic case) → cyclic-reference compile error; switch to `%Persistent` and add the delete cascade.
-- **Adding `SourceFilename` / `SourceLine` to a message that comes from a Record Mapper Record** for CSV-line forensics → Record Mapper doesn't fill those properties at runtime, even if you declare them. If you need this correlation, propagate from the BS adapter (e.g. `Ens.MessageHeader` carries `%Source` / `%FileName` from the file adapter) instead of adding properties that stay empty.
+- **An object property typed `%Persistent` "to be safe", with no delete cascade** → child rows survive every purge and the table grows forever, silently. See §**Complex properties** for the `%SerialObject`-vs-trigger fix.
+- **Recursive properties on a `%SerialObject`** → cyclic-reference compile error. See §**Complex properties** (row 4) and the CDA section.
+- **Adding `SourceFilename` / `SourceLine` to a Record Mapper message** → the mapper never fills them; propagate provenance from the BS adapter instead — see `business-services`.
 
 ## Testing / how to verify
 

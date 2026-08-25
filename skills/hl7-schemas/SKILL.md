@@ -73,7 +73,7 @@ Use case: receiving ADT_A01 messages that include a custom `ZPI` segment carryin
 
 ## Cookbook — MCP-friendly import via XML + SqlProc
 
-Closes friction-log #106. When the Portal UI isn't available (working entirely via MCP, headless CI, scripted environment refresh), the canonical path is:
+When the Portal UI isn't available (working entirely via MCP, headless CI, scripted environment refresh), the canonical path is:
 
 1. Author the schema as a **standalone XML file** (root `<Category>`, see format below).
 2. Call `##class(EnsLib.HL7.SchemaXML).Import(file, .pCategoryImported)` from a SqlProc wrapper.

@@ -231,7 +231,7 @@ classes + native credential/SSL settings. Use HTTP-manual for: unreachable-at-bu
 the stack chokes on, or any case where `%SOAP.WebClient` gives `<ZSOAP> 64` and you can't tell why. **Do not**
 fall back to hand-injecting an `Authorization: Basic` header by reaching into `..Adapter.%CredentialsObj` —
 that's the anti-pattern this section exists to prevent; either generate the client (native `Credentials`) or
-set the adapter's `Credentials`/`SSLConfig` settings. Document the choice as a friction-log entry.
+set the adapter's `Credentials`/`SSLConfig` settings. Document the choice in the project's decision log.
 
 ### HTTP-manual client details that each cost a debug cycle
 

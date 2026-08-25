@@ -171,10 +171,10 @@ These don't replace the alert circuit — they sit alongside it. See `fhir`.
 
 - **`Send Alert on Error` enabled on `Ens.Alert` itself or on the alert sink BO** → infinite alert loop. The portal won't warn.
 - **No dedup function set in `Ens.Alert`** → cascading alerts and retry storms flood the mailbox; oncall starts ignoring the channel.
-- **`Failure Timeout = -1`** → infinite retries pile up against an unreachable target, queue slots leak. Always finite.
+- **`Failure Timeout = -1`** → infinite retries; always finite — see the per-BO settings checklist above.
 - **No `Ens.ProductionMonitorService`** → portal monitor screen stops updating; status feels real-time but is stale.
 - **Disabling `Send Alert on Error` on a "noisy" host** instead of filtering in the router → loses recoverability if the noise was actually a real condition you started ignoring.
-- **Storing the dedup state in `^IRISTemp.*`** → dedup resets on process restart; the next retry storm starts fresh. Use a regular global.
+- **Storing the dedup state in `^IRISTemp.*`** → dedup resets on process restart. Use a regular global (see the dedup function notes above).
 - **Per-occurrence variation in the error message** (PIDs, timestamps, stack frames) defeats simple dedup keys → truncate to first 200 chars or hash the constant prefix.
 
 ## Testing the alert circuit

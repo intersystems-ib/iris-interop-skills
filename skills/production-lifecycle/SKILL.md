@@ -442,18 +442,18 @@ If the installer must run identically on Linux and Windows, prefer driving it fr
 
 - **Editing settings in the production XML directly** in TEST/PROD instead of using Default Site Settings → values get blown away on next deploy.
 - **Stop/Start when Update would do** → unnecessary downtime.
-- **Restart-then-act without waiting for Running** → `StartProduction` returns before the production is up; the next call sees a Stopped production and fails downstream. Poll `Ens.Director.IsProductionRunning()` after every restart (see the RestartProduction pattern above).
-- **Re-issuing an identical `start` after a refusal** → `ErrProductionSuspendedMismatch` / `ErrProductionNotShutdownCleanly` / `ErrInvalidProduction` never clear on retry; the state must change first. Status first, then the recovery ladder (see "When the production will NOT start").
-- **Probing credentials with `IDKeyExists()`** → the method does not exist on `Ens.Config.Credentials`; runtime `<METHOD DOES NOT EXIST>`. Use `%OpenId()` + `$IsObject()`.
+- **Restart-then-act without waiting for Running** → poll `Ens.Director.IsProductionRunning()` after every restart — see §"Hot-swap vs. restart" above.
+- **Re-issuing an identical `start` after a refusal** → the refusal never clears on retry; the state must change first. See §"When the production will NOT start — the recovery ladder".
+- **Probing credentials with `IDKeyExists()`** → the method does not exist; use `%OpenId()` + `$IsObject()` — see §"Probing for an existing credential" above.
 - **Ignoring the rollback file** after a botched import → manual recovery is much harder.
 - **Items disabled in DEV that get re-enabled by import** because the export captured them as `Enabled=true`.
 - **Auditing `PoolSize=1` as a defect** → it's the correct default everywhere. Raise only with measured evidence.
 - **Production XML edited by two people simultaneously** → merge conflicts in XML; coordinate via source control.
 - **Forgetting custom utility classes** in the export bundle → import succeeds, runtime breaks.
-- **Using `EnsLib.JavaGateway.Service` as a production item for JDBC** → deprecated in IRIS 2026.1 (the class itself flags "use an External Language Server instead"). Reference the ELS by name from the BO's `JGService` setting; the gateway item, if kept, should point its `%gatewayName` at the ELS (`%JDBC Server` or your custom one).
+- **Using `EnsLib.JavaGateway.Service` as a production item for JDBC** → deprecated in IRIS 2026.1; reference the ELS from the BO's `JGService` setting — see §"Default scaffolds" above.
 - **Item name that breaks `Tipo.Nombre`** (`Java.Gateway`, `Censo`, `myBS`) → rename to fit the pattern (`Util.JavaGateway`, `BS.Censo`). Cosmetic but it affects portal grouping and search.
-- **Missing `Ens.Alerts` router** → exceptions die in the Event Log with no fan-out. Always include the alert router + at least a file sink in the scaffold.
-- **No purge task scheduled** → `Ens.MessageHeader` and custom-message tables grow forever. Add `Ens.Util.Tasks.Purge` at production creation time and audit existing productions for its absence.
+- **Missing `Ens.Alerts` router** → exceptions die in the Event Log with no fan-out — scaffold rule in §"Default scaffolds" above.
+- **No purge task scheduled** → message tables grow forever; add `Ens.Util.Tasks.Purge` at creation time — see §"Default scaffolds" above.
 - **Adding `Schedule=""` and `LogTraceEvents="false"` to every item** → those are defaults; setting them explicitly to the default value adds noise to the XML and to diffs. Leave them off.
 
 ## Testing / how to verify

@@ -39,12 +39,10 @@ ERROR #5001: Parameter PRODUCTION must be specified
 
 Two consequences that are easy to get wrong (verified on IRIS 2026.1):
 
-- **A class that hit `#5001` never compiled, so to the test runner it does not exist.** If you
-  miss the compile error, the *next* thing you see is `iris_test` answering `NO_TESTS_FOUND` —
-  which is a **correct answer about a class that was never created**, not a discovery or naming
-  problem. `%Dictionary.CompiledClass` can still list the class name, which is exactly why this
-  masquerades as a discovery bug. Never diagnose `NO_TESTS_FOUND` without re-reading the last
-  compile result first.
+- **A class that hit `#5001` never compiled, so to the test runner it does not exist** — a later
+  `NO_TESTS_FOUND` is a correct answer about a missing class, not a discovery bug. Measured across
+  an eval campaign, this single omission accounted for **every** zero-tests-run failure. Diagnosis
+  path: the `NO_TESTS_FOUND` recovery recipe below.
 - The value must be **non-empty**, but it need not name an *existing* production to compile —
   existence is asserted at runtime when the lifecycle starts the production. Name the real
   production anyway; a wrong name just moves the failure to run time.
@@ -155,7 +153,7 @@ against an implementation that silently drops every field.
 
 ## Where to store the tests
 
-`MyApp.Tests.*` package, compiled in the namespace alongside `MyApp.*`. Source-controlled in Git (VS Code ObjectScript export or `$system.OBJ.Export`). With `%UnitTest.TestProduction.Run()` you don't need `/noload` gymnastics — invoke directly by class name. You **do** still need `^UnitTestRoot` pointing at an existing server-side directory: the manager's "Finding directories" step runs regardless, and an invalid path yields a **silent zero-test run** (see `unit-tests`). The MCP's `iris_test` sets `^UnitTestRoot` itself; the trap bites direct `Run()` / `DebugRunTestCase` invocations.
+`MyApp.Tests.*` package, compiled in the namespace alongside `MyApp.*`. Source-controlled in Git (VS Code ObjectScript export or `$system.OBJ.Export`). With `%UnitTest.TestProduction.Run()` you don't need `/noload` gymnastics — invoke directly by class name. You **do** still need `^UnitTestRoot` → an existing server-side directory (silent zero-test run otherwise — see the `Run()` bullet above and `unit-tests`).
 
 ## Canonical skeletons (USE THESE AS TEMPLATES)
 
@@ -332,7 +330,7 @@ Effect:
 - Programmatic: `..SendRequest(...)` and `EnsLib.Testing.Service.SendTestRequest(...)` both work when the production is running with this flag.
 - Internally: a hidden `EnsLib.Testing.Process` is registered and dispatches the wrapped `EnsLib.Testing.Request` to the target via `SendRequestAsync`.
 
-**Important — security**: `TestingEnabled="true"` is a development setting. **Never deploy a production to prod with this flag on** — anyone with the Testing resource can fabricate messages into running BPs/BOs. Strip it (or guard via a deployment-time setting) before promoting.
+**Important — security**: `TestingEnabled="true"` is a development setting — the **correct default** in dev/workshop productions, and a risk only where deploy-to-prod automation exists. **Never deploy a production to prod with this flag on** — anyone with the Testing resource can fabricate messages into running BPs/BOs. Strip it (or guard via a deployment-time setting) before promoting.
 
 ## Running the tests
 
@@ -404,15 +402,15 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
 
 ## Pitfalls specific to Interop TDD
 
-- **Extending `%UnitTest.TestCase` instead of `%UnitTest.TestProduction`** — you lose `Run()`, `SendRequest`, `GetEventLog`, etc., and end up reinventing them with `$$$EnsRuntimeAppData` polling and embedded SQL. Don't.
-- **Omitting `Parameter PRODUCTION` (or leaving it `= ""`)** — the class fails to compile with `#5001`, and everything downstream (`iris_test` → `NO_TESTS_FOUND`, empty `^UnitTest.Result`) is a correct report about a class that doesn't exist. Measured across an eval campaign, this single omission accounted for **every** zero-tests-run failure while the class *looked* complete. Non-empty is the compile-time requirement; naming the real production is the runtime one.
+- **Extending `%UnitTest.TestCase` instead of `%UnitTest.TestProduction`** — you lose everything the superclass provides and reinvent it by hand. See §"Baseline class" above.
+- **Omitting `Parameter PRODUCTION` (or leaving it `= ""`)** — `#5001` at compile time; the class never exists to any runner. See §"Required parameters" above.
 - **Stubbing the adapter in BO tests.** In conventional software you'd unit-test the BO method with a mocked adapter — in IRIS Interop that's an anti-pattern. The adapter boundary is exactly where the defects you care about live (auth, classpath, type marshalling, encoding, timeouts). Stubs make the test green while the real thing breaks. Use a real adapter against a real test endpoint.
 - **Forgetting to override `TestControl()`** — TestProduction will start/stop your production every time you `Run()`. Override to no-op when the production is managed externally.
 - **Forgetting to seed `..BaseLogId`** — `GetEventLog` returns nothing if `BaseLogId` is empty. Seed it in `OnBeforeAllTests` from `MAX(ID) FROM Ens_Util.Log`.
 - **Asserting on internal state** instead of public contract. Assert on what the next consumer (DTL, BO, downstream system) actually sees.
 - **No fixture strategy** — paste-in literals everywhere. Centralize sample inputs in a fixtures class (`MyApp.Tests.Fixtures.Censo`).
 - **File fixtures on a path only the agent can see.** A test that reads sample data from a file (`CopyFile`, an HL7 drop, a CSV) runs **inside IRIS** — and when IRIS is in a container, your working directory does not exist there. The red assert says "file not found" against a path that plainly exists on *your* side, and the fix is never to retry the path. Put server-read fixtures on a **server-visible path**: the container's mounted data directory, or ferry the content in via the MCP (`iris_execute` writing a temp file server-side, or inline the fixture as a string in the test class — the most portable option).
-- **`TestingEnabled="true"` left in a deployed production** — security/integrity risk. Treat it like a debug flag. (Note: `TestingEnabled="true"` is the **correct default** in dev/workshop productions — only flagged here for environments with deploy-to-prod automation.)
+- **`TestingEnabled="true"` left in a deployed production** — treat it like a debug flag. See §"Enabling the Testing Service" (security note).
 - **Asserting only on `$$$LOGINFO` presence in the event log** ("INSERT OK paciente_id=...") instead of on the row's actual contents → the log proves the BO method ran, not that the destination has the right values. Add at least one assert that reads the side-effect back: a `SELECT` via psql/`Adapter` in `OnAfterAllTests`, or a small **verifier BO** callable via `..SendRequest(verifier, query, .resp, 1)` that returns the row for property-by-property asserts. The log is necessary but insufficient.
 - **Test methods without a description comment** — When a test fails, the first thing the user sees is the method name in the portal. A `///` comment on the method clarifies *what spec clause* the test verifies, not just *what code it exercises*. One line is enough: `/// Verifies that empty Alergias is marshalled to SQL NULL`.
 

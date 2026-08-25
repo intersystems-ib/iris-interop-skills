@@ -173,10 +173,10 @@ Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Ut
 - **Defaulting to Create=New** when source and target shapes match → costly rebuilding of every segment.
 - **Forgetting to compile before testing** → the editor lies (runs the previous compiled version).
 - **Lookup() without a default parameter** → silent "" on miss, hard to debug.
-- **Validation lists / `In()` checks that don't tolerate diacritic and case variants** → `"Diabetica"` ≠ `"Diabética"` ≠ `"diabética"`. Spanish-language input drifts on tildes and casing constantly; a hardcoded literal list rejects legitimate input silently. Normalize **both sides** with `$ZCONVERT(...,"L")_$ZSTRIP(...,"*-CWE")` (see the `NormalizeKey` example in the FunctionSet section above) and compare normalized values, or accept every variant explicitly in the list. Same rule for lookup table keys — store the normalized form.
+- **Validation lists / `In()` checks that don't tolerate diacritic and case variants** → `"Diabetica"` ≠ `"Diabética"` ≠ `"diabética"`; a hardcoded literal list rejects legitimate input silently. Normalize **both sides** before comparing — see `NormalizeKey` in the FunctionSet section above; normalized lookup-table keys: `lookup-tables`.
 - **Switch cases ordered generic-to-specific** → generic case matches first, specific cases never run.
 - **Foreach over the wrong group** in HL7 nested structures (e.g. iterating PIDgrp when you wanted PIDgrpgrp).
-- **Bounding a repeating-segment loop with `AL1Count`** → returns `""` on schema versions that don't expose it; `For i=1:1:""` runs zero times and the transform "succeeds" having processed nothing. Bounded loop + `Quit:'$IsObject(seg)` instead (see the iteration section below).
+- **Bounding a repeating-segment loop with `AL1Count`** → returns `""` on schemas that don't expose it; the loop runs zero times and the transform "succeeds" having processed nothing. See §"Iterating repeating segments" below for the safe pattern.
 - **DTL doing DB lookups in `code` actions** that block the BP — move to a method that can be cached.
 - **CDA in DTL** — almost always wrong; switch to XSLT.
 - **Hand-rolling date conversion in `<code>` blocks** (`$ZDATEH(source.X, 4, , , , , , , -1)` etc.) → prefer `ConvertDateTime` from the function picker, or wrap the logic in a project FunctionSet subclass (see above). Inline `$ZDATEH` with positional empty args is unreadable and not reusable.
@@ -299,7 +299,7 @@ For i = 1:1:source.SegCount {
 
 - **`%Date` (storage = integer day count) ≠ string `YYYY-MM-DD`**. The PostgreSQL JDBC driver throws `StringIndexOutOfBoundsException: begin 0, end 10, length 5` when bound a raw `%Date` integer to a `DATE` column. Convert in the DTL or BO with `$ZDATE(tDate, 3)` before binding.
 - **`%TimeStamp` for `xs:dateTime`**: replace the space with `T`. `$TRANSLATE($ZDATETIME($HOROLOG, 3), " ", "T")` produces `2026-05-13T07:13:59`.
-- **Canonical message types should hold values as `%String`** when they collect from HL7/REST sources. Typing `Planta As %SmallInt` and then receiving `"PLANTA3"` from `PV1:3.1` produces `ERROR #7207: Datatype value 'PLANTA3' is not a valid number` and kills the BP. If you need numeric, cast in the DTL after extraction.
+- **Canonical message types should hold values as `%String`** when they collect from HL7/REST sources — a typed field receiving free text (`Planta As %SmallInt` ← `"PLANTA3"`) dies with `#7207` and kills the BP; cast in the DTL after extraction. Full datatype rule: `messages`.
 
 ## Lab device integration — DT in BOTH directions
 
