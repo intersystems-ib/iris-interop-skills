@@ -253,7 +253,7 @@ reads the lines and assembles the sub-batch itself.
 
 The Record Map's `<Map>.Record` class **and** the `GetObject`/`PutObject`/`GetRecord`/`PutRecord` method bodies are written by the **wizard / generator into the source**, exactly like a generated SOAP client. A normal `iris_compile` (or `iris_doc put` with `compile=true`) of a Record Map class that contains only the XData block compiles green but produces **no working `GetObject`** — at runtime the FileService dies with `<METHOD DOES NOT EXIST>GetObject ... ^EnsLib.RecordMap.Service.Base.1`.
 
-When the Portal wizard is not available (MCP / headless), generate via the official API **wrapped in a `[SqlProc]`** (because `iris_execute`'s objectgenerator mode silently no-ops class-generating calls — see the friction log):
+When the Portal wizard is not available (MCP / headless), generate via the official API **wrapped in a `[SqlProc]`** (because `iris_execute`'s objectgenerator mode silently no-ops class-generating calls — verified on IRIS 2026.1):
 
 ```objectscript
 ClassMethod GenerateRecordMap(pRM As %String) As %String [ SqlProc ]
@@ -337,7 +337,7 @@ Method Preauth(pInput As %Stream.Object, Output pOutput As %Stream.Object) As %S
 }
 ```
 
-Five non-obvious rules (each cost a debug cycle — see friction log):
+Five non-obvious rules (each cost a debug cycle):
 - **Write to the `pOutput` the framework passes in — do NOT `Set pOutput = ##class(%GlobalBinaryStream).%New()`.** Rebinding the local variable orphans the framework's response stream; the HTTP reply comes back `200` with an **empty body**.
 - **The route handler runs as an INSTANCE method of the service host** (`EnsLib.REST.Service` dispatches no-class-prefix routes via `$method($this,...)`), so `..SendRequestSync(target, req, .resp)` to a BP/BO works directly inside it.
 - **`%DynamicObject` keys with underscores need `%Get`/`%Set`** — `tJSON.codigo_acto` parses as `tJSON.codigo _ acto` (the `_` is the concat operator) and breaks compilation. Use `tJSON.%Get("codigo_acto")`.
@@ -416,7 +416,7 @@ Method OnPreWebMethod() As %Status
 }
 ```
 
-This requires `EnsLib.SOAP.InboundAdapter` (an adapter that strips Authorization headers would defeat the pattern). For non-SOAP REST inbound, use the CSP web app's `AutheEnabled` bitmask (covered above) and let the gateway handle Basic — OnPreWebMethod is specific to SOAP service classes.
+This requires `EnsLib.SOAP.InboundAdapter` (an adapter that strips Authorization headers would defeat the pattern). For non-SOAP REST inbound, use the CSP web app's `AutheEnabled` bitmask (see §CSP/Web-app permissions below) and let the gateway handle Basic — OnPreWebMethod is specific to SOAP service classes.
 
 ## REST/CSP entry point: Business Service **without an adapter**
 
@@ -479,10 +479,8 @@ these IRIS-SQL specifics in mind:
 - **Discover, don't guess.** Before querying, use `iris_table_info` (or `docs_introspect`, or the
   `introspect-dont-guess` agent) to get the real table/column names rather than guessing
   system-catalog tables — and on `SQLCODE -30 Table not found`, the next call is introspection,
-  never a differently-guessed name. Collection properties on a RecordMap `.Record` or message
-  class project to a child table **in the parent's schema** (`COCINA.MSG.MenuRecibido` +
-  `Alergias` → `COCINA_MSG.MenuRecibido_Alergias`, not `COCINA.MenuRecibido_Alergias`) — see
-  `messages` (Collections).
+  never a differently-guessed name. Collection properties project to a child table **in the
+  parent's schema** — projection rule and example: `messages` §Collections.
 
 ## See also
 
