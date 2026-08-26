@@ -164,8 +164,9 @@ Switch to UPSERT (`INSERT ... ON CONFLICT (paciente_id) DO NOTHING` / `DO UPDATE
 
 Any SQL a BO (or its verification step) touches goes through this gate: **before the first
 `iris_query` / SQL statement against a table you did not create in this session, resolve the real
-name** — `iris_table_info` on the schema, or spawn the `introspect-dont-guess` agent. Never write
-the query from an assumed name.
+name** — `iris_table_info` on the schema, or spawn the `introspect-dont-guess` plugin agent (an
+agent, not a skill; with no agent tool, this section plus `interop` §"Resolving real names" is the
+recipe). Never write the query from an assumed name.
 
 Measured over a workshop cohort: `iris_query` returned `SQL_ERROR` **127 times across 17/18
 students**, dominated by invented object names — and the recovery pattern made it worse: guess →
