@@ -92,6 +92,17 @@ If the destination is a SOAP web service, **stop and use `soap-bo`** instead. It
 | `LogTraceEvents` | Per-item toggle for `$$$TRACE` calls. Default off in prod, on in dev. `$$$LOGINFO`/`$$$LOGWARNING` are not gated by this. |
 | Stay-alive / reconnect | TCP/SOAP — controls whether the BO holds the connection open. |
 
+## File output — two `%File` API traps
+
+When creating the directory a file BO writes into (or checking its output from a test):
+
+- Use `##class(%File).CreateDirectoryChain(dir)` for any path whose parents may not exist.
+  `CreateDirectory` creates **one** level only, and on failure returns a bare `0` — not a
+  `%Status`, so there is no error text to read; a missing intermediate directory fails silently.
+- The existence tests are `##class(%File).Exists(file)` and `##class(%File).DirectoryExists(dir)`.
+  There is no `%File.FileExists` — calling it fails as `<METHOD DOES NOT EXIST>`, easy to misread
+  as a read-only filesystem when it is just a wrong method name.
+
 ## Error handling and retry policy
 
 `If $$$ISERR(tSC) Quit tSC` propagates every error the same way. That's almost never what you want — transient errors (timeout, connection drop) should retry; permanent errors (constraint violation, schema mismatch, auth failure) should suspend and alert.
