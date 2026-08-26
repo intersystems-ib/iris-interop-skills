@@ -142,6 +142,10 @@ Anti-pattern worth naming: a `Test*` method whose only assertion is `$$$AssertSt
 asserts the component did not error. It does not assert it did the right thing, and it passes
 against an implementation that silently drops every field.
 
+Write assertions only with macros that exist — there is no `$$$AssertNotNull` or `$$$AssertGreater`,
+and inventing one fails the compile with `MPP5610`. Mechanism: see `unit-tests` (section "Assertion
+macros — the inventory").
+
 ## What's testable in IRIS Interop — decision table
 
 | Component | Test approach |
@@ -408,7 +412,7 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
 
 ## Pitfalls specific to Interop TDD
 
-- **Extending `%UnitTest.TestCase` instead of `%UnitTest.TestProduction`** — you lose everything the superclass provides and reinvent it by hand. See §"Baseline class" above.
+- **Extending `%UnitTest.TestCase` instead of `%UnitTest.TestProduction`** — you lose everything the superclass provides and reinvent it by hand. Nor is `%UnitTest.TestCase` an escape hatch for a compile error: `Extends %UnitTest.TestProduction` and `Parameter PRODUCTION` are fixed points — fix the error, never remove the parameter or change the superclass to silence it. See §"Baseline class" above.
 - **Omitting `Parameter PRODUCTION` (or leaving it `= ""`)** — `#5001` at compile time; the class never exists to any runner. See §"Required parameters" above.
 - **Stubbing the adapter in BO tests.** In conventional software you'd unit-test the BO method with a mocked adapter — in IRIS Interop that's an anti-pattern. The adapter boundary is exactly where the defects you care about live (auth, classpath, type marshalling, encoding, timeouts). Stubs make the test green while the real thing breaks. Use a real adapter against a real test endpoint.
 - **Forgetting to override `TestControl()`** — TestProduction will start/stop your production every time you `Run()`. Override to no-op when the production is managed externally.
