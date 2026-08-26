@@ -1,6 +1,6 @@
 ---
 name: dicom
-description: DICOM C-STORE/FIND/MOVE, MWL, PACS, STOW-RS. Routed from interop. Triggers: DICOM, C-STORE, C-FIND, C-MOVE, MWL, PACS, STOW-RS, DICOMweb, modality, AE Title, EnsLib.DICOM.
+description: DICOM C-STORE/FIND/MOVE, MWL, PACS, STOW-RS. Routed from interop. Triggers: DICOM, C-STORE, C-FIND, C-MOVE, MWL, modality worklist, PACS, STOW-RS, DICOMweb, imaging modality (the device), AE Title, EnsLib.DICOM. NOT a trigger: the bare word "modality" in HL7/FHIR/lab-device prose — that alone is not DICOM work.
 ---
 
 # DICOM on IRIS for Health
@@ -14,8 +14,11 @@ for every pattern here.
 
 ## When to use this skill
 
-The user mentioned DICOM, a modality, PACS, MWL, C-STORE, C-FIND, C-MOVE, STOW-RS,
-DICOMweb, AE Title, association context, or any `EnsLib.DICOM.*` class.
+The user mentioned DICOM, an imaging modality, PACS, MWL, C-STORE, C-FIND, C-MOVE,
+STOW-RS, DICOMweb, AE Title, association context, or any `EnsLib.DICOM.*` class.
+The bare word "modality" is **not** enough on its own — HL7/lab-device prose uses it
+for any bidirectional device (a lab analyzer is "a modality" in that sense); without a
+DICOM protocol cue, stay in the HL7/FHIR skills.
 
 ## Status: architecture + wiring only
 

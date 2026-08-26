@@ -168,7 +168,7 @@ SQL-BO worked flow (child-table projections, invented system catalogs): see `bus
 | **About to build *anything* (DTL, rule, BO method, BPL) — TDD workflow** | **`iris-interop-skills:tdd`** (entry point; non-negotiable) |
 | **Built it and TDD-green — is it idiomatic / per best practices?** (run before declaring done) | **`iris-interop-skills:conformance-review`** (criteria CR-1…CR-12; the `conformance-reviewer` plugin agent — an agent, not a skill — runs it). **Mechanically: FIRST open `skills/conformance-review/SKILL.md`** — via the Skill tool where available, else read the file — before writing any review output. |
 | %UnitTest framework toolbox (storage, runner flags, ^UnitTest.Result) | `iris-interop-skills:unit-tests` (lower-level reference; the TDD skill calls into it) |
-| Anything DICOM (C-STORE, C-FIND, C-MOVE, MWL, STOW-RS, modalities, PACS) | `iris-interop-skills:dicom` (architecture + wiring patterns; defers byte-level work to docs + vendored sample at `${CLAUDE_PLUGIN_ROOT}/BestPractices/external/workshop-iris-dicom-interop/`) |
+| Anything DICOM (C-STORE, C-FIND, C-MOVE, MWL, STOW-RS, imaging modalities, PACS — the bare word "modality" for an HL7/lab device is NOT DICOM) | `iris-interop-skills:dicom` (architecture + wiring patterns; defers byte-level work to docs + vendored sample at `${CLAUDE_PLUGIN_ROOT}/BestPractices/external/workshop-iris-dicom-interop/`) |
 
 ## Exact routing — call these now (don't just describe them)
 
