@@ -39,10 +39,10 @@ Class MyApp.Msg.PatientCensusRequest Extends (Ens.Request, %Persistent)
 Property PatientId As %String;
 Property AdmissionDate As %TimeStamp;
 Property Department As %String(MAXLEN=80);
-
-Storage Default { /* lives in MyApp.Msg.PatientCensusRequestD, not Ens.MessageBodyD */ }
 }
 ```
+
+Do **not** write a `Storage` block. Extending `%Persistent` is what gives the message its own extent — `MyApp.Msg.PatientCensusRequestD`, not `Ens.MessageBodyD` — and IRIS generates the storage definition on first compile. Hand-writing one makes `iris_doc` refuse the write until `allow_storage_regeneration: true` is passed; the guard is protecting generated storage, so the fix is to leave the block out, not to pass the flag.
 
 Pair Request with a Response class extending `(Ens.Response, %Persistent)`. If the operation is fire-and-forget, return `Ens.Response` directly — no custom Response class needed.
 
@@ -198,6 +198,7 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/xml-p
 ## Common pitfalls
 
 - **Custom message without `%Persistent`** → bodies stored in `Ens.MessageBodyD`, unsearchable by property, slow to purge.
+- **Hand-written `Storage` block** → `iris_doc` refuses the write (storage guard). See §**Canonical pattern — custom persistent message**.
 - **Subclassing `EnsLib.HL7.Message`** → almost always wrong; HL7 is structurally defined by DocType, not by class hierarchy.
 - **Putting business properties on the carrier instead of the payload** in SOAP scenarios → wizard regeneration overwrites them.
 - **Missing pair**: Request without matching Response when the operation is synchronous and the BP expects a typed response.
