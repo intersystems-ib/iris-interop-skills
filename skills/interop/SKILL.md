@@ -166,7 +166,7 @@ SQL-BO worked flow (child-table projections, invented system catalogs): see `bus
 | **Securing endpoints** — SAML 2.0 / 1.1, OAuth 2.0 server + LDAP, SSL/TLS chain, internal account hygiene | `iris-interop-skills:security` |
 | **Alert circuit** — `Ens.Alert` router, dedup function set, ProductionMonitorService, per-BO alert settings | `iris-interop-skills:alerting` |
 | **About to build *anything* (DTL, rule, BO method, BPL) — TDD workflow** | **`iris-interop-skills:tdd`** (entry point; non-negotiable) |
-| **Built it and TDD-green — is it idiomatic / per best practices?** (run before declaring done) | **`iris-interop-skills:conformance-review`** (criteria CR-1…CR-12; the `conformance-reviewer` agent runs it). **Mechanically: FIRST open `skills/conformance-review/SKILL.md`** — via the Skill tool where available, else read the file — before writing any review output. |
+| **Built it and TDD-green — is it idiomatic / per best practices?** (run before declaring done) | **`iris-interop-skills:conformance-review`** (criteria CR-1…CR-12; the `conformance-reviewer` plugin agent — an agent, not a skill — runs it). **Mechanically: FIRST open `skills/conformance-review/SKILL.md`** — via the Skill tool where available, else read the file — before writing any review output. |
 | %UnitTest framework toolbox (storage, runner flags, ^UnitTest.Result) | `iris-interop-skills:unit-tests` (lower-level reference; the TDD skill calls into it) |
 | Anything DICOM (C-STORE, C-FIND, C-MOVE, MWL, STOW-RS, modalities, PACS) | `iris-interop-skills:dicom` (architecture + wiring patterns; defers byte-level work to docs + vendored sample at `${CLAUDE_PLUGIN_ROOT}/BestPractices/external/workshop-iris-dicom-interop/`) |
 
@@ -203,12 +203,13 @@ involved, issue several `Skill(...)` calls in the same turn.
 
 ## Stop on repeated failure — do not loop, do not switch mechanism
 
-If the same class won't compile or the same test won't run after a few attempts, **stop and report the
-blocker** — read the error and fix the source rather than retrying blindly. A failing `iris_compile` /
-`iris_test` is never a cue to drop to the terminal or `$SYSTEM.OBJ.Load`/`Compile` — that bypasses the
-MCP without fixing the error. There is no Docker on native Windows IRIS (never probe for it), and never
-mix bash `&&`/syntax in the PowerShell tool. The full iteration cap and self-abort rule lives in the
-`interop-builder` agent.
+If the same class won't compile or the same test won't run, read the error and fix the source rather
+than retrying blindly. After **3 consecutive failed attempts at the same goal**, stop and report the
+blocker: what was tried, the exact error, and the current hypothesis. Changing the namespace, package,
+or superclass to make an error disappear is **not** a fix — it relocates the deliverable out of the
+place the user asked for. A failing `iris_compile` / `iris_test` is never a cue to drop to the terminal
+or `$SYSTEM.OBJ.Load`/`Compile` — that bypasses the MCP without fixing the error. There is no Docker on
+native Windows IRIS (never probe for it), and never mix bash `&&`/syntax in the PowerShell tool.
 
 ## Scaffold the build on local disk BEFORE implementing
 
@@ -217,7 +218,9 @@ compiles never hit missing-dependency errors and `iris_test` is always called wi
 This is disk-only work; **execution stays MCP-only**. See `component-map` for the full recipe. In short:
 write a build-order manifest (topological: messages -> DTs -> BO/BP -> rules -> production) plus typed
 class skeletons and `%UnitTest.TestProduction` test stubs wired to the exact class names, all under local
-`src/`, then fill in logic and push via the MCP.
+`src/`, then fill in logic and push via the MCP. A component is delivered only when it is compiled in the
+target namespace and its tests run GREEN via `iris_test` — local files are a scaffold, not a deliverable.
+Mechanism: see `tdd` (section "The non-negotiable workflow").
 
 ## Recommended build order
 
@@ -234,7 +237,7 @@ For a typical end-to-end interface, work in this order — it minimises rework b
 9. **Production wiring + settings** (`production-lifecycle`) — add `TestingEnabled="true"` for dev productions; choose deployment tool early
 10. **Security** (`security`) — only after components exist; SAML/OAuth/SSL added where the endpoints actually call out
 11. **Test, search, debug** (`message-search-debug`) — Visual Trace + Event Log for verifying end-to-end runs; purge task added
-12. **Conformance review** (`conformance-review`) — once built and TDD-green, review against the best-practice criteria (CR-1…CR-12) before declaring done; spawn the `conformance-reviewer` agent, or where no agent/Skill tool exists, FIRST read `skills/conformance-review/SKILL.md` and follow it. It re-verifies tests via the real `iris_test` tool (never a self-graded `[SqlProc]`), reports findings with the canonical fix, and proposes a scoped remediation plan.
+12. **Conformance review** (`conformance-review`) — once built and TDD-green, review against the best-practice criteria (CR-1…CR-12) before declaring done; spawn the `conformance-reviewer` plugin agent (an agent, not a skill), or where no agent/Skill tool exists, FIRST read `skills/conformance-review/SKILL.md` and follow it. It re-verifies tests via the real `iris_test` tool (never a self-graded `[SqlProc]`), reports findings with the canonical fix, and proposes a scoped remediation plan.
 
 For FHIR-specific work, replace steps 4–7 with the `fhir` decision tree (Façade vs Repository, OAuth2 PKCE setup, FHIR R4 Bundle shape).
 

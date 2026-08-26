@@ -55,8 +55,10 @@ message first (`messages`) and write the test first (`tdd`) as always.
 2. **Don't hand-roll introspection or SQL via `iris_execute`.** Asking "what's the production status / which
    items exist / what columns does this table have" by writing ObjectScript or SQL leads to guessed,
    non-existent APIs (`<METHOD/CLASS DOES NOT EXIST>`) and malformed queries (`<SYNTAX>errdone+2^%qaqqt`).
-   Use the typed MCP tools — the cheat-sheet lives in `message-search-debug` and the `introspect-dont-guess`
-   agent resolves real names before you reference them.
+   Use the typed MCP tools — the cheat-sheet lives in `message-search-debug`, and the `introspect-dont-guess`
+   plugin **agent** (an agent, not a skill — `Skill()` on it errors with "Unknown skill") resolves real names
+   before you reference them; with no agent tool, follow `interop` §"Resolving real names" and the
+   introspection section in `business-operations`.
 
 ## Scaffold on disk before you implement (cuts compile-order and `NO_TESTS_FOUND` thrash)
 
@@ -88,4 +90,4 @@ Then fill in logic and push each class via the MCP **in manifest order**. Source
 - `messages` — design the message class first (the foundational building block)
 - `tdd` — write the component's test before the implementation (non-negotiable)
 - `business-operations` / `business-services` / `bpl` / `transformations` — the depth behind each row
-- `message-search-debug` + `introspect-dont-guess` agent — typed-tool cheat-sheet (rule 2 above)
+- `message-search-debug` + `introspect-dont-guess` plugin agent (an agent, not a skill) — typed-tool cheat-sheet and no-agent fallback (rule 2 above)

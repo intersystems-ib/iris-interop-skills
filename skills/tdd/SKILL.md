@@ -95,6 +95,11 @@ If the conversation is purely about wiring components into a production (product
 6. REFACTOR       Simplify with green tests as the safety net. Re-run.
 ```
 
+**Definition of done.** A component is delivered only when (a) its source is compiled in the target
+namespace and the compiler result was read, and (b) its `%UnitTest.TestProduction` suite runs GREEN
+via `iris_test`. Files on local disk are a scaffold, not a deliverable. Do not write a completion
+summary unless both happened in this session; if either is missing, say plainly which one and stop.
+
 Stepping over 1-2-3 ("just write the DTL first") is the most common anti-pattern. Refuse it:
 
 > "I'll write the test first. It defines what 'done' means, and we'll know we're done when it passes."
@@ -365,8 +370,9 @@ error. Work the cause instead, in this exact order:
 4. **Verify the superclass.** The class must extend `%UnitTest.TestProduction` (or `%UnitTest.TestCase`)
    and have at least one `Test*` method. A class that extends the wrong base, or whose methods are not
    prefixed `Test`, compiles but exposes zero tests.
-5. Only after 1–4 — if it still reports `NO_TESTS_FOUND` — STOP and report the blocker (see the agent's
-   iteration cap). Do not loop, and do not switch routes to "work around" it — not `$SYSTEM.OBJ.Load` /
+5. Only after 1–4 — if it still reports `NO_TESTS_FOUND` — STOP and report the blocker: 3 consecutive
+   failed attempts at the same goal is the cap. Mechanism: see `interop` (section "Stop on repeated
+   failure"). Do not loop, and do not switch routes to "work around" it — not `$SYSTEM.OBJ.Load` /
    the terminal, not `Run()` via `iris_execute`, not `RunTest(..., "/noload")`, not querying
    `^UnitTest.Result` by hand hoping to find a result. Every one of those gives the same (correct)
    answer about a class that never compiled; the only fix is upstream, at step 1.
@@ -446,6 +452,7 @@ Inspect:        ..GetEventLog(type, configName, baseId, .Log, .new)
 Run:            do ##class(MyApp.Tests.X).Run()   — still needs ^UnitTestRoot → existing server dir (unit-tests)
 
 Spec → Test → Red → Implement → Green → Refactor.
+Done = compiled in the target namespace + GREEN via iris_test; local files are a scaffold.
 BS: from outside IRIS only (file drop, TCP, curl).
 TestingEnabled="true" on production for dev; strip before deploy.
 ```

@@ -262,7 +262,8 @@ table), and the property name is appended to the *table*: class `COCINA.MSG.Menu
 `Property Alergias As list Of %String` projects to `COCINA_MSG.MenuRecibido_Alergias` — not
 `COCINA.MenuRecibido_Alergias` (a guess that cost one workshop cohort 12 straight
 `SQLCODE -30 Table not found` round-trips). Before querying a projected table you did not just
-create, confirm the name with `iris_table_info` (or the `introspect-dont-guess` agent) — one call
+create, confirm the name with `iris_table_info` (or the `introspect-dont-guess` plugin agent — an
+agent, not a skill; with no agent tool, follow `interop` §"Resolving real names") — one call
 answers it.
 
 Don't substitute a pipe-string property for a typed collection if downstream consumers want collection semantics — the conversion belongs in the DTL one time, not in every consumer.

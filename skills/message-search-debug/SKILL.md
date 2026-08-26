@@ -60,7 +60,7 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 | Restart **one** component | `iris_production(action=restart, item="<Item>")` |
 | Apply pending config to the whole production | `iris_production(action=update)` |
 | Business partners | `iris_interop_query(what=partners)` |
-| SQL-Gateway connections | introspect-dont-guess agent / `iris_table_info` (no SQL catalog table) |
+| SQL-Gateway connections | `introspect-dont-guess` plugin agent (an agent, not a skill; no agent tool → `interop` §"Resolving real names") / `iris_table_info` (no SQL catalog table) |
 | Namespaces | `check_config` (not a SQL table) |
 
 If you do fall back to raw `iris_query` and hit "table not found", **read the `hint`** it returns — it names the typed tool for that exact case.
