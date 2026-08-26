@@ -46,6 +46,14 @@ Storage Default { /* lives in MyApp.Msg.PatientCensusRequestD, not Ens.MessageBo
 
 Pair Request with a Response class extending `(Ens.Response, %Persistent)`. If the operation is fire-and-forget, return `Ens.Response` directly — no custom Response class needed.
 
+**Identifiers are letters and digits only — never `_`.** `_` is the concatenation operator, so
+`Property patient_id As %String;` cannot parse — and the error is actively misleading:
+`ERROR #5559: ... could not be parsed correctly, possibly due to non-matching {} or () characters`.
+The braces are fine; the name isn't. If you see #5559, check class/property/method/parameter names
+for underscores before touching a brace. Use PascalCase (`PatientId`, `ResultValue`). External JSON
+keys that do carry underscores are read via `%Get`/`%Set` on a `%DynamicObject` — see
+`business-services`.
+
 ## Complex properties — what class for an object inside a message
 
 The canonical example above is all scalars. As soon as a property is an **object** — an `Address`
