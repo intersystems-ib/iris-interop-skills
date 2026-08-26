@@ -175,6 +175,15 @@ The SqlProc wrapper above traverses this global to compute the pass/fail summary
 **method node's** own flag, not its assert children, for the reason given in that section. The portal
 renders the same data graphically.
 
+## Assertion macros — the inventory
+
+The assertion macros are already in scope in any `%UnitTest.TestCase` subclass (`TestProduction` included) — **no `Include` line needed**. Verified on IRIS 2026.1:
+
+- **These exist**: `$$$AssertEquals`, `$$$AssertNotEquals`, `$$$AssertTrue`, `$$$AssertNotTrue`, `$$$AssertStatusOK`, `$$$AssertStatusNotOK`, `$$$LogMessage`.
+- **These do NOT exist**: `$$$AssertNotNull`, `$$$AssertNotEmpty`, `$$$AssertGreater`. Inventing one fails the compile with `MPP5610 : Referenced macro not defined`. Compose from the real set instead: `$$$AssertTrue(val'="", ...)`, `$$$AssertTrue(x>y, ...)`.
+- Do **not** add `Include %UnitTest` as a recovery for `MPP5610` — it fails again with `MPP5635 : No include file '%UnitTest'` and points the fix at the wrong problem. The macro name itself is wrong; replace it.
+- Ens logging macros (in the BS/BP/BO code the tests exercise) are **UPPERCASE**: `$$$LOGINFO`, `$$$LOGERROR`, `$$$LOGWARNING`. `$$$LogError` is a different, nonexistent macro — casing matters, and the mixed-case slip produces the same `MPP5610`.
+
 ## Error handling inside test methods
 
 When a test method drops to ObjectScript that may raise, use the standard try/catch idiom:
@@ -236,6 +245,7 @@ For Interop-specific test skeletons (DTL / routing rule / BO method / BPL), see 
 - **Asserting on internal state instead of public contract** — tests get brittle. Assert on what the next consumer (DTL, BO, downstream system) will actually see.
 - **Real adapter calls in unit tests** → flaky, slow, environment-dependent. That's an integration test, not a unit test.
 - **Missing `$$$AssertStatusOK` on every `Set tSC = ...`** — silent failures pass the test.
+- **Inventing an assertion macro** (`$$$AssertNotNull`, `$$$AssertGreater`) or mis-casing an Ens logging one (`$$$LogError`) → `MPP5610`; `Include %UnitTest` is never the fix. See §"Assertion macros — the inventory".
 - **Tests that depend on each other** — each test method should be runnable in any order, in isolation.
 - **No fixture data strategy** — paste-in literals everywhere. Centralize sample messages/inputs in a fixtures class.
 - **Forgetting the portal URL in runner output** — students go straight to `^UnitTest.Result` by hand because they don't know the portal exists.
