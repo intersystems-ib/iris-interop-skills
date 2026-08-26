@@ -120,6 +120,28 @@ Production component settings can come from four levels. Pick the level delibera
 
 System Default Settings are the **only** layer that does NOT migrate via a production XML deploy. Mis-classify a setting and a deploy clobbers production with the source environment's value.
 
+## Resolving real names — no class, table, or column name is known until a tool returned it
+
+Before the first SQL statement (or class reference) against anything not created in this session,
+resolve the real names with tools — never from the prompt, the class name, or memory. The sequence:
+
+1. `iris_symbols(query="Pkg.*")` → the real class names in the package.
+2. `docs_introspect(class_name=...)` → that class's properties.
+3. `iris_table_info(table="Pkg_Sub.Table")` → the projected table and its columns
+   (`iris_table_info(schema="Pkg_Sub")` lists a whole schema).
+4. Catalog fallback: `SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES` and
+   `INFORMATION_SCHEMA.COLUMNS`. There is no `%INFORMATION_SCHEMA` — that name itself returns
+   `-30`; the working name is `INFORMATION_SCHEMA`.
+
+Dots-to-underscores is **not** enough: `SqlTableName` and `SqlFieldName` override the projection.
+A class `Demo.Enc.Encounter` carrying `SqlTableName = "PatEncounter"` projects as table
+`Demo_Enc.PatEncounter`, and a property `DeptCode` can project as column `UnitCode` — none of it
+derivable from the class definition's names alone. Derive nothing; confirm with `iris_table_info`.
+On `SQLCODE -30` (Table not found), the next call is introspection — never another guessed name.
+
+SQL-BO worked flow (child-table projections, invented system catalogs): see `business-operations`
+(section "Resolve real table names BEFORE the first query").
+
 ## Sibling skill index
 
 > **Invoke skills by their plugin-qualified id `iris-interop-skills:<name>`.** A bare name like
@@ -139,6 +161,7 @@ System Default Settings are the **only** layer that does NOT migrate via a produ
 | Custom HL7 schemas, Z-segments, schema editor | `iris-interop-skills:hl7-schemas` |
 | Lookup tables (creating, loading, using in DTL) | `iris-interop-skills:lookup-tables` |
 | **Looking at a RUNNING production for any reason** — did it arrive, how many rows landed, what did session N do, resend a message, queue depth, Visual Trace, Event Log, testing live components, SOAP tracing, purge. **Verifying a run that worked counts — not just debugging one that didn't.** | **`iris-interop-skills:message-search-debug`** — load it *before* writing any query against `Ens.MessageHeader` / `Ens_Util.Log` |
+| **Writing SQL against any class/table not created this session** — resolving real class, table, and column names | §"Resolving real names" above (universal recipe); `iris-interop-skills:business-operations` for the SQL-BO worked flow |
 | **FHIR work** — Façade vs Repository, OAuth2 PKCE, FHIR R4 Bundles, FHIR SQL Builder | `iris-interop-skills:fhir` |
 | **Securing endpoints** — SAML 2.0 / 1.1, OAuth 2.0 server + LDAP, SSL/TLS chain, internal account hygiene | `iris-interop-skills:security` |
 | **Alert circuit** — `Ens.Alert` router, dedup function set, ProductionMonitorService, per-BO alert settings | `iris-interop-skills:alerting` |
