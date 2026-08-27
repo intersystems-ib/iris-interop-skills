@@ -1,6 +1,6 @@
 ---
 name: dicom
-description: DICOM C-STORE/FIND/MOVE, MWL, PACS, STOW-RS. Routed from interop. Triggers: DICOM, C-STORE, C-FIND, C-MOVE, MWL, modality worklist, PACS, STOW-RS, DICOMweb, imaging modality (the device), AE Title, EnsLib.DICOM. NOT a trigger: the bare word "modality" in HL7/FHIR/lab-device prose — that alone is not DICOM work.
+description: DICOM C-STORE/FIND/MOVE, MWL, PACS, STOW-RS. Routed from interop. Triggers: DICOM, C-STORE, C-FIND, C-MOVE, MWL, modality worklist, PACS, STOW-RS, DICOMweb, imaging modality (the device), AE Title, EnsLib.DICOM. NOT a trigger: reading or converting .dcm files locally (e.g. a pydicom batch script) with no network protocol and no IRIS — that is file processing, not integration.
 ---
 
 # DICOM on IRIS for Health
@@ -16,9 +16,10 @@ for every pattern here.
 
 The user mentioned DICOM, an imaging modality, PACS, MWL, C-STORE, C-FIND, C-MOVE,
 STOW-RS, DICOMweb, AE Title, association context, or any `EnsLib.DICOM.*` class.
-The bare word "modality" is **not** enough on its own — HL7/lab-device prose uses it
-for any bidirectional device (a lab analyzer is "a modality" in that sense); without a
-DICOM protocol cue, stay in the HL7/FHIR skills.
+
+Not every mention of DICOM is integration work. A local batch that reads `.dcm` files
+to convert them or extract tags (pydicom, dcmtk on a laptop) has no association, no
+SCU/SCP and no IRIS — that is file processing, and this skill does not apply.
 
 ## Status: architecture + wiring only
 

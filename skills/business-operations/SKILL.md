@@ -315,7 +315,7 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/java
 
 ## Lab device integration — DT in both directions
 
-When integrating with a lab analyzer / device vendor (any modality where HL7 v2 flows in both directions), even directions that look like passthrough usually need a DT. Common reasons:
+When integrating with a lab analyzer / device vendor (any instrument where HL7 v2 flows in both directions), even directions that look like passthrough usually need a DT. Common reasons:
 
 - Field truncation requirements (the receiver's parser is stricter than the sender's emitter).
 - Segment re-ordering (the receiver keys on segment position).
