@@ -120,7 +120,16 @@ SELECT MyApp_Bootstrap_RunTestClass('MyApp.Tests.DT.Censo2Menus')
 
 ### Qualifier syntax pitfall — booleans only
 
-The `DebugRunTestCase` qualifier flags are **boolean** — write `/noload/norecursive/nodelete`. Do NOT write `/noload=0` or `/recursive=1`. The `=value` form throws `ERROR #5001: can not mix negated form with value`. The qualifier is either present (true) or absent (default false).
+`ERROR #5001: can not mix negated form with value` fires only when a **negated** qualifier carries a
+value — `/noload=0`, `/norecursive=1`. The `no` prefix already encodes the value, so a second one is
+a contradiction.
+
+The plain form takes a value perfectly well: IRIS's own `%UnitTest.TestProduction.Run()` calls
+`DebugRunTestCase("", class, "/debug=0/recursive=0")`. Verified on IRIS 2026.1 —
+`DebugRunTestCase(…, "/recursive=1")` returns OK, `DebugRunTestCase(…, "/noload=0")` returns #5001.
+
+So: write `/noload/norecursive/nodelete` for the negated form, or `/recursive=0/debug=0` for the
+plain form. Never `/no<x>=<value>`.
 
 ### `Try / Catch + Quit` pitfall inside runners
 
@@ -179,7 +188,14 @@ renders the same data graphically.
 
 The assertion macros are already in scope in any `%UnitTest.TestCase` subclass (`TestProduction` included) — **no `Include` line needed**. Verified on IRIS 2026.1:
 
-- **These exist**: `$$$AssertEquals`, `$$$AssertNotEquals`, `$$$AssertTrue`, `$$$AssertNotTrue`, `$$$AssertStatusOK`, `$$$AssertStatusNotOK`, `$$$LogMessage`.
+- **The full set** — every `Assert*`/`Log*` macro `%outUnitTest.inc` defines, enumerated from the
+  include itself on IRIS 2026.1 (`%UnitTest.TestCase` declares `Include %outUnitTest`, which is why
+  they are in scope without an `Include` line):
+  `$$$AssertEquals`, `$$$AssertNotEquals`, `$$$AssertTrue`, `$$$AssertNotTrue`, `$$$AssertStatusOK`,
+  `$$$AssertStatusNotOK`, `$$$AssertStatusEquals`, `$$$AssertFilesSame`,
+  `$$$AssertFilesSQLUnorderedSame`, `$$$AssertSuccess`, `$$$AssertFailure`, `$$$AssertSkipped`,
+  `$$$LogMessage`. Anything outside this list is not a macro — but do not "correct" code that uses
+  one that IS on it.
 - **These do NOT exist**: `$$$AssertNotNull`, `$$$AssertNotEmpty`, `$$$AssertGreater`. Inventing one fails the compile with `MPP5610 : Referenced macro not defined`. Compose from the real set instead: `$$$AssertTrue(val'="", ...)`, `$$$AssertTrue(x>y, ...)`.
 - Do **not** add `Include %UnitTest` as a recovery for `MPP5610` — it fails again with `MPP5635 : No include file '%UnitTest'` and points the fix at the wrong problem. The macro name itself is wrong; replace it.
 - Ens logging macros (in the BS/BP/BO code the tests exercise) are **UPPERCASE**: `$$$LOGINFO`, `$$$LOGERROR`, `$$$LOGWARNING`. `$$$LogError` is a different, nonexistent macro — casing matters, and the mixed-case slip produces the same `MPP5610`.
