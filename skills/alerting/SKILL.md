@@ -35,7 +35,7 @@ Production XML excerpt for the alert circuit:
 ```xml
 <Item Name="Ens.Alert" Category="..." ClassName="EnsLib.MsgRouter.RoutingEngine"
       PoolSize="1" Enabled="true">
-  <Setting Target="Host" Name="BusinessRuleName">MyApp.Rule.AlertRouting</Setting>
+  <Setting Target="Host" Name="BusinessRuleName">MyApp.RUL.AlertRouting</Setting>
   <!-- deliberately NO AlertOnError here — this item IS the alert circuit -->
 </Item>
 

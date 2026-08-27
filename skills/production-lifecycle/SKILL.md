@@ -177,7 +177,7 @@ XData ProductionDefinition
 
   <Item Name="Router.Census" Category="MyApp" ClassName="EnsLib.MsgRouter.RoutingEngine"
         PoolSize="1" Enabled="true">
-    <Setting Target="Host" Name="BusinessRuleName">MyApp.Rule.RoutingCensus</Setting>
+    <Setting Target="Host" Name="BusinessRuleName">MyApp.RUL.RoutingCensus</Setting>
     <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
 
@@ -195,7 +195,7 @@ XData ProductionDefinition
   <!-- Default scaffold: alerts router + file logger. Wired even before any rule exists. -->
   <Item Name="Ens.Alert" Category="MyApp" ClassName="EnsLib.MsgRouter.RoutingEngine"
         PoolSize="1" Enabled="true">
-    <Setting Target="Host" Name="BusinessRuleName">MyApp.Rule.Alerts</Setting>
+    <Setting Target="Host" Name="BusinessRuleName">MyApp.RUL.Alerts</Setting>
   </Item>
   <Item Name="BO.AlertLogger" Category="MyApp" ClassName="EnsLib.File.PassthroughOperation"
         PoolSize="1" Enabled="true">
