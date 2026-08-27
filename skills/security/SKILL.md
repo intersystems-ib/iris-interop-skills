@@ -142,7 +142,7 @@ Some e-invoicing and public-sector signature workflows (e.g. Spanish TicketBAI, 
 - **Keeping the server cert in the trust chain `.PEM`** → annual cert rotation forces an IRIS config change.
 - **Treating `CSPSystem` as a normal account** (deleting it, rotating its password from a human-account script) → Web Gateway breaks.
 - **GUID-style AssertionIDs on SAML 1.1** → fixed-format underscore-prefixed IDs required by many partners.
-- **Trusting the WSDL's response namespace blindly** — SOAP servers often return a different namespace than the WSDL declares. Capture an actual response and override (see `iris-interop-soap-bo §6.1.6`).
+- **Trusting the WSDL's response namespace blindly** — SOAP servers often return a different namespace than the WSDL declares. Capture an actual response and override (see `soap-bo` §"`RESPONSENAMESPACE` doesn't match what the vendor actually returns").
 
 ## When NOT to use this skill — fall back to docs
 

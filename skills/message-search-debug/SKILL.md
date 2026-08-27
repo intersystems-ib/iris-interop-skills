@@ -225,7 +225,7 @@ The global `^ISCSOAP("Log")` toggle traces all SOAP traffic for the namespace, m
 
 **Better:** per-BO SOAP tracing via a customer-internal copy of `%SOAP.WebClient`:
 
-1. Copy `%SOAP.WebClient` to a customer namespace (e.g. `Alt.SOAP.WebClient`) — `Alt` is the canonical reserved package for patched system classes (xref `iris-interop` §1.2).
+1. Copy `%SOAP.WebClient` to a customer namespace (e.g. `Alt.SOAP.WebClient`) — `Alt` is the canonical reserved package for patched system classes (xref `interop` §"Reserved package names").
 2. Change the generated SOAP proxy's superclass from `%SOAP.WebClient` to `Alt.SOAP.WebClient`.
 3. Add a `SoapLogFile` setting on each BO; toggle the global only inside that BO's `OnMessage`:
 

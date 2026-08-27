@@ -20,7 +20,7 @@ What's the destination?
 │       BO method calls the gateway and runs parameterized SQL
 ├── HL7 v2.x over TCP/MLLP → EnsLib.HL7.Operation.TCPOperation
 ├── HL7 v2.x to file → EnsLib.HL7.Operation.FileOperation
-├── SOAP web service → use iris-interop-soap-bo (SOAP wizard from WSDL)
+├── SOAP web service → use the soap-bo skill (SOAP wizard from WSDL)
 ├── REST endpoint → custom BO + EnsLib.REST.OutboundAdapter (or HTTP.OutboundAdapter)
 ├── Plain file → EnsLib.File.OutboundAdapter
 └── Custom protocol → custom BO extending Ens.BusinessOperation
@@ -125,7 +125,7 @@ Without a finite timeout, in-flight retries against an unreachable target accumu
 
 ### Timeout precedence — BO timeouts MUST be smaller than calling BP
 
-A BO's `Response Timeout` and `Failure Timeout` MUST be strictly smaller than the calling BP's wait timeout — whoever times out first owns the error context, and only a BO-first timeout carries diagnostic detail up the chain. Set BO timeouts last, after the calling BP's timeout is fixed. Mechanism and the BP-side view: see `bpl` §"Timeouts".
+A BO's `Response Timeout` and `Failure Timeout` MUST be strictly smaller than the calling BP's wait timeout — whoever times out first owns the error context, and only a BO-first timeout carries diagnostic detail up the chain. Set BO timeouts last, after the calling BP's timeout is fixed. Mechanism and the BP-side view: see `bpl` §"Timeout precedence".
 
 ### `ReplyCodeActions` defaults can swallow application errors (HL7 BO)
 
@@ -260,7 +260,7 @@ The BP is the documentation anchor; `Credentials` is just the secret holder. Aud
 </Item>
 ```
 
-`EnsLib.JavaGateway.Service` is **deprecated in IRIS 2026.1** — the item can be kept as a thin wrapper pointing at `%JDBC Server`, but the long-term direction is to reference the ELS directly from the BO. See `iris-interop-production-lifecycle §Default scaffolds`.
+`EnsLib.JavaGateway.Service` is **deprecated in IRIS 2026.1** — the item can be kept as a thin wrapper pointing at `%JDBC Server`, but the long-term direction is to reference the ELS directly from the BO. See `production-lifecycle` §"Default scaffolds".
 
 ## JDBC type marshalling — gotchas
 

@@ -147,7 +147,7 @@ Pin every row a DTL relies on with a `%UnitTest` (see the assertion pattern abov
 
 ## Naming conventions
 
-Apply the canonical naming convention (xref `iris-interop` router §1.1) to lookup tables. The table **name** should describe the mapping clearly enough that a reader of a DTL knows what's being translated without opening the table.
+Apply the canonical naming convention (xref `interop` §"Naming convention") to lookup tables. The table **name** should describe the mapping clearly enough that a reader of a DTL knows what's being translated without opening the table.
 
 | Pattern | Example | When |
 |---|---|---|
@@ -215,4 +215,4 @@ This raises on miss instead of silently propagating an empty value.
 - `bpl` — also consumes lookups in routing rules and BPL conditions
 - `production-lifecycle` — lookup tables are part of the production export
 - `business-operations` — `ExecuteQueryParmArray` pattern for SQL-sourced refresh jobs
-- `iris-interop` — naming conventions (router §1.1)
+- `interop` — §"Naming convention"
