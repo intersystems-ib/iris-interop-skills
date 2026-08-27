@@ -371,9 +371,11 @@ error. Work the cause instead, in this exact order:
 3. **Act on the tool's `hint` / `candidates`.** `iris_test` returns these on a miss — they list the
    names it *can* see. Pick the matching candidate and re-run with that exact name; do not guess a third
    variant or fall back to running `Run()` from the terminal.
-4. **Verify the superclass.** The class must extend `%UnitTest.TestProduction` (or `%UnitTest.TestCase`)
-   and have at least one `Test*` method. A class that extends the wrong base, or whose methods are not
-   prefixed `Test`, compiles but exposes zero tests.
+4. **Verify the superclass.** The class must extend `%UnitTest.TestProduction` — never
+   `%UnitTest.TestCase`, which is not an escape hatch from a `#5001` here any more than anywhere
+   else (see §"Baseline class" and the fixed-points rule below) — and have at least one `Test*`
+   method. A class that extends the wrong base, or whose methods are not prefixed `Test`, compiles
+   but exposes zero tests.
 5. Only after 1–4 — if it still reports `NO_TESTS_FOUND` — STOP and report the blocker: 3 consecutive
    failed attempts at the same goal is the cap. Mechanism: see `interop` (section "Stop on repeated
    failure"). Do not loop, and do not switch routes to "work around" it — not `$SYSTEM.OBJ.Load` /

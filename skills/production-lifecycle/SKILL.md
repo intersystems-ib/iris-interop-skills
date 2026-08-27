@@ -172,16 +172,19 @@ XData ProductionDefinition
         PoolSize="1" Enabled="true">
     <Setting Target="Adapter" Name="FilePath">/data/in</Setting>
     <Setting Target="Host" Name="TargetConfigNames">Router.Census</Setting>
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
 
   <Item Name="Router.Census" Category="MyApp" ClassName="EnsLib.MsgRouter.RoutingEngine"
         PoolSize="1" Enabled="true">
     <Setting Target="Host" Name="BusinessRuleName">MyApp.Rule.RoutingCensus</Setting>
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
 
   <Item Name="BO.SQL" Category="MyApp" ClassName="MyApp.BO.WriteCensusToSQL"
         PoolSize="1" Enabled="true">
     <Setting Target="Adapter" Name="JGService">Util.JDBCGateway</Setting>
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
 
   <Item Name="Util.JDBCGateway" Category="MyApp" ClassName="EnsLib.JavaGateway.Service"

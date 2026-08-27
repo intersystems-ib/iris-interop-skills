@@ -36,13 +36,13 @@ Production XML excerpt for the alert circuit:
 <Item Name="Ens.Alert" Category="..." ClassName="EnsLib.MsgRouter.RoutingEngine"
       PoolSize="1" Enabled="true">
   <Setting Target="Host" Name="BusinessRuleName">MyApp.Rule.AlertRouting</Setting>
-  <!-- NO SendAlertOnError setting -->
+  <!-- deliberately NO AlertOnError here — this item IS the alert circuit -->
 </Item>
 
 <Item Name="BO.AlertEmail" Category="..." ClassName="EnsLib.EMail.AlertOperation"
       PoolSize="1" Enabled="true">
   <Setting Target="Host" Name="Recipient">oncall@example.org</Setting>
-  <!-- NO SendAlertOnError setting -->
+  <!-- deliberately NO AlertOnError here — this item IS the alert sink -->
 </Item>
 
 <Item Name="Ens.ProductionMonitorService" Category="..."
