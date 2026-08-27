@@ -228,7 +228,16 @@ Method TestHappyPath()
     Do $$$AssertEquals(tTarget.GetValueAt("PV1:3"), "ICU", "PV1:3 should be Department")
 }
 
-/// Add one rejection/boundary Test* method per spec clause — never ship happy-path-only.
+Method TestEmptyDepartment()
+{
+    Set tSrc = ##class(MyApp.Msg.PatientCensusRequest).%New()
+    Set tSrc.PatientId = "P12345"
+    Set tSC = ##class(MyApp.DT.PatientCensusToADT).Transform(tSrc, .tTarget)
+    Do $$$AssertStatusOK(tSC)
+    Do $$$AssertEquals(tTarget.GetValueAt("PV1:3"), "", "Empty department should map to empty PV1:3")
+}
+
+/// One boundary method is the MINIMUM, not the target — add one Test* per spec clause.
 /// Completeness checklist and full skeletons (DTL, routing rule, BO, BPL): see `tdd`.
 }
 ```
