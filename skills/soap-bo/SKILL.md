@@ -144,17 +144,17 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/soap
 
 Vendor services occasionally return errors unless the SOAP envelope's namespace prefix is literally `urn` (not the default `s` or `soap` the wizard emits).
 
-**Fix**: instantiate the SOAP client manually so the namespace prefix can be set explicitly before invocation. Same instantiation pattern as the SAML custom-header example (see `iris-interop-security §11.3`).
+**Fix**: instantiate the SOAP client manually so the namespace prefix can be set explicitly before invocation. Same instantiation pattern as the SAML custom-header example (see `security` §"Custom security header on a generated SOAP BO").
 
 ### Generated classes ARE meant to be edited
 
-The naming convention's reserved `<Pkg>.<SubPkg>.WSC<Name>` sub-package (see `iris-interop` §1.1) is partly motivated by these patches. Generated SOAP/XSD classes need to be **regeneratable in isolation** (delete the sub-package, re-run the wizard, re-apply patches) AND every patch needs to be applied each time.
+The naming convention's reserved `<Pkg>.<SubPkg>.WSC<Name>` sub-package (see `interop` §"Naming convention") is partly motivated by these patches. Generated SOAP/XSD classes need to be **regeneratable in isolation** (delete the sub-package, re-run the wizard, re-apply patches) AND every patch needs to be applied each time.
 
 Document every patch in the class header with a stable tag (e.g. `///PYD20260513:` prefix on each modified line) — a grep across the regenerated classes finds the patches to re-apply by tag, not by line position.
 
 ## SOAP tracing per BO
 
-For diagnosing wire-level issues on a SOAP BO, use a per-BO `SoapLogFile` setting rather than the namespace-wide `^ISCSOAP("Log")` toggle. Each BO writes to its own log file path, settable at runtime from the portal — covered in `iris-interop-message-search-debug §6.2`.
+For diagnosing wire-level issues on a SOAP BO, use a per-BO `SoapLogFile` setting rather than the namespace-wide `^ISCSOAP("Log")` toggle. Each BO writes to its own log file path, settable at runtime from the portal — covered in `message-search-debug` §"Per-BO SOAP tracing".
 
 ## Canonical pattern — calling the SOAP BO
 
@@ -286,4 +286,4 @@ When you're on the **other side** — exposing a SOAP service that an external c
 - `unit-tests` — testing the generated BO methods
 - `message-search-debug` — verifying end-to-end SOAP calls; per-BO SOAP tracing
 - `security` — attaching SAML / WS-Security custom headers to the generated proxy
-- `iris-interop` — generated-class sub-package naming convention (§1.1, `WSC<Name>` pattern)
+- `interop` — §"Naming convention" (generated-class sub-package, `WSC<Name>` pattern)

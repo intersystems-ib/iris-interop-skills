@@ -374,7 +374,7 @@ Git 2.35+ verifies the repository owner matches the running user. IRIS running a
 
 Custom HL7 schemas edited via the Management Portal are stored **in the namespace**, not on disk. They are not auto-exported by source-control integration. After every schema edit, manually `Export` to the SCM root and commit alongside related class changes.
 
-Failure to export is a silent loss-of-work risk on the next namespace refresh. See `iris-interop-hl7-schemas §2.2` for the full risk discussion.
+Failure to export is a silent loss-of-work risk on the next namespace refresh. See `hl7-schemas` §"Schemas are NOT auto-exported to source control" for the full risk discussion.
 
 ## Migration of interop productions
 
@@ -477,4 +477,4 @@ If the installer must run identically on Linux and Windows, prefer driving it fr
 - `alerting` — alert circuit baseline (alert router + sink BO + monitor service)
 - `hl7-schemas` — schema export discipline (NOT auto-exported)
 - `security` — credentials, instance keys, namespace-level security boundaries
-- `iris-interop` — naming convention (§1.1) and reserved packages (§1.2)
+- `interop` — §"Naming convention" and §"Reserved package names"

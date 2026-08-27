@@ -191,7 +191,7 @@ When a message class is projected to XML (SOAP payloads, REST XML responses, fil
 | `XMLIGNORENULL = 1` (class-level, NOT property-level) | Empty-string properties appear as empty elements (`<Field/>`) instead of being omitted. | When the partner schema requires the elements to be present even when empty. **Caveat**: for `list Of <T>` collections where every item is empty, the list element is still omitted — there is no clean way to force its presence except manual XML manipulation. |
 | `CONTENT = "STRING"` on a `%Stream.GlobalCharacter` property | Wraps content in `<![CDATA[...]]>`. | When the payload is XML you don't want re-escaped (e.g. CDA inside a SOAP envelope). |
 | `CONTENT = "ESCAPE"` on a `%Stream.GlobalCharacter` property | XML-escapes the text. | For free-text fields that may contain `<` or `&`. |
-| `OUTPUTTYPEATTRIBUTE = 0` (class-level on SOAP proxy) | Suppresses `xsi:type` attributes on every element. | When the partner SOAP server rejects messages with `xsi:type` (some SAP, some vendor servers — see `iris-interop-soap-bo §6.1.2`). |
+| `OUTPUTTYPEATTRIBUTE = 0` (class-level on SOAP proxy) | Suppresses `xsi:type` attributes on every element. | When the partner SOAP server rejects messages with `xsi:type` (some SAP, some vendor servers — see `soap-bo` §"Vendor rejects `xsi:type` attributes"). |
 
 Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/xml-projection-settings.cls`.
 
