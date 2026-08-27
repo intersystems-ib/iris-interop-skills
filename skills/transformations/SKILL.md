@@ -124,7 +124,12 @@ When transforming CDA documents (HL7 CDA R2 XML), DTL is awkward because of deep
 - Looping over data sources that aren't visible to the DTL (multiple lookup tables intersecting).
 - Anything where the DTL would be >50% `code` actions.
 
-In those cases either embed a single `code` action that calls a class method, or replace the DTL with a method on a BP.
+In those cases embed a single `code` action that calls a class method — and keep the DTL as the
+transform. Do **not** replace it with an imperative method: an `Ens.DataTransformDTL` subclass with
+no `XData DTL` still compiles, but the Portal's DTL editor opens nothing (CR-4), and moving the
+logic into a hand-written BP `OnRequest` is CR-1 — the P1 finding in `conformance-review`. If the
+transform genuinely cannot be declared, that is a design signal worth raising, not a licence to
+write it imperatively.
 
 ### ObjectScript inside XData is XML text — escape it
 
