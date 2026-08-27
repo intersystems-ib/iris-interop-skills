@@ -133,7 +133,7 @@ Every production must include at minimum:
 
 - `Ens.ProductionMonitorService` running every 30 s (default).
 - An `Ens.Alert` business process configured to handle `Ens.AlertRequest` messages.
-- An alert-output BO (typically `EnsLib.Email.AlertOperation` for email; `Ens.Alarm` for paging/SMS).
+- An alert-output BO (typically `EnsLib.EMail.AlertOperation` for email; `Ens.Alarm` for paging/SMS).
 
 See §7 for the alert circuit details and the "always-on / dedupe" rules.
 
@@ -620,7 +620,7 @@ In every Business Host of the production, enable "Send Alert on Error". The exce
 Canonical wiring:
 
 - `Ens.Alert` implemented as `EnsLib.MsgRouter.RoutingEngine`.
-- `EnsLib.Email.AlertOperation` BO sends `Ens.AlertRequest` messages by email to a distribution list.
+- `EnsLib.EMail.AlertOperation` BO sends `Ens.AlertRequest` messages by email to a distribution list.
 - A **filter routing rule** dedupes alerts to avoid mailbox saturation (see §7.2 for the FunctionSet).
 
 - **Validity.** Still valid.

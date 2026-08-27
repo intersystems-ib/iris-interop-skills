@@ -15,7 +15,7 @@ The user is wiring `Ens.Alert`, adding an `EnsLib.EMail.AlertOperation`, asking 
 
 Every production must include at minimum:
 
-- **`Ens.ProductionMonitorService`** — runs every 30 s (default). Surfaces per-component state to the production monitor screen.
+- **`Ens.ProductionMonitorService`** — the conventional *item* name; runs every 30 s (default) and surfaces per-component state to the production monitor screen. Two **different** real classes exist here and are easy to conflate — IRIS's own descriptions: `Ens.MonitorService` *"checks all hosts for inactivity"* (the `ClassName` wired below), and `Ens.ProductionMonitorService` *"monitor service for the production status … calls UpdateProduction once it notices the production is not up-to-date"*. Both are real, so a wrong pick fails silently rather than at load.
 - **`Ens.Alert`** — an `EnsLib.MsgRouter.RoutingEngine` configured to handle `Ens.AlertRequest` messages.
 - **At least one alert sink BO** — typically `EnsLib.EMail.AlertOperation` for email; can be SMS, file, a paging system. Multiple sinks fan out through the router.
 
