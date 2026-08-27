@@ -27,10 +27,15 @@ What's the input?
 
 ## Canonical pattern — custom BS skeleton
 
+This is the **subclass** case: it extends the prebuilt `EnsLib.RecordMap.Service.FileService`, which
+already supplies `EnsLib.File.InboundAdapter`. Do **not** also declare `Parameter ADAPTER` — that
+keyword names an *adapter*, and `…Service.FileService` is a Business Service, not one. A BS that
+needs a bare adapter instead extends `Ens.BusinessService` and declares e.g.
+`Parameter ADAPTER = "EnsLib.File.InboundAdapter"`.
+
 ```objectscript
-Class MyApp.BS.PatientCensusFromCSV Extends Ens.BusinessService
+Class MyApp.BS.PatientCensusFromCSV Extends EnsLib.RecordMap.Service.FileService
 {
-Parameter ADAPTER = "EnsLib.RecordMap.Service.FileService";
 Parameter SETTINGS = "TargetConfigNames:Basic,RequiredField:Basic";
 
 Property TargetConfigNames As %String(MAXLEN=1000);
