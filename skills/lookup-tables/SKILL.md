@@ -86,10 +86,19 @@ obvious-looking mask is the broken one:
   helper returns, every lookup misses, and with the DTL below's `""` default every message throws
   `InvalidDieta` instead. Prefer `"*WC"` and fold accents explicitly.
 
-Do not reach for `$ZCONVERT(value, "O", "UTF8")` to strip accents. On an already-internal string it
-does not fail — measured here, `$ZCONVERT("Diab"_$CHAR(233)_"tica", "O", "UTF8")` returns
-`DiabÃ©tica`, the UTF-8 bytes re-read as single characters. It silently double-encodes, which then
-propagates into the lookup key. `$TRANSLATE` above is self-contained and testable.
+Do not reach for the `$ZCONVERT(..., "O", "UTF8")` / `$ZCONVERT(..., "I", "Latin1")` round trip to
+strip accents. Measured leg by leg on 2026.1, it fails **twice, in two different ways**:
+
+| step | result |
+|---|---|
+| `$ZCONVERT("Diab"_$CHAR(233)_"tica", "O", "UTF8")` | `DiabÃ©tica` — len 10, codes 195,169. **No error.** |
+| `$ZCONVERT(<that>, "I", "Latin1")` | **`<ILLEGAL VALUE>`** |
+| the composite, as usually written | **`<ILLEGAL VALUE>`** |
+
+The throw is the easy half — you find out. The first leg is the dangerous one: on an
+already-internal string it silently re-reads the UTF-8 bytes as single characters, and if you ever
+use it alone the double-encoded value propagates straight into the lookup key. `$TRANSLATE` above is
+self-contained and testable.
 
 ### 3. Use from DTL
 
