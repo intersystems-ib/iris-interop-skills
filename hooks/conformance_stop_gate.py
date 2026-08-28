@@ -56,36 +56,53 @@ def project_root(data):
     return data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
 
-def cls_files(root):
-    """Every .cls path under the project, as forward-slash strings.
+# A .cls file declares its class; a .cls.xml export names it in an attribute.
+CLASS_DECL = re.compile(r"^[ \t]*Class[ \t]+([A-Za-z0-9_.%]+)", re.M)
+XML_DECL = re.compile(r"<Class\s+name=[\"\']([A-Za-z0-9_.%]+)[\"\']", re.I)
 
-    os.walk rather than glob('**') on purpose: glob silently skips dot-directories, so a
-    class staged under one reads as missing and the gate fires on a file that is right
-    there. That exact bug cost a debugging cycle earlier (#95).
+
+def classes_on_disk(root):
+    """Every class name actually DEFINED by a file under the project.
+
+    Matching on filename is the obvious implementation and it is wrong. This plugin's own
+    example bank names files by topic — `dtl-order-to-vendor.cls` defines
+    `Example.DT.OrderToVendor` — and a path-only check calls every one of them missing.
+    Tested against a real session transcript before this was fixed: 25 classes put into
+    IRIS, all 25 on disk, all 25 reported as orphans. A gate that is wrong 25 times out of
+    25 on a normal workflow does not get obeyed, it gets removed.
+
+    So presence is decided by content. The conventional path is still used, but only to
+    tell the model WHERE to write a class that genuinely is missing.
+
+    os.walk rather than glob('**'): glob silently skips dot-directories, so a class staged
+    under one reads as missing (#95 cost a cycle to that).
     """
-    out = []
+    found = set()
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for fn in filenames:
-            if fn.lower().endswith(".cls"):
-                out.append(os.path.join(dirpath, fn).replace("\\", "/"))
-    return out
+            low = fn.lower()
+            if not (low.endswith(".cls") or low.endswith(".cls.xml") or low.endswith(".xml")):
+                continue
+            path = os.path.join(dirpath, fn)
+            try:
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
+            except OSError:
+                continue
+            found.update(CLASS_DECL.findall(text))
+            found.update(XML_DECL.findall(text))
+            # a file named for its class counts even if the body cannot be parsed
+            base = fn[:-4] if low.endswith(".cls") else None
+            if base and "." in base:
+                found.add(base)
+    return found
 
 
 def find_orphans(root, classes):
-    """Classes with no file anywhere under the project.
-
-    Accepts the Atelier nested layout the `interop` skill mandates (src/Pkg/BO/Name.cls)
-    and, tolerantly, the legacy flat-dotted form (Pkg.BO.Name.cls).
-    """
-    paths = cls_files(root)
-    orphans = []
-    for cls in sorted(classes):
-        nested = "/" + cls.replace(".", "/") + ".cls"
-        flat = "/" + cls + ".cls"
-        if not any(p.endswith(nested) or p.endswith(flat) for p in paths):
-            orphans.append(cls)
-    return orphans
+    """Classes this session put into IRIS that no file under the project defines."""
+    on_disk = classes_on_disk(root)
+    return [c for c in sorted(classes) if c not in on_disk]
 
 
 def scan_transcript(path):
@@ -125,15 +142,33 @@ def scan_transcript(path):
                 if REVIEW_SKILL in str(inp.get("skill") or ""):
                     reviewed = True
 
-                if "iris_doc" in tool and inp.get("mode") == "put":
+                if "iris_doc" not in tool:
+                    continue
+                mode = inp.get("mode")
+
+                if mode == "put":
                     name = str(inp.get("name") or "").strip()
                     content_str = inp.get("content")
                     if not name or not isinstance(content_str, str) or not content_str.strip():
                         continue
                     if GENERATED.search(name):
                         continue
-                    put.add(re.sub(r"\.cls$", "", name, flags=re.I))
+                    put.add(strip_cls(name))
+
+                elif mode == "delete":
+                    # Staging scratch classes and deleting them afterwards is a legitimate
+                    # workflow — it is how the example bank is compile-checked. Without
+                    # this, cleaning up correctly looks identical to abandoning work in the
+                    # namespace, and the gate fires on the careful case.
+                    for n in ([inp.get("name")] + list(inp.get("names") or [])):
+                        if isinstance(n, str) and n.strip():
+                            put.discard(strip_cls(n.strip()))
+
     return put, reviewed
+
+
+def strip_cls(name):
+    return re.sub(r"\.cls$", "", name, flags=re.I)
 
 
 def block(reason):
