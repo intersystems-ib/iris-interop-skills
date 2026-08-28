@@ -17,7 +17,15 @@
 Class Demo.Vendor.WSC.PrescriptionWS Extends %SOAP.WebClient
 {
 
-///PYD20171115: vendor returns a different response namespace than the WSDL declares.
+/// Minimum viable %SOAP.WebClient parameters - the SOAP Wizard generates both from
+/// the WSDL. Without SERVICENAME the class does not compile:
+///   ERROR #6240: SERVICENAME must be specified by overriding the SERVICENAME parameter.
+Parameter NAMESPACE = "http://example.org/PrescriptionWS";
+
+Parameter SERVICENAME = "PrescriptionWS";
+
+/// The point of this example (patch marked per §6.1.7).
+///<initials>20171115: vendor returns a different response namespace than the WSDL declares.
 /// WSDL: "http://example.org/PrescriptionWS"  -> actual:
 Parameter RESPONSENAMESPACE = "http://prescription.ws.example.org";
 

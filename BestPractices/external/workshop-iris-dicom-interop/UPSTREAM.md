@@ -11,13 +11,14 @@ canonical reference survives if the upstream disappears.
 | Snapshot commit SHA | `75dcf2f30102432fe41086d86d5e3c9521c45144` |
 | Upstream commit date | `2026-03-09T15:30:25+01:00` |
 | Snapshot taken | 2026-05-14 |
-| Cited by skill | `skills/iris-interop-dicom/SKILL.md` |
+| Cited by skill | `skills/dicom/SKILL.md` (skill id `iris-interop-skills:dicom`) |
 | Cited by docs | `BestPractices/examples/external-repos.md` |
 
 ## Contents — source-only subset
 
 This snapshot is **not** the full upstream tree. It keeps only the **ObjectScript
-source** that the `iris-interop-dicom` skill cites as canonical reference:
+source** that the `iris-interop-skills:dicom` skill (`skills/dicom/SKILL.md`) cites
+as canonical reference:
 
 - `iris/src/DICOM/**` — Production, Processes (`BP/`), Services (`BS/`), messages
   (`Msg/`) and `Util` for the five DICOM wiring patterns.

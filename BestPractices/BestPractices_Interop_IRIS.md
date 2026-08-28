@@ -8,9 +8,9 @@ Each rule is tagged with:
 - **Validity** — `Still valid` / `Resolved in IRIS X.Y` / `Superseded by ...` / `Historical` / `Verify against current docs`
 - **Severity** — `High` (data-loss / outage risk) / `Medium` (significant operational impact) / `Low` (style / efficiency / informational)
 
-## Methodology note (preface)
+## Provenance
 
-When mining a customer engagement folder for best practices, **exclude** dependency-tree artefacts (`node_modules/`, `bin/`, `obj/`, `lib/`, `vendor/`), VM-runtime logs (`*/VM/*/Logs/`), personal documents (employment cards, diplomas), pricing/sales material, and InterSystems-authored vendor reference documents (Adoption Guide, Migration Guide, In-Place Conversion Guide). Customer-derived best practices live in narrative documents (`*.docx`, `*.pdf`, `*.md`) authored by the engagement team. This deliverable applies that filter throughout.
+Derived from field engagements; non-technical and customer-specific material was excluded.
 
 > **Scope note (2026-05-13).** This document was originally synthesised as a generalist Ensemble/IRIS best-practices reference. It has been trimmed to focus on **IRIS Interoperability** patterns (BS/BP/BO/DTL/Rules, HL7 v2/v3/CDA, FHIR, SOAP/REST adapters, alerting, security on interop endpoints, migration of interop productions). Material on platform performance/sizing, mirroring/HA/backups, generic IRIS migration/install, and non-interop version notes was removed. Chapter numbering preserves the original §N for stable cross-references; gaps (§8, §10) are intentional.
 
@@ -29,7 +29,6 @@ When mining a customer engagement folder for best practices, **exclude** depende
 13. [Migration of Interop productions](#13-migration-of-interop-productions)
 14. [Version-specific notes (interop-relevant)](#14-version-specific-notes-interop-relevant)
 15. [Appendix B — References](#appendix-b--references)
-16. [Appendix C — Skip rationale](#appendix-c--skip-rationale)
 
 ---
 
@@ -131,9 +130,9 @@ When a developer adds a System Default Setting on dev, populate values for ALL e
 
 Every production must include at minimum:
 
-- `Ens.ProductionMonitorService` running every 30 s (default).
+- A production-monitor service. The conventional *item* name is `Ens.ProductionMonitorService`; the `ClassName` you wire it to is `Ens.MonitorService`, which runs every 30 s (default) and “checks all hosts for inactivity”. Both names are real classes doing **different** jobs — `Ens.ProductionMonitorService` is the monitor service for *production status*, calling `UpdateProduction` once it notices the production is not up to date — so a wrong pick fails silently rather than at load.
 - An `Ens.Alert` business process configured to handle `Ens.AlertRequest` messages.
-- An alert-output BO (typically `EnsLib.EMail.AlertOperation` for email; `Ens.Alarm` for paging/SMS).
+- At least one alert-output BO (typically `EnsLib.EMail.AlertOperation` for email; a sink can equally be SMS, file, or a paging system — multiple sinks fan out through the router). Not `Ens.Alarm`: that item services `Ens.AlarmRequest` for BPL `<delay>` and timed waits, and is not an alert sink.
 
 See §7 for the alert circuit details and the "always-on / dedupe" rules.
 
@@ -177,7 +176,7 @@ To prevent concurrent execution of a scheduled Business Service: (a) set Pool Si
 
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
 
-When a partner emits ER7 messages that deviate from the published HL7 standard (e.g., `SQM_S25` / `SRM_S25` missing `RGS` segment), define a custom HL7 schema based on v2.5 in the Portal, redefine just the affected messages, and set the BS's "Categoría de esquema para mensaje" to that schema name.
+When a partner emits ER7 messages that deviate from the published HL7 standard (e.g., `SQM_S25` / `SRM_S25` missing `RGS` segment), define a custom HL7 schema based on v2.5 in the Portal, redefine just the affected messages, and set the BS's `MessageSchemaCategory` setting (Portal: “Message Schema Category”) to that schema name.
 
 - **Validity.** Still valid.
 - **Severity.** Medium.
@@ -200,7 +199,7 @@ Ensemble auto-escapes HL7 v2 special chars when it generates the message itself 
 
 ### 2.4 Lab device integration: heterogeneous-vendor HL7 routing requires DTs in BOTH directions
 
-When integrating with a lab analyzer / device vendor (Roche, Hispania, Suitestensa, Cobas Pure, etc.), even directions that look like passthrough need a DT. Concrete example (Roche → SAP at a hospital site for OUL^R21): truncate `MSH-7` from `YYYYMMDDHHMMSS.fff` to `YYYYMMDDHHMMSS` (SAP rejects ms variant), re-order segments (move `SAC` to after `PV1`), copy technique code into `PID-2` and `PID-9` because SAP keys on those fields.
+When integrating with a lab analyzer / device vendor (Roche, Suitestensa, Cobas Pure, etc.), even directions that look like passthrough need a DT. Concrete example (Roche → SAP at a hospital site for OUL^R21): truncate `MSH-7` from `YYYYMMDDHHMMSS.fff` to `YYYYMMDDHHMMSS` (SAP rejects ms variant), re-order segments (move `SAC` to after `PV1`), copy technique code into `PID-2` and `PID-9` because SAP keys on those fields.
 
 - **Validity.** Still valid.
 - **Severity.** High.
@@ -248,11 +247,11 @@ When migrating from Mirth, do NOT translate channels 1:1 into Productions. Group
 
 When migrating between two HL7 engines (Rhapsody → Ensemble), run them in parallel with three namespaces:
 
-- `HP` — current production (customer-managed) — keeps running for legacy integrations
-- `HP-MIG` — migrated production (vendor-managed) — receives messages flagged `PENDIENTE_MIG`
-- `HP-MIG-DIFF` — comparator namespace — receives outputs from BOTH engines; compares messages for exact equality
+- `PROD` — current production (customer-managed) — keeps running for legacy integrations
+- `PROD-MIG` — migrated production (vendor-managed) — receives messages flagged `PENDIENTE_MIG`
+- `PROD-MIG-DIFF` — comparator namespace — receives outputs from BOTH engines; compares messages for exact equality
 
-Acceptance criterion: messages generated by `HP-MIG` MUST be byte-equal to those generated by Rhapsody. After validation, import `HP-MIG` into `HP`, decommission `HP-MIG-DIFF`. **Caveat:** during parallel, the upstream HL7 Filler/Service load doubles.
+Acceptance criterion: messages generated by `PROD-MIG` MUST be byte-equal to those generated by Rhapsody. After validation, import `PROD-MIG` into `PROD`, decommission `PROD-MIG-DIFF`. **Caveat:** during parallel, the upstream HL7 Filler/Service load doubles.
 
 - **Validity.** Still valid.
 - **Severity.** High.
@@ -309,7 +308,7 @@ When a third-party WSDL specifies a custom `acceptMessage(message)` with the HL7
 - Override `..Adapter.WebServiceClientClass` to point to the custom proxy.
 - Adapt `..Adapter.InvokeMethod("acceptMessage", ...)` (default would call `Send`).
 
-The same pattern applies for SOAP-carrying-CDA to a regional health-record exchange (e.g. `<publicarDocument>` with a CCD `<ClinicalDocument xmlns="urn:hl7-org:v3">` directly in the SOAP Body parameter).
+The same pattern applies for SOAP-carrying-CDA to a regional health-record exchange (e.g. `<publishDocument>` with a CCD `<ClinicalDocument xmlns="urn:hl7-org:v3">` directly in the SOAP Body parameter).
 
 - **Validity.** Still valid.
 - **Severity.** High.
@@ -431,7 +430,7 @@ When you need a Business Service that accepts inbound SOAP requests:
 
 ### 5.2 BS that runs on a schedule: use a custom adapter for wall-clock triggers
 
-Default Ensemble inbound adapters only do interval scheduling ("every X seconds"). For wall-clock schedules (daily 08:30, weekdays 08–18, etc.) use a custom adapter (e.g. `Demo.ADP.SchedulerAdapter`) with a cron-style format `min hour day month dayOfWeek`. Or (modern alternative) use IRIS's native `%SYS.TaskSuper` for scheduled tasks.
+Default Ensemble inbound adapters only do interval scheduling ("every X seconds"). For wall-clock schedules (daily 08:30, weekdays 08–18, etc.) use a custom adapter (e.g. `Demo.ADP.SchedulerAdapter`) with a cron-style format `min hour day month dayOfWeek`. Or (modern alternative) use IRIS's native task framework: subclass `%SYS.Task.Definition` and override `OnTask`. (`%SYS.TaskSuper` also exists but is documented “for internal use only” — it is the persistent superclass of `%SYS.Task` and has no `OnTask`.)
 
 - **Validity.** Still valid; prefer native task framework for greenfield.
 - **Severity.** Low.
@@ -471,9 +470,20 @@ Default Ensemble inbound adapters only do interval scheduling ("every X seconds"
 - **Severity.** Low (style).
 - **Example.** `examples/ch05_bpl_dtl/objectscript-trycatch.cls`
 
-### 5.5 Async logging: prefer `^IRISTemp.*` + `System.Semaphores` over IPQ
+### 5.5 Async logging: prefer `^IRISTemp.*` + `%SYSTEM.Semaphore` over IPQ
 
-When implementing async logging from many writer processes to one (or a few) logger reader process(es), choose **temporary globals** (under `^IRISTemp.*`) over IRIS IPQ. The logger sleeps via `System.Semaphores` and is woken by writers when data is added. Multiple readers possible; sync via the same semaphore.
+When implementing async logging from many writer processes to one (or a few) logger reader process(es), choose **temporary globals** (under `^IRISTemp.*`) over IRIS IPQ. The logger blocks on a semaphore and is woken by writers when data is added. Multiple readers possible; sync via the same semaphore.
+
+**Get the semaphore class right.** It is `%SYSTEM.Semaphore` — singular, `%`-prefixed — reached as `$SYSTEM.Semaphore`. There is no `System.Semaphores`. It is an *instance* API, not class methods on `$SYSTEM`; there is no `Signal` and no `Wait`:
+
+```objectscript
+set sem = ##class(%SYSTEM.Semaphore).%New()
+do sem.Create(name, 0)      // owner creates; joiners use sem.Open(name)
+do sem.Increment(1)         // writer signals
+set rc = sem.Decrement(1, timeout)  // logger waits
+```
+
+Instance methods: `Create(name,value)`, `Open(name)`, `Delete()`, `Increment(value)`, `Decrement(amount,timeout)`, `GetValue()`, `SetValue(amount)`, `AddToWaitMany()`, `RmFromWaitMany()`, `WaitCompleted()`. Class method: `WaitMany(timeout)`.
 
 Why temporary globals over IPQ:
 
@@ -598,10 +608,10 @@ Some legacy partner services (e.g. an e-prescription gateway) return PDF attachm
 
 When a third-party library is only available as Java (e.g. a legacy partner-supplied SAML module, customer JAR), call it from Ensemble via the JavaGateway:
 
-1. Deploy the JAR to a fixed directory (e.g. `D:\ClassesJavaEnsemble\`).
+1. Deploy the JAR to a fixed directory (e.g. `/opt/iris/javalib/`).
 2. Use Studio → Tools → Java Gateway Wizard to generate ObjectScript proxy classes.
 3. Write a BO that extends `EnsLib.JavaGateway.AbstractOperation` and calls the proxy via `obj.<javaMethod>(...)`.
-4. Add the JAR to the JavaGateway classpath via the production component's "Parámetros adicionales" setting.
+4. Add the JAR to the Java Gateway classpath. Two settings can do this, both under the Portal's **Additional Settings** group (the Spanish Portal renders that group heading as “Parámetros adicionales” — it is a category, not a setting name, so always search by the XML name): `ClassPath` on the Java Gateway service item (`EnsLib.JavaGateway.Service`, platform-delimited) and `AdditionalPaths` on the BO (`EnsLib.JavaGateway.AbstractOperation`, comma-delimited, appended to the service's `ClassPath`). JVM options are a separate setting, `JVMArgs` — not the classpath.
 
 In 2025+, prefer external services or ObjectScript reimplementation (the 2017+ SAML JavaGateway pattern was superseded by the public `intersystems-ib/SAML-COS` ObjectScript implementation).
 
@@ -615,7 +625,7 @@ In 2025+, prefer external services or ObjectScript reimplementation (the 2017+ S
 
 ### 7.1 Alert circuit — the canonical pattern
 
-In every Business Host of the production, enable "Send Alert on Error". The exception (always) is the Ens.Alert circuit itself: **Ens.Alert and the BO that sends the alert must have this checkbox DISABLED** to avoid infinite loops.
+In every Business Host of the production, enable “Send Alert on Error” (the setting is `AlertOnError`). The exception (always) is the Ens.Alert circuit itself: **Ens.Alert and the BO that sends the alert must have this checkbox DISABLED** to avoid infinite loops.
 
 Canonical wiring:
 
@@ -630,7 +640,7 @@ Canonical wiring:
 ### 7.2 Alert deduplication FunctionSet (verbatim)
 
 ```objectscript
-Class PYD.FilterAlerts.FunctionSet Extends Ens.Rule.FunctionSet [ LegacyInstanceContext, Not ProcedureBlock ] {
+Class Demo.FilterAlerts.FunctionSet Extends Ens.Rule.FunctionSet [ LegacyInstanceContext, Not ProcedureBlock ] {
 
 /// Returns true if (SourceConfigName, ErrorMessage) was already reported within Interval seconds today.
 ClassMethod AlreadyReportedErr(SourceConfigName, ErrorMessage, Interval = 60) As %Boolean {
@@ -677,7 +687,7 @@ What this protects against (both real, repeatedly observed):
 
 | Setting | Recommended value | Why |
 |---|---|---|
-| Send Alert on Error | ✔ (everything except Ens.Alert + Email AlertOperation) | as §7.1 |
+| Send Alert on Error (`AlertOnError`) | ✔ (everything except Ens.Alert + Email AlertOperation) | as §7.1 |
 | Alert on Queue Wait (`QueueWaitAlert`) | 30 s | catches messages piling up when downstream is slow |
 | Reply Code Actions (`ReplyCodeActions`) | review per-host | HL7 BO defaults are correct; non-HL7 BO defaults often are not |
 | Failure Timeout | finite (NEVER `-1`) | infinite retries pile up forever (§1.8) |
@@ -730,7 +740,7 @@ Custom HL7 schemas edited in the portal are NOT auto-exported. Manually `Export`
 
 ### 9.4 Customer + vendor share git for migration projects
 
-When customer and vendor work in parallel during a migration: vendor uses Git in a dedicated namespace (`HP-MIG`); customer feeds their concurrent production-base changes (in original `HP`) to the migration team as Ensemble XML exports. Vendor merges these into the migration namespace alongside the migration work.
+When customer and vendor work in parallel during a migration: vendor uses Git in a dedicated namespace (`PROD-MIG`); customer feeds their concurrent production-base changes (in original `PROD`) to the migration team as Ensemble XML exports. Vendor merges these into the migration namespace alongside the migration work.
 
 - **Why.** Customer can't freeze production-base changes during a multi-month migration; without explicit sync mechanism, the migration namespace drifts and is unmergeable at cutover.
 - **Severity.** Medium.
@@ -741,7 +751,7 @@ When customer and vendor work in parallel during a migration: vendor uses Git in
 
 ### 11.1 SAML 2.0 — native `%SAML` charset bug (2017–2019)
 
-Native Ensemble `%SAML.Assertion`-generated SAML 2.0 assertions are rejected by a partner SOAP platform with a SOAP fault from the partner platform ("Error validant el tiquet SAML. La signatura del tiquet SAML no és vàlida") whenever the assertion contains any non-Latin-1 character (any character whose value differs between Latin-1 and UTF-8). Latin-1-only assertions validate successfully.
+Native Ensemble `%SAML.Assertion`-generated SAML 2.0 assertions are rejected by a partner SOAP platform with a SOAP fault from the partner platform (in effect: “Error validating the SAML ticket — the SAML ticket signature is not valid”) whenever the assertion contains any non-Latin-1 character (any character whose value differs between Latin-1 and UTF-8). Latin-1-only assertions validate successfully.
 
 Confirmed by independent third-party validators: same cert, same XML structure — only difference is a non-ASCII char (e.g. corrupted euro sign `â¬` in a NameID) → bad hash & signature.
 
@@ -764,14 +774,14 @@ When sending a SAML 2.0 assertion as a SOAP `wsse:Security` header, the assertio
 ### 11.3 SAML 2.0 — attaching a custom security header to a generated SOAP BO
 
 ```objectscript
-Set ..Adapter.WebServiceClientClass = "Demo.WS016V3.WS016V3"
+Set ..Adapter.WebServiceClientClass = "Demo.WSxxx.WSxxx"
 
-///PYD+: Instantiate the Web Service Client to attach a SAML Header
+///<initials>+: Instantiate the Web Service Client to attach a SAML Header
 set ..Adapter.%Client = $classmethod(..Adapter.WebServiceClientClass, "%New")
 set tSC = ..GenSecurityHeader(pRequest.atributosSAML, .tHeader)
 Quit:$$$ISERR(tSC) tSC
 set ..Adapter.%Client.SecurityOut = tHeader
-///PYD-
+///<initials>-
 
 Set tSC = ..Adapter.InvokeMethod("methodName", .tResponse, ...)
 ```
@@ -805,7 +815,7 @@ Use IRIS as an OAuth 2.0 broker between a third-party SaaS app and on-premise Ac
 - `OAuth2.Server.Authenticate` — login UI customisation (logo, skip `DisplayPermissions` by using `btnAccept` instead of `btnLogin`)
 - `OAuth2.Server.ValidateLDAP` — credential check via `%SYS.LDAP` (copy of `^LDAP.MAC` example1: bind anonymously → switch to TLS → bind as admin → look up UserDN by `sAMAccountname` → re-bind with user's password → cleanup)
 
-**HAProxy URL routing.** Ensemble exposes its OAuth endpoints under `/<csp-app>/oauth2/...` (e.g. `/ensdevelop/oauth2`). When fronted by HAProxy with a different external path (`/dev/oauth2`), add an HAProxy rule that maps `/dev/oauth2` → `/ensdevelop/oauth2`.
+**HAProxy URL routing.** Ensemble exposes its OAuth endpoints under `/<csp-app>/oauth2/...` (e.g. `/demoapp/oauth2`). When fronted by HAProxy with a different external path (`/dev/oauth2`), add an HAProxy rule that maps `/dev/oauth2` → `/demoapp/oauth2`.
 
 **`OAuth2.Server.Client.ValidateRedirectURL` may need patching** when the redirect URI host is constrained externally.
 
@@ -863,7 +873,9 @@ Several legacy installs (2015, 2020) used `Normal` Initial Security. **In curren
 
 When generating a SAML 2.0 assertion for a regional health-record exchange, the assertion's `<saml:AttributeStatement>` may be required to include attribute names such as (case-sensitive):
 
-- `ResponsibleUser`, `Profile`, `ProviderOrganization`, `Entity`, `CodeUp`, `CIP`, `GivenName`, `FirstFamilyName`, `SecondFamilyName`, `DocumentType`, `documentNumber`, `code`
+- `ResponsibleUser`, `Profile`, `ProviderOrganization`, `Entity`, `GivenName`, `FirstFamilyName`, `SecondFamilyName`, `DocumentType`, `documentNumber`, `code`, plus one or more region-specific identifier attributes (typically a regional patient identifier and an issuing-organisation code)
+
+The list is **illustrative**. Attribute names, casing and the region-specific identifiers are defined by the exchange's own integration specification — take them from that spec, never from here.
 
 - **Severity.** Low (reference data).
 
@@ -884,7 +896,7 @@ When integrating with Spanish public-sector e-invoicing (TicketBAI, facturae), t
 During an IAM major-version upgrade (e.g. 0.34 → 2.x), corrupt rows in the embedded PostgreSQL `public.rbac_user_roles` table can block migration. Fix: shell into the IAM PostgreSQL container, connect via psql, and `DELETE FROM public.rbac_user_roles WHERE user_id='<id>';` for the offending rows before re-running the migration container.
 
 ```bash
-docker exec -it iam-db-base /bin/bash
+docker exec -it <iam-db-container> /bin/bash
 psql -U iam -h localhost
 \dt
 DELETE FROM public.rbac_user_roles WHERE user_id='<id>';
@@ -995,8 +1007,10 @@ A class that compiles fine in Caché 2012 may report `Missing BPL Data` (i.e. `<
 
 | Default | Ensemble (≤2017) | IRIS (2018+) |
 |---|---|---|
-| SuperServer | 1972 | 52772 |
+| SuperServer | 1972 | 1972 |
 | Web (Apache) | 57772 | 52773 |
+
+The SuperServer default is unchanged at 1972; only the web port moved. Never assume it — read the instance's own `iris.cpf` `[Startup] DefaultPort` (or `##class(Config.Startup).Get()`), which is authoritative, and remember that a container may publish it on a different host port.
 
 Watch for hardcoded port references in client code and firewall rules during migration.
 
@@ -1009,7 +1023,7 @@ Watch for hardcoded port references in client code and firewall rules during mig
 - `https://github.com/intersystems-ib/SAML-COS` — SAML 2.0 ObjectScript implementation, addresses the charset bug (§11.1).
 - `https://github.com/intersystems-ib/SAML11-COS` — SAML 1.1 ObjectScript implementation (§11.4).
 - `https://github.com/intersystems-ib/Healthcare-HL7-XML` — HL7 v2 in XML form (§2.6).
-- `https://github.com/intersystems-ib/workshop-iris-dicom-interop` — DICOM interop workshop (local snapshot at `Documentacion/BestPractices/external/workshop-iris-dicom-interop/`).
+- `https://github.com/intersystems-ib/workshop-iris-dicom-interop` — DICOM interop workshop (local snapshot at `BestPractices/external/workshop-iris-dicom-interop/`).
 - `https://github.com/PYDuquesnoy/IRIS-Interop-Deployment` — open-source deploy tool (§9.1).
 
 ### InterSystems documentation
@@ -1026,30 +1040,12 @@ Cited for verification:
 
 ### Validity-tag taxonomy
 
+Restated from "How to read this document"; every rule and every example header uses one of these:
+
 | Tag | Meaning |
 |---|---|
-| F | Fully implemented — fully tested, currently being to the market |
-| D | In development |
-| R | On roadmap — committed to implementing |
-| P | Plan to implement — plans exist but no commitment date |
-| N | No plans to implement |
-
----
-
-## Appendix C — Skip rationale
-
-This deliverable explicitly excluded the following document categories from extraction:
-
-| Category | Examples | Reason |
-|---|---|---|
-| InterSystems-authored guides | IRIS Adoption Guide, Migration Guide, In Place Conversion Guide, IRIS New Product Key Points | Vendor reference, not customer findings; cite in Appendix B |
-| Pricing material | Licensing and pricing guides | Commercial, not technical |
-| Sales templates | Blank architecture questionnaires, capability matrices | Not filled-out customer findings |
-| Personal documents | Driving-licence diploma, employment cards, password-change PDF, Teams background PNG | False-positive H rows from filename triage |
-| VM runtime logs | `*/VM/*/Logs/VBox.log*` | False-positive H rows from filename triage |
-| Third-party analyst reports | Industry analyst validations | Industry context, not technical findings |
-| Vendor user guides | Device host-interface manuals | Third-party authored |
-| Verbatim XML payloads | Customer-specific SAML / forms XML | Quote-on-demand only |
-| Procurement / RFI material | Public tenders, RFI questionnaires | Public procurement, not engagement docs |
-| LinkedIn / training material | Online courses, training plans, certifications | Marketing or non-technical |
-| Same template already mined | Duplicate copies of an architecture/development guide already covered | Avoid duplicate extraction |
+| `Still valid` | Applies to current IRIS as written |
+| `Resolved in IRIS X.Y` | The underlying defect or limitation was fixed in that release |
+| `Superseded by ...` | A newer mechanism replaces the pattern described |
+| `Historical` | Kept for context; do not apply to new work |
+| `Verify against current docs` | Was true when recorded; re-check before relying on it |

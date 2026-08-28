@@ -389,7 +389,7 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/soap-
 Default Ensemble inbound adapters do **interval** scheduling ("every X seconds"). For **wall-clock** schedules (daily 08:30, weekdays 08:00–18:00 only, etc.) two options:
 
 - **Custom scheduler adapter** with a cron-style format `min hour day month dayOfWeek`. Most legacy customer projects built one of these.
-- **IRIS native task framework** (`%SYS.TaskSuper`) that triggers a passive BS via `Ens.Director.CreateBusinessService`. Preferred for new work.
+- **IRIS native task framework** — subclass **`%SYS.Task.Definition`**, override `OnTask`, and have it trigger a passive BS via `Ens.Director.CreateBusinessService`. Preferred for new work. (Not `%SYS.TaskSuper`: that class also exists, so the mistake survives an existence check, but it is the internal persistent superclass of the stored `%SYS.Task` schedule record — *"for internal use only"* — and has no `OnTask` to override. Every shipped task on an instance, `PurgeJournal` / `IntegrityCheck` / `PurgeErrorsAndLogs` …, subclasses `%SYS.Task.Definition`.)
 
 ### Scheduled BS concurrency — `PoolSize=1` alone is not enough
 

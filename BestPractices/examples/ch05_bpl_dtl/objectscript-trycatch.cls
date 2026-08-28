@@ -3,16 +3,26 @@
 ///
 /// Why: Ensemble libraries and wizard-generated code don't use modern try/catch;
 /// refactor opportunistically. Always return %Status.
-Class Example.TryCatch.Idiom Extends %RegisteredObject
+///
+/// Named `Example.UTL.TryCatchIdiom`: plain helper/utility classes take the `.UTL`
+/// sub-package (skills/interop §"naming convention"), Tipo in the middle.
+Class Example.UTL.TryCatchIdiom Extends %RegisteredObject
 {
 
+/// The idiom: make the call, throw on a bad %Status, convert the exception back to
+/// %Status in the catch, and return %Status. Never `Quit <value>` inside the Try (#1043).
+///
+/// There is a one-line equivalent of the two executable lines below:
+///
+///     $$$THROWONERROR(tSC, ..InnerCall(pInput, .pOutput))
+///
+/// Pick ONE of the two forms. They do the same thing, so writing both — as this example
+/// used to, separated by a `// OR` comment — calls InnerCall twice.
 ClassMethod DoSomething(pInput As %String, Output pOutput As %String) As %Status
 {
     #DIM tSC as %Status = $$$OK
     #DIM errObj as %Exception.AbstractException
     try {
-        $$$THROWONERROR(tSC, ..InnerCall(pInput, .pOutput))
-        // OR
         set tSC = ..InnerCall(pInput, .pOutput)
         $$$ThrowOnError(tSC)
     } catch (errObj) {
