@@ -36,6 +36,25 @@ BS_BO_SEGS = {"BS", "BO", "Service", "Operation", "BusinessService", "BusinessOp
 # for Load*/Import*/Compile* only — Delete/DeletePackage/Export are intentionally NOT matched.
 OBJ_BYPASS = re.compile(r"(?i)SYSTEM\.OBJ\)?\.(Load|Import|Compile)")
 
+# $SYSTEM.OBJ was never the only way to make a class from ObjectScript, and it was the only
+# one gated (#110). Reproduced live: %Compiler.UDL.TextServices.SetTextFromStream puts an
+# interop-named Business Operation in the namespace with no file on disk and no gate firing,
+# because OBJ_BYPASS does not match it and src_before_iris only watches iris_doc. Observed in
+# the corpus too: a run wrote ^oddDEF directly, with zero conformance denials in its transcript.
+#
+# CALIBRATED TO WRITES ONLY. The read forms are the normal introspection path and the plugin
+# teaches them — %ExistsId, %Dictionary.CompiledClass queries, $order/$data over ^oddDEF,
+# TextServices GetText*. Gating those would make this rule noise, and a noisy gate gets
+# disabled. Each pattern below matches a mutation and nothing else.
+CLASS_WRITE_BYPASS = [
+    (re.compile(r"(?i)TextServices\)?\.SetText"),
+     "%Compiler.UDL.TextServices.SetText* writes class source straight into the namespace"),
+    (re.compile(r"(?i)%Dictionary\.(Class|Method|Property|Parameter|XData)Definition\)?\.%(New|Save)"),
+     "the %Dictionary.*Definition object API creates/saves a class definition in place"),
+    (re.compile(r"(?i)(?:^|[\s:])(?:set|kill|merge)\s+\^odd(DEF|COM)"),
+     "writing ^oddDEF/^oddCOM edits the class dictionary directly"),
+]
+
 # Tools whose `namespace` is documented as OPTIONAL but is effectively REQUIRED: they resolve
 # Ens.Director / Ens_Config.* in whatever namespace the connection defaults to, and if that one
 # is not interop-enabled the call dies with an internal error that never names the cause
@@ -118,6 +137,24 @@ def main():
                 "Load Skill(iris-interop-skills:production-lifecycle) for the proper deploy path."
                 % m.group(0)
             )
+
+        # (3b) the other routes into the class dictionary — same bypass, different API (#110).
+        for pattern, why in CLASS_WRITE_BYPASS:
+            m = pattern.search(code)
+            if m:
+                deny(
+                    "Creating class source through iris_execute (matched '%s') bypasses the MCP's "
+                    "iris_doc/iris_compile path, this gate, and the source-of-truth gate — so the "
+                    "class lands in the namespace with no file on disk, which is not "
+                    "version-controlled, not reviewable, and does not survive the instance.\n\n"
+                    "%s.\n\n"
+                    "Write the class to src/<Pkg>/<Tipo>/<Name>.cls, then iris_doc(mode=put) the "
+                    "same content and compile with iris_compile.\n\n"
+                    "Reading the dictionary is untouched and is the right way to introspect: "
+                    "%%ExistsId, %%Dictionary.CompiledClass queries, $order/$data over ^oddDEF, and "
+                    "TextServices GetText* all pass."
+                    % (m.group(0), why)
+                )
 
     for nm in names:
         base = nm[:-4] if nm.lower().endswith(".cls") else nm
