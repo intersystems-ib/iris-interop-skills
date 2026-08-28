@@ -36,6 +36,38 @@ BS_BO_SEGS = {"BS", "BO", "Service", "Operation", "BusinessService", "BusinessOp
 # for Load*/Import*/Compile* only — Delete/DeletePackage/Export are intentionally NOT matched.
 OBJ_BYPASS = re.compile(r"(?i)SYSTEM\.OBJ\)?\.(Load|Import|Compile)")
 
+# $SYSTEM.OBJ was never the only way to make a class from ObjectScript, and it was the only
+# one gated (#110). Reproduced live: %Compiler.UDL.TextServices.SetTextFromStream puts an
+# interop-named Business Operation in the namespace with no file on disk and no gate firing,
+# because OBJ_BYPASS does not match it and src_before_iris only watches iris_doc. Observed in
+# the corpus too: a run wrote ^oddDEF directly, with zero conformance denials in its transcript.
+#
+# CALIBRATED TO WRITES ONLY. The read forms are the normal introspection path and the plugin
+# teaches them — %ExistsId, %Dictionary.CompiledClass queries, $order/$data over ^oddDEF,
+# TextServices GetText*. Gating those would make this rule noise, and a noisy gate gets
+# disabled. Each pattern below matches a mutation and nothing else.
+CLASS_WRITE_BYPASS = [
+    (re.compile(r"(?i)TextServices\)?\.SetText"),
+     "%Compiler.UDL.TextServices.SetText* writes class source straight into the namespace"),
+    (re.compile(r"(?i)%Dictionary\.(Class|Method|Property|Parameter|XData)Definition\)?\.%(New|Save)"),
+     "the %Dictionary.*Definition object API creates/saves a class definition in place"),
+    (re.compile(r"(?i)(?:^|[\s:])(?:set|kill|merge)\s+\^odd(DEF|COM)"),
+     "writing ^oddDEF/^oddCOM edits the class dictionary directly"),
+]
+
+# ^oddDEF / ^oddCOM at all — read included. This started as a write-only rule, on the
+# reasoning that $order over the dictionary global was legitimate introspection. It is not.
+# ^oddDEF is the undocumented internal representation; reading it is the guessing that
+# `introspect-dont-guess` exists to prevent, and it is version-fragile in a way the
+# supported APIs are not.
+#
+# Nothing is lost by forbidding it. Verified on IRIS 2026.1: 58 persistent, SQL-queryable
+# %Dictionary.* classes and 129 predefined queries. The two real corpus uses map directly —
+# `$Order(^oddDEF(name))` is `SELECT Name FROM %Dictionary.ClassDefinition`, and walking
+# `^oddDEF(cls,"p",param)` is %Dictionary.CompiledProperty / ParameterDefinition, or the
+# Summary query.
+DICT_GLOBAL = re.compile(r"(?i)\^odd(DEF|COM)")
+
 # Tools whose `namespace` is documented as OPTIONAL but is effectively REQUIRED: they resolve
 # Ens.Director / Ens_Config.* in whatever namespace the connection defaults to, and if that one
 # is not interop-enabled the call dies with an internal error that never names the cause
@@ -116,6 +148,44 @@ def main():
                 "$SYSTEM.OBJ.Import / $SYSTEM.OBJ.Compile from iris_execute. "
                 "(Deleting/exporting via iris_execute is fine.) "
                 "Load Skill(iris-interop-skills:production-lifecycle) for the proper deploy path."
+                % m.group(0)
+            )
+
+        # (3b) the other routes into the class dictionary — same bypass, different API (#110).
+        for pattern, why in CLASS_WRITE_BYPASS:
+            m = pattern.search(code)
+            if m:
+                deny(
+                    "Creating class source through iris_execute (matched '%s') bypasses the MCP's "
+                    "iris_doc/iris_compile path, this gate, and the source-of-truth gate — so the "
+                    "class lands in the namespace with no file on disk, which is not "
+                    "version-controlled, not reviewable, and does not survive the instance.\n\n"
+                    "%s.\n\n"
+                    "Write the class to src/<Pkg>/<Tipo>/<Name>.cls, then iris_doc(mode=put) the "
+                    "same content and compile with iris_compile.\n\n"
+                    "Reading the dictionary is untouched and is the right way to introspect: "
+                    "%%ExistsId, %%Dictionary.CompiledClass queries, $order/$data over ^oddDEF, and "
+                    "TextServices GetText* all pass."
+                    % (m.group(0), why)
+                )
+
+        # (3c) reading the class dictionary global instead of the supported APIs (#110).
+        m = DICT_GLOBAL.search(code)
+        if m:
+            deny(
+                "`%s` is the undocumented internal class dictionary. Reading it is guessing at "
+                "IRIS internals, and its layout is not a contract — the supported APIs are.\n\n"
+                "Use, in order of preference:\n"
+                "  1. The MCP's typed tools — iris_symbols(pattern=...) to find classes, "
+                "docs_introspect(class=...) for methods/properties, iris_table_info(schema=...) "
+                "for projected tables. One call, no catalog guessing.\n"
+                "  2. %%Dictionary SQL — 58 queryable classes, e.g.\n"
+                "       SELECT Name FROM %%Dictionary.ClassDefinition WHERE Name %%STARTSWITH 'Pkg.'\n"
+                "       SELECT parent, Name, Type FROM %%Dictionary.CompiledProperty WHERE parent = ?\n"
+                "  3. The predefined queries — %%Dictionary.ClassDefinition:Summary / :SubclassOf / "
+                ":MemberSummary, %%Dictionary.PackageDefinition:SubPackage, and 125 more.\n\n"
+                "Load Skill(iris-interop-skills:introspect-dont-guess) — resolving real names "
+                "instead of guessing is exactly what it is for."
                 % m.group(0)
             )
 
