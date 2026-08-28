@@ -30,7 +30,9 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   `skillListingMaxDescChars: 2048`) in `~/.claude/settings.json` so `interop`/`tdd` don't get evicted.
 - `BestPractices/` — the worked-example bank the skills cite:
   - `BestPractices_Interop_IRIS.md` — patterns tagged Validity/Severity.
-  - `examples/` — runnable artefacts indexed in `examples/README.md`.
+  - `examples/` — runnable artefacts indexed in `examples/README.md`, gated by
+    `scripts/validate_examples.py` (tier 1 structural in CI; `--compile` against a
+    live IRIS before a release). Adding an example means adding its README row.
   - `external/workshop-iris-dicom-interop/` — vendored MIT DICOM snapshot.
 - `.claude-plugin/` — `marketplace.json` + `plugin.json` (this repo is both a
   single-plugin marketplace and the plugin itself; plugin `source` is the repo root).

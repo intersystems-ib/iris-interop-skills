@@ -269,6 +269,11 @@ Four shapes cover most orchestration needs. Reach for the closest match before a
 | **Custom BPL business process** | Sync `<call>` to a BO with context-vars, response handlers, and decision logic on the returned data. Drive it under test via `EnsLib.Testing.Service.SendTestRequest` (see `tdd`). |
 | **Alerts router rule** | Subscribes to `Ens.AlertRequest`, fans out to a file-logger BO; xref `alerting` for the dedup function-set pattern that goes on top. |
 
+Worked examples, all compiled against live IRIS 2026.1:
+
+- Custom BPL — `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/bpl-order-process.cls` (§5.6): `<context>` property, a sync `<call>` with `callrequest` bindings, a `<code>` activity.
+- Fan-out routing rule — `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/routing-rule-fanout.cls` (§5.8): one `<rule>` per source `msgClass`, two `<send>` inside one `<when>`, correct engine/assist pairing, and the `!=` / `Document.` condition traps in its header.
+
 The pre-flight `ValidateProduction()` validator shown above is the full version (item-class check **plus** rule-XData parsing of `transform=`/`target=`). A lighter starter that only checks item classes is fine early on — extend it with the rule-XData parser as the production matures.
 
 ## What this skill does NOT yet do

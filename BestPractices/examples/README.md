@@ -1,5 +1,31 @@
 # Code examples — rule → file index
 
+## Validation
+
+This bank is gated, not reviewed. Before this gate existed, 10 of 18 files did
+not compile — across seven releases, because nobody had ever run a compiler over
+them.
+
+```sh
+python3 scripts/validate_examples.py            # tier 1: structural, ~1s, runs in CI
+python3 scripts/validate_examples.py --compile  # tier 2: compile every class on live IRIS
+```
+
+**Tier 1** checks the invariants this index depends on: every artefact carries a
+`/// Rule:` header, every `§X.Y` resolves to a real heading, one class per `.cls`,
+the index and the directory agree in both directions, no class puts its Tipo last,
+and no token the audit proved wrong survives outside a comment.
+
+**Tier 2** stages every class into a live IRIS, compiles, compares against
+`scripts/examples_baseline.json`, and deletes what it staged. Run it before any
+release. It needs `IRIS_HOST` / `IRIS_PORT` / `IRIS_NAMESPACE` / `IRIS_USER` /
+`IRIS_PASSWORD` (defaults suit a local dev container).
+
+Adding an example means adding its row here — C4 fails the build otherwise. If it
+introduces a class the baseline does not know, review it and re-record with
+`--update-baseline`.
+
+
 This directory hosts standalone code artefacts referenced from
 `../BestPractices_Interop_IRIS.md`. The deliverable is the canonical source;
 each file here is a verbatim lift (or faithful reconstruction) of a "tricky"
@@ -40,6 +66,10 @@ its siblings.
 | §5.3 | XML projection settings — `XMLIGNORENULL` / `CONTENT` / `OUTPUTTYPEATTRIBUTE` | `ch05_bpl_dtl/xml-projection-settings.cls` |
 | §5.4 | ObjectScript try/catch + %Status idiom | `ch05_bpl_dtl/objectscript-trycatch.cls` |
 | §5.5 | Async logging via `^IRISTemp.*` + `%SYSTEM.Semaphore` | `ch05_bpl_dtl/async-logger-iristemp-semaphore.cls` |
+| §5.6 | Custom BPL — context variables, a sync `<call>`, code-block idiom (`Example.BP.OrderProcess`) | `ch05_bpl_dtl/bpl-order-process.cls` |
+| §5.7 | DTL — declared transform, XData escaping, compile-order trap (`Example.DT.OrderToVendor`) | `ch05_bpl_dtl/dtl-order-to-vendor.cls` |
+| §5.7 | Sibling: DTL target message, also the `<call>` request type in §5.6 (`Example.MSG.VendorOrder`) | `ch05_bpl_dtl/msg-vendororder.cls` |
+| §5.8 | Routing rule — one rule per source msgClass, N `<send>` fan-out (`Example.RUL.OrderRouting`) | `ch05_bpl_dtl/routing-rule-fanout.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |

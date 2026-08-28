@@ -1,0 +1,37 @@
+# validate-examples: structural gate over the BestPractices example bank.
+#
+# Runs tier 1 only. Tier 2 (compile every example against a live IRIS) needs an
+# IRIS instance with Interoperability + HL7, which this runner does not have —
+# run it locally before a release:
+#
+#   python3 scripts/validate_examples.py --compile
+#
+# See scripts/validate_examples.py for what each check does and, more importantly,
+# why each one is written in its narrow form.
+
+name: validate-examples
+
+on:
+  push:
+    paths:
+      - 'BestPractices/**'
+      - 'scripts/validate_examples.py'
+      - '.github/workflows/validate-examples.yml'
+  pull_request:
+    paths:
+      - 'BestPractices/**'
+      - 'scripts/validate_examples.py'
+  workflow_dispatch:
+
+jobs:
+  structural:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Tier 1 — structural checks
+        run: python3 scripts/validate_examples.py

@@ -155,6 +155,13 @@ exactly the ones ObjectScript uses most:
 <code><![CDATA[Quit:(tipo="")&&(val="")]]></code>
 ```
 
+Worked example, compiled *and executed* against live IRIS 2026.1:
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/dtl-order-to-vendor.cls` (§5.7) —
+shows both escaping forms, and its header records the compile-order trap: `Transform` is built by
+a generator that resolves `sourceClass`/`targetClass` at generation time, so a DTL compiled in the
+same batch as its own message classes can fail with `#5001 <CLASS DOES NOT EXIST>` wrapped in
+`#5490`. Compile the messages first, or just compile twice.
+
 **`expected entity name for reference` always means an unescaped `&`.** The parser reports a line and
 offset **into the XData stream**, not into your source file, so the numbers will not match your editor
 — go looking for the `&`, not for line 10. Measured over a workshop cohort: **16 of 18 students** hit

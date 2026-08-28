@@ -499,6 +499,67 @@ Temporary globals are not journalled, never part of the writer's transaction (no
 
 ---
 
+### 5.6 Custom BPL: context variables, a sync call, and the code-block idiom
+
+Reach for a custom BPL only when the flow is genuinely multi-step: synchronous sub-calls, conditional branches, fan-out/aggregation, error compensation. For "route this message onwards", use a MessageRouter plus a routing rule (§5.8) — a hand-written `Ens.BusinessProcess.OnRequest` doing the routing is conformance **CR-1**.
+
+The `<context>` block is the point of the shape. Context properties persist for the BPL's whole lifetime and survive a `<call>`; locals inside a `<code>` activity do not. Anything that must cross an async boundary lives in the context.
+
+Two traps that are not visible in the editor:
+
+- The BPL editor writes **straight into the namespace** and bypasses the source-of-truth gate. On some IRIS versions it silently strips `XData BPL` on first open, and the class then reports `Missing BPL Data`. Recovery is a copy-paste back into the block — which only works if the class is on disk as text. After any editor session, `iris_doc(mode=get)` the class and write it back to `src/`.
+- A BO's `Response Timeout` must be **smaller** than the calling BP's. Whichever side times out first owns the error context; if the BP goes first, the BO never gets to record its own failure.
+
+- **Validity.** Still valid.
+- **Severity.** Medium.
+- **Example.** `examples/ch05_bpl_dtl/bpl-order-process.cls`
+
+---
+
+### 5.7 DTL: declare the transform, don't write it imperatively
+
+An `Ens.DataTransformDTL` subclass with **no `XData DTL` still compiles** — and the Portal's DTL editor then opens nothing (conformance **CR-4**). Moving the same logic into a hand-written BP `OnRequest` is **CR-1**, a P1 finding. If a transform genuinely cannot be declared, that is a design signal worth raising, not a licence to write it by hand.
+
+**The body is XML first and ObjectScript second.** The operators that collide are the ones ObjectScript uses most:
+
+| ObjectScript | Inside XData |
+|---|---|
+| `&&` | `&amp;&amp;` |
+| `&` | `&amp;` |
+| `<`, `<=` | `&lt;`, `&lt;=` |
+
+An unescaped `&` fails with `ERROR #6301: SAX XML Parser Error: expected entity name for reference`, and the reported line and offset point into the **XData stream**, not into your source file — the numbers will not match your editor. Wrapping raw ObjectScript in `<![CDATA[ … ]]>` avoids the whole class of problem and survives later edits better.
+
+**Compile order matters.** `Transform` is built by a method generator that resolves `sourceClass` and `targetClass` at generation time, so both must already be compiled. Compiling a DTL in the same batch as its own message classes can fail with `#5001 <CLASS DOES NOT EXIST>` wrapped in `#5490 Error running generator`, even though the classes are in the batch. It is an ordering artefact, not a defect — compile the messages first, or just compile twice.
+
+- **Validity.** Still valid.
+- **Severity.** High.
+- **Example.** `examples/ch05_bpl_dtl/dtl-order-to-vendor.cls` (+ sibling `msg-vendororder.cls`)
+
+---
+
+### 5.8 Routing rule: one rule per source msgClass, N sends inside it
+
+The canonical fan-out is **one `<rule>` per source message class, with N `<send>` actions inside its `<when>` block** — not one rule per destination. Splitting per destination to "isolate failures" conflates runtime fault tolerance with architecture: it multiplies rules and makes routing harder to reason about. Flaky destinations are handled by settings on the Router **item** — `AlertOnError`, `BadMessageHandler`, `ReplyCodeActions`.
+
+**Pair the engine with the assist class.** A rule for custom `Ens.Request` subclasses uses `EnsLib.MsgRouter.RuleAssist` with `context="EnsLib.MsgRouter.RoutingEngine"`. HL7 needs `EnsLib.HL7.MsgRouter.RuleAssist` and `EnsLib.HL7.MsgRouter.RoutingEngine`; running HL7 through the generic engine still compiles and still passes tests, but silently loses schema validation and the `{MSH:9.1}` paths (conformance **CR-6**).
+
+**A `condition=` is not ObjectScript.** The rule XData is compiled into `evaluateRuleDefinition` by a generator that reports offsets into *generated* code, so `#5490` never points at what you wrote:
+
+| Don't write | Write |
+|---|---|
+| `'=` (ObjectScript "not equal") | `!=` |
+| `document.Field` | `Document.Field` — capitalised; lowercase does not resolve |
+| `##class(Pkg.UTL.X).Check(Document)=1` | put the method on an `Ens.Rule.FunctionSet` subclass, call it bare: `Check(Document)=1` |
+
+**A rule that compiles can still break at runtime.** Nothing checks that `transform=` and `target=` resolve: a missing transform class or a target that is not a production item compiles clean and fails at runtime with `<CLASS DOES NOT EXIST>` or `target 'X' not an item`. Run the pre-flight `ValidateProduction()` validator (in the `bpl` skill) before every production start.
+
+- **Validity.** Still valid.
+- **Severity.** High.
+- **Example.** `examples/ch05_bpl_dtl/routing-rule-fanout.cls`
+
+---
+
 ## 6. Adapters & connectivity
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
