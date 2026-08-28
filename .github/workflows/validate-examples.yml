@@ -57,27 +57,62 @@ jobs:
 
       - name: Start IRIS for Health (community)
         run: |
+          # Pinned, not :latest. The two are the same digest today (sha256:255ce9c0...),
+          # but a moving tag means this gate can break with no change to the repo — and
+          # 2026.1 is the version the baseline in scripts/examples_baseline.json was
+          # recorded against.
+          #
+          # IRIS_INIT=1 is load-bearing. Without it the entrypoint runs iris-after-start,
+          # which on this build dies in the image's own python glue:
+          #     [ERROR] Cannot call an iris.package wrapper ... Given name was: dbapi.connect
+          #     [ERROR] Command "/docker-entrypoint.sh iris-after-start " exited with status 256
+          #     [FATAL] Error executing post-startup command
+          # IRIS then shuts down cleanly ~12s after starting and the container exits 1, so
+          # every readiness probe sees HTTP 000. Setting IRIS_INIT skips that whole block
+          # (the entrypoint's own "Already initialized, skipping" path). The cost is that
+          # docker_setup_username is skipped too, which is why the password step below
+          # exists. Reproduced locally in 10s; do not remove without re-testing.
           docker run -d --name iris \
+            -e IRIS_INIT=1 \
             -p 52773:52773 -p 1972:1972 \
-            intersystemsdc/irishealth-community:latest
+            intersystemsdc/irishealth-community:2026.1
           echo "container started"
 
-      - name: Wait for the Atelier API
+      - name: Wait for the web server
         run: |
-          # IRIS takes 1-2 minutes to come up. Poll rather than sleep a fixed amount:
-          # a fixed sleep is either flaky or slow, and both get the job disabled.
+          # Poll rather than sleep a fixed amount: a fixed sleep is either flaky or slow,
+          # and both get a job disabled. Any HTTP response means IRIS is serving — 401 is
+          # expected here and is handled by the next step.
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' \
               -u "$IRIS_USER:$IRIS_PASSWORD" \
               "http://localhost:$IRIS_PORT/api/atelier/v1/$IRIS_NAMESPACE" || true)
-            if [ "$code" = "200" ]; then
-              echo "ready after ${i}0s (HTTP $code)"
+            if [ "$code" != "000" ]; then
+              echo "web server answering after $((i*5))s (HTTP $code)"
               exit 0
             fi
-            echo "  attempt $i: HTTP ${code:-none}"
-            sleep 10
+            [ $((i % 6)) -eq 0 ] && echo "  ${i}: still no response"
+            sleep 5
           done
-          echo "IRIS did not become ready in 10 minutes"
+          echo "IRIS never answered in 5 minutes"
+          docker logs --tail 50 iris || true
+          exit 1
+
+      - name: Enable the default credentials
+        run: |
+          # Skipping iris-after-start also skipped docker_setup_username, so _SYSTEM's
+          # password is still flagged expired and every Atelier call returns 401.
+          docker exec iris iris session IRIS -U %SYS \
+            '##class(Security.Users).UnExpireUserPasswords("*")'
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              -u "$IRIS_USER:$IRIS_PASSWORD" \
+              "http://localhost:$IRIS_PORT/api/atelier/v1/$IRIS_NAMESPACE" || true)
+            if [ "$code" = "200" ]; then echo "authenticated (HTTP 200)"; exit 0; fi
+            echo "  attempt $i: HTTP $code"
+            sleep 3
+          done
+          echo "credentials still rejected"
           exit 1
 
       - name: Preflight — is this target usable at all?
