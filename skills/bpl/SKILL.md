@@ -210,11 +210,27 @@ For multi-router productions, extend step 2 to iterate every `EnsLib.MsgRouter.R
 
 If a destination is *legitimately flaky* (network, downstream service that does go down), use `EnsLib.MsgRouter.RoutingEngine` settings rather than rewriting rules:
 
-- `AlertOnError="true"` — emit an `Ens.AlertRequest` instead of terminating the BP.
+- `AlertOnError` — emit an `Ens.AlertRequest` instead of terminating the BP.
 - `BadMessageHandler` — a target item where un-routable messages go (configure a file logger or an alerts router as the value).
 - `ReplyCodeActions` — per-error-code action table (Retry / Fail / Suspend / Skip per error class).
 
-These are knobs on the Router item itself, not on individual rules.
+These are knobs on the Router item itself, not on individual rules. **In production XML they are
+`<Setting>` elements, never `<Item>` attributes:**
+
+```xml
+<Item Name="Router" ClassName="EnsLib.MsgRouter.RoutingEngine">
+  <Setting Target="Host" Name="AlertOnError">1</Setting>
+  <Setting Target="Host" Name="BadMessageHandler">ErrorFileLogger</Setting>
+</Item>
+```
+
+`<Item ... AlertOnError="true">` fails the whole class with *attribute 'AlertOnError' is not
+declared for element 'Item'*. The `<Item>` element maps to `Ens.Config.Item`, whose 19 properties
+are `Name`, `ClassName`, `Enabled`, `PoolSize`, `Schedule`, `Category`, `Comment`,
+`DisableErrorTraps`, `Foreground`, `InactivityTimeout`, `LogTraceEvents`, `AlertGroups` and the
+rest — `AlertOnError` is not among them. Host settings reach the item through its `Settings`
+collection (`Ens.Config.Setting`), which is what `<Setting>` builds. Note the value is `1`/`0`,
+not `"true"`.
 
 ## Timeout precedence — BO timeout MUST be smaller than calling BP
 
