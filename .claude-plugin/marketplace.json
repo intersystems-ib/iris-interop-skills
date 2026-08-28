@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "IRIS For Health Interoperability skills for Claude Code.",
-    "version": "1.7.0"
+    "version": "1.8.0"
   },
   "plugins": [
     {
       "name": "iris-interop-skills",
       "source": "./",
       "description": "20 skills for building IRIS For Health Interoperability productions with Claude — including a task→component map and a post-build conformance review. Start at the iris-interop router. Requires an IRIS MCP server (iris-agentic-dev or iris-interop-dev). Ships 8 hooks (SessionStart conventions bootstrap + 2 PreToolUse gates that block non-conformant writes, class loads/compiles smuggled through iris_execute, and namespace-only classes missing from src/ + 5 PostToolUse guards) + 4 agents (interop-builder, deploy-smoke-test, introspect-dont-guess, conformance-reviewer).",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "category": "healthcare",
       "keywords": [
         "iris",
