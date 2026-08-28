@@ -23,9 +23,11 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   name or path — a bare `Skill("messages")` errors with "Unknown skill".
 - `agents/*.md` — four bundled subagents (`interop-builder`, `deploy-smoke-test`,
   `introspect-dont-guess`, `conformance-reviewer`) that auto-register on install. MCP-server-agnostic (no server pinned).
-- `hooks/` — eight hooks auto-enabled via `plugin.json`: a SessionStart conventions bootstrap,
-  two blocking PreToolUse gates (conformance gate, src-before-iris), and five PostToolUse guards
-  (silent-execute guard, TDD enforcement, conformance pre-scan, docker-detect, tdd-first-green).
+- `hooks/` — nine hooks auto-registered via `hooks/hooks.json`: a SessionStart conventions
+  bootstrap, two blocking PreToolUse gates (conformance gate, src-before-iris), five PostToolUse
+  guards (silent-execute guard, TDD enforcement, conformance pre-scan, docker-detect,
+  tdd-first-green), and one blocking **Stop** gate (conformance-stop-gate) that enforces
+  "before declaring done" — see #96 for why an advisory nudge was worth 0 invocations in 206 runs.
 - **Required user setting:** raise the skill-listing budget (`skillListingBudgetFraction: 0.03`,
   `skillListingMaxDescChars: 2048`) in `~/.claude/settings.json` so `interop`/`tdd` don't get evicted.
 - `BestPractices/` — the worked-example bank the skills cite:

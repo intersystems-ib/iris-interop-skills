@@ -11,6 +11,15 @@ description: Review an already-built IRIS Interoperability production against th
 > build skills alone; they do not carry the criteria, and a review without CR-1…CR-12 misses the
 > checks this plugin exists to make.
 
+> **A Stop hook enforces this pass.** When a session has written classes into IRIS, it blocks
+> once at the moment the model would stop: hard on **CR-12** (any class put into IRIS with no
+> file on disk — mechanical, no judgement involved), and once on "the conformance pass never
+> ran". Answer it and stop again; it fires at most once per session. It exists because this
+> instruction previously had *no* enforcement point — measured over 206 runs that produced
+> authored `.cls`, the `conformance-reviewer` agent was spawned **0 times**, while
+> `interop-builder`, whose instruction lives in the SessionStart hook, was spawned 79. The two
+> differed only in where they lived (#96).
+
 A built production can **compile and "pass tests"** and still be non-idiomatic. This skill defines the
 criteria a finished interop build is checked against, and the **review workflow**: surface findings →
 propose a scoped remediation plan → apply only the unambiguous fixes, with the user's OK. It does **not**

@@ -40,6 +40,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -205,7 +206,9 @@ class Atelier:
         pwd = os.environ.get("IRIS_PASSWORD", "SYS")
         token = base64.b64encode(f"{user}:{pwd}".encode()).decode()
         self.auth = f"Basic {token}"
-        self.base = f"http://{self.host}:{self.port}/api/atelier/v1/{self.ns}"
+        # The namespace goes in the URL path, so it must be encoded: %SYS and any namespace
+        # with a % in it otherwise returns HTTP 400 and gets misreported as "unreachable".
+        self.base = f"http://{self.host}:{self.port}/api/atelier/v1/{urllib.parse.quote(self.ns, safe='')}"
 
     def _call(self, method: str, path: str, body=None):
         data = json.dumps(body).encode() if body is not None else None
@@ -224,6 +227,68 @@ class Atelier:
 
     def delete(self, name: str):
         return self._call("DELETE", f"/doc/{name}")
+
+    def query(self, sql: str):
+        return self._call("POST", "/action/query", {"query": sql, "parameters": []})
+
+
+def preflight() -> bool:
+    """Prove the environment is usable BEFORE compiling anything.
+
+    Without this, a misconfigured target produces a uniformly red run that reads as "the
+    examples are broken" when it actually means "this IRIS has no Interoperability". That is
+    a worse outcome than no CI check at all, because it trains people to ignore the result.
+    Each failure below names which of the two it is.
+    """
+    print("Preflight\n")
+    iris = Atelier()
+    print(f"  target {iris.base}")
+
+    try:
+        ver = iris._call("GET", "")
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
+        print(f"  FAIL  cannot reach IRIS: {exc}")
+        print("        ENVIRONMENT problem, not an example problem.")
+        print("        Check IRIS_HOST / IRIS_PORT / IRIS_USER / IRIS_PASSWORD.")
+        return False
+    content = (ver.get("result") or {}).get("content") or {}
+    dbs = ", ".join(d.get("name", "?") for d in (content.get("db") or [])[:6])
+    print(f"  ok    reachable — namespace {content.get('name', iris.ns)} over [{dbs}]")
+
+    try:
+        rows = (iris.query(
+            "SELECT COUNT(*) AS n FROM %Dictionary.CompiledClass WHERE Name = 'Ens.Director'"
+        ).get("result") or {}).get("content") or []
+        has_ens = rows and int(list(rows[0].values())[0]) > 0
+    except Exception as exc:
+        print(f"  FAIL  could not query the dictionary in namespace {iris.ns}: {exc}")
+        print("        ENVIRONMENT problem, not an example problem.")
+        return False
+
+    if not has_ens:
+        print(f"  FAIL  namespace {iris.ns} has no Ens.Director — Interoperability is not enabled")
+        print("        ENVIRONMENT problem, not an example problem. Every Ens.* example would")
+        print("        fail for the same reason and the run would say nothing about the bank.")
+        return False
+    print(f"  ok    namespace {iris.ns} is Interoperability-enabled")
+
+    try:
+        rows = (iris.query(
+            "SELECT COUNT(*) AS n FROM %Dictionary.CompiledClass WHERE Name = 'EnsLib.HL7.Message'"
+        ).get("result") or {}).get("content") or []
+        has_hl7 = rows and int(list(rows[0].values())[0]) > 0
+    except Exception:
+        has_hl7 = False
+
+    if not has_hl7:
+        print("  FAIL  EnsLib.HL7.Message is absent — this is IRIS, not IRIS for Health")
+        print("        ENVIRONMENT problem. Several examples legitimately need the HL7 library;")
+        print("        use an irishealth image rather than recording them as failures.")
+        return False
+    print("  ok    HL7 library present")
+
+    print("\nPreflight: environment is usable\n")
+    return True
 
 
 def parse_failures(result: dict, known: set[str]) -> dict[str, str]:
@@ -349,6 +414,8 @@ def update_baseline() -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--compile", action="store_true", help="also run tier 2 against a live IRIS")
+    ap.add_argument("--preflight", action="store_true",
+                    help="only check that the IRIS target is usable, then exit")
     ap.add_argument("--update-baseline", action="store_true", help="re-record the expected-clean list")
     args = ap.parse_args()
 
@@ -356,9 +423,14 @@ def main() -> int:
         update_baseline()
         return 0
 
+    if args.preflight:
+        return 0 if preflight() else 1
+
     ok = tier1()
     if args.compile:
-        ok = tier2() and ok
+        # A failed preflight means the environment is wrong, not the bank. Say which,
+        # and do not stage 34 classes into an instance that cannot compile them.
+        ok = (preflight() and tier2()) and ok
     return 0 if ok else 1
 
 
