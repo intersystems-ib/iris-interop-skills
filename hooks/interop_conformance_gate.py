@@ -55,6 +55,19 @@ CLASS_WRITE_BYPASS = [
      "writing ^oddDEF/^oddCOM edits the class dictionary directly"),
 ]
 
+# ^oddDEF / ^oddCOM at all — read included. This started as a write-only rule, on the
+# reasoning that $order over the dictionary global was legitimate introspection. It is not.
+# ^oddDEF is the undocumented internal representation; reading it is the guessing that
+# `introspect-dont-guess` exists to prevent, and it is version-fragile in a way the
+# supported APIs are not.
+#
+# Nothing is lost by forbidding it. Verified on IRIS 2026.1: 58 persistent, SQL-queryable
+# %Dictionary.* classes and 129 predefined queries. The two real corpus uses map directly —
+# `$Order(^oddDEF(name))` is `SELECT Name FROM %Dictionary.ClassDefinition`, and walking
+# `^oddDEF(cls,"p",param)` is %Dictionary.CompiledProperty / ParameterDefinition, or the
+# Summary query.
+DICT_GLOBAL = re.compile(r"(?i)\^odd(DEF|COM)")
+
 # Tools whose `namespace` is documented as OPTIONAL but is effectively REQUIRED: they resolve
 # Ens.Director / Ens_Config.* in whatever namespace the connection defaults to, and if that one
 # is not interop-enabled the call dies with an internal error that never names the cause
@@ -155,6 +168,26 @@ def main():
                     "TextServices GetText* all pass."
                     % (m.group(0), why)
                 )
+
+        # (3c) reading the class dictionary global instead of the supported APIs (#110).
+        m = DICT_GLOBAL.search(code)
+        if m:
+            deny(
+                "`%s` is the undocumented internal class dictionary. Reading it is guessing at "
+                "IRIS internals, and its layout is not a contract — the supported APIs are.\n\n"
+                "Use, in order of preference:\n"
+                "  1. The MCP's typed tools — iris_symbols(pattern=...) to find classes, "
+                "docs_introspect(class=...) for methods/properties, iris_table_info(schema=...) "
+                "for projected tables. One call, no catalog guessing.\n"
+                "  2. %%Dictionary SQL — 58 queryable classes, e.g.\n"
+                "       SELECT Name FROM %%Dictionary.ClassDefinition WHERE Name %%STARTSWITH 'Pkg.'\n"
+                "       SELECT parent, Name, Type FROM %%Dictionary.CompiledProperty WHERE parent = ?\n"
+                "  3. The predefined queries — %%Dictionary.ClassDefinition:Summary / :SubclassOf / "
+                ":MemberSummary, %%Dictionary.PackageDefinition:SubPackage, and 125 more.\n\n"
+                "Load Skill(iris-interop-skills:introspect-dont-guess) — resolving real names "
+                "instead of guessing is exactly what it is for."
+                % m.group(0)
+            )
 
     for nm in names:
         base = nm[:-4] if nm.lower().endswith(".cls") else nm
