@@ -413,8 +413,10 @@ A migration with 30+ steps cannot be done from memory; one missed step ships a n
 
 | Default | Ensemble (≤2017) | IRIS (2018+) |
 |---|---|---|
-| SuperServer | 1972 | 52772 |
+| SuperServer | 1972 | 1972 |
 | Web (Apache) | 57772 | 52773 |
+
+The **SuperServer default did not change** — it is `1972` on both, and the authoritative value on any instance is the CPF `[Startup] DefaultPort` key (`##class(Config.Startup).Get()`, or read `iris.cpf` directly). Only the web port moved. Read the CPF rather than assuming: a container publishes the SuperServer on a *host* port (`0.0.0.0:43972->1972/tcp`, say), and that host-side number is not the instance's default.
 
 Watch for hardcoded port references in client code and firewall rules during migration.
 

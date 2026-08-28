@@ -14,14 +14,19 @@
      skips DisplayPermissions via btnAccept instead of btnLogin) is not included
      here - it's mostly CSP/HTML.
 
-     ALL VALUES ARE PLACEHOLDERS. Replace LDAPServer1/2, AdminDN, AdminPassword,
-     BaseDN before deploying. The pattern (Init -> SimpleBinds(admin) -> SearchExts
-     -> SimpleBinds(user)) is unchanged.
+     Deployed as Alt.OAuth2.Server.Validate. `Alt` is the reserved package for system
+     classes that had to be patched (skills/interop, "Reserved package names"); re-test
+     it on every IRIS upgrade, because the patch may have to be reapplied.
+
+     ALL VALUES ARE PLACEHOLDERS. Replace LDAPServer1/2, BaseDN and the Credentials
+     entry name before deploying. The LDAP read user's DN and password live in
+     Ens.Config.Credentials, never in this class source. The pattern
+     (Init -> SimpleBinds(admin) -> SearchExts -> SimpleBinds(user)) is unchanged.
 -->
 <Export generator="Cache" version="25" zv="Cache for UNIX 2018.1.2 (Build 309_5_19198U)" ts="2019-11-22 15:35:41">
-<Class name="OAuth2.Server.Validate">
+<Class name="Alt.OAuth2.Server.Validate">
 <Description><![CDATA[
-PYD20191122: A Copy of %OAuth2.Server.Validate to Customize the ValidateUser
+<initials><date>: A Copy of %OAuth2.Server.Validate to Customize the ValidateUser
 Entry point and call an LDAP / Active Directory server.
 The %OAuth2.Server.Validate class is the default ValidateUserClass which is included
 with the server. The default class will use the user database of the Cache instance
@@ -31,14 +36,15 @@ The ValidateUserClass is specified in the Authorization Server Configuration.]]>
 <IncludeCode>%syLDAP,%syLDAPFunc,%sySite</IncludeCode>
 <Super>%RegisteredObject</Super>
 
-<Parameter name="AdminDN">
-<Description>LDAP User to Scan/Read the Directory</Description>
-<Default>cn=svc-ldap-reader,ou=service-accounts,dc=example,dc=com</Default>
-</Parameter>
-
-<Parameter name="AdminPassword">
-<Description>Credentials for the LDAP Read user — replace via System Default Settings</Description>
-<Default>REPLACE_ME</Default>
+<Parameter name="Credentials">
+<Description><![CDATA[Name of the Ens.Config.Credentials entry that holds the LDAP read user:
+Username = the bind DN (e.g. cn=svc-ldap-reader,ou=service-accounts,dc=example,dc=com),
+Password = its password. The secret stays out of class source and is rotated from the
+portal (Interoperability > Configure > Credentials) with no recompile and no re-export.
+A class Parameter CANNOT be overridden by System Default Settings - SDS applies to
+production host settings only - so the only supported override of the name below is a
+subclass. Requires an interoperability-enabled namespace.]]></Description>
+<Default>LDAP_READER</Default>
 </Parameter>
 
 <Parameter name="LDAPServer1">
@@ -67,7 +73,7 @@ The ValidateUserClass is specified in the Authorization Server Configuration.]]>
 
 <Method name="ValidateUser">
 <Description><![CDATA[
-PYD20191122: Customised ValidateUser - calls out to an LDAP Server.
+<initials><date>: Customised ValidateUser - calls out to an LDAP Server.
 All the LDAP Code has been copied from [SAMPLES]LDAP.MAC; look there for full comments.
 Return 1 if username/password is valid, 0 otherwise.
 If password="", the user is already logged into an existing session and the password
@@ -85,8 +91,11 @@ does not need to be validated.]]></Description>
 	#DIM tFilter,tAttributes,tTimeout,tSizeLimit
 	#DIM SearchResult, tNumEntries, tCurrentEntry
 	#DIM tUserDN
+	#DIM tCredentials as Ens.Config.Credentials
+	#DIM tCredSC as %Status=$$$OK
 	try {
 		set tValidUser=0
+		set sc=$$$OK
 
 		///1- Bind against LDAP Server 1
 		set LD=##class(%SYS.LDAP).Init(..#LDAPServer1)
@@ -109,10 +118,16 @@ does not need to be validated.]]></Description>
  			}
 		}
 
-		///3- Bind as Admin to get the UserDN for this username
-	 	set tLDAPErr=##Class(%SYS.LDAP).SimpleBinds(LD,..#AdminDN,..#AdminPassword)
+		///3- Bind as the LDAP read user to get the UserDN for this username.
+		///   Its DN and password come from Ens.Config.Credentials, not from class source.
+	 	set tCredentials=##class(Ens.Config.Credentials).%OpenId(..#Credentials,,.tCredSC)
+		if '$isobject(tCredentials) {
+			set tLDAPMsg="Ens.Config.Credentials '"_..#Credentials_"' not found - "_$system.Status.GetErrorText(tCredSC)
+			$$$ThrowStatus($$$ERROR($$$GeneralError,tLDAPMsg))
+		}
+		set tLDAPErr=##Class(%SYS.LDAP).SimpleBinds(LD,tCredentials.Username,tCredentials.Password)
 		if (tLDAPErr'=$$$LDAPSUCCESS) {
-			set tLDAPMsg="ldap_Binds(AdminDN) - "_##Class(%SYS.LDAP).Err2String(tLDAPErr)
+			set tLDAPMsg="ldap_Binds("_tCredentials.Username_") - "_##Class(%SYS.LDAP).Err2String(tLDAPErr)
 			$$$ThrowStatus($$$ERROR($$$GeneralError,tLDAPMsg))
 		}
 		///3.1- Search for the UserDN
@@ -157,12 +172,16 @@ does not need to be validated.]]></Description>
 	 		set tValidUser=1
  		}
  	}catch (errObj) {
-	 	set ^PYDOAuthLog($I(^PYDOAuthLog))=$zdt($h,3)_"|"_username_"|"_errObj.DisplayString()
+	 	set ^Demo.OAuth2Log($I(^Demo.OAuth2Log))=$zdt($h,3)_"|"_username_"|"_errObj.DisplayString()
 		set tSC=errObj.AsStatus()
 	}
 	///5- Cleanup
  	i $d(SearchResult) d ##Class(%SYS.LDAP).MsgFree(SearchResult)
  	i $d(LD) d ##Class(%SYS.LDAP).UnBinds(LD)
+	///6- Hand the diagnostic back to the OAuth2 server. ValidateClient below does the
+	///   same with its `Set sc=$$$OK`. Without this line sc is never assigned, so every
+	///   LDAP failure reaches the server as a bare 0 with no message for the operator.
+	set sc=tSC
 	quit tValidUser
 ]]></Implementation>
 </Method>

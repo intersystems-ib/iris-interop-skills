@@ -66,8 +66,10 @@ Public InterSystems-Iberia helper package for converting HL7 v2 into XML form
 and back. Useful when you need to carry HL7 v2 inside a SOAP MessageBody or
 store it as XML in a non-IRIS system.
 
-Originally developed inside `itb/Ensemble-HL7-XML-master/`; the public repo is
-the maintained version. Install via `zpm "install healthcare-hl7-xml"`.
+Originally an internal helper package carried from project to project before it
+was published; the public repo is now the maintained version — use it, not a
+copy pasted out of an old project tree. Install via
+`zpm "install healthcare-hl7-xml"`.
 
 Test fixtures shipped with the package (cited as templates in the deliverable):
 
@@ -84,8 +86,9 @@ Test fixtures shipped with the package (cited as templates in the deliverable):
 ### `https://github.com/intersystems-ib/workshop-iris-dicom-interop`
 
 **Canonical for:** DICOM-interop reference patterns (mentioned in Appendix B);
-cited by `iris-interop-dicom` skill for all five wiring patterns (C-STORE
-inbound, MWL server, Q/R, STOW-RS, DICOM↔HL7/FHIR gateway).
+cited by the `iris-interop-skills:dicom` skill (`skills/dicom/SKILL.md`) for all
+five wiring patterns (C-STORE inbound, MWL server, Q/R, STOW-RS,
+DICOM↔HL7/FHIR gateway).
 
 Workshop / reference implementation for DICOM interop on IRIS for Health.
 Not tied to a specific §-rule in the deliverable; useful as starting point

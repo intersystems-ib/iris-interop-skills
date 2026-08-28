@@ -152,7 +152,11 @@ Tune by adding routing-rule guards in `Ens.Alert` rather than disabling `Send Al
 
 ## ProductionMonitorService — what it actually does
 
-`Ens.ProductionMonitorService` polls all hosts in the production every interval (default 30 s) and updates the production monitor screen. It does not by itself send any alert — that's the role of `Ens.Alert`. Without the monitor service, the portal monitor screen stops updating; alerts still fire.
+Keep the item and the class apart, as in the wiring above: the production **item** is conventionally named `Ens.ProductionMonitorService`, and the `ClassName` it runs is **`Ens.MonitorService`**. It is that class which *"checks all hosts for inactivity"* — polling every interval (default 30 s) and feeding the production monitor screen.
+
+The class that happens to share the item's name, `Ens.ProductionMonitorService`, is a **different** real class doing a different job: it watches production *status* and calls `UpdateProduction` once it notices the production is not up-to-date. Wiring that class where `Ens.MonitorService` belongs fails silently — both names resolve.
+
+Neither class sends an alert by itself — that's the role of `Ens.Alert`. Without the monitor service, the portal monitor screen stops updating; alerts still fire.
 
 Run the monitor service even on small productions; the cost is one process, the benefit is the portal screen actually shows current state.
 

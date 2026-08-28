@@ -7,71 +7,104 @@
        - Ens.Alert is a EnsLib.MsgRouter.RoutingEngine (dedup via routing rules).
        - EnsLib.EMail.AlertOperation sends Ens.AlertRequest messages by email.
        - Filter routing rule uses examples/ch07_alerting/alert-dedup-functionset.cls
-         to dedupe alerts (PYD.FilterAlerts.AlreadyReportedErr / AlreadyReportedPerSession).
+         to dedupe alerts (Demo.FilterAlerts.FunctionSet: AlreadyReportedErr /
+         AlreadyReportedPerSession).
        - CRITICAL: Ens.Alert AND the BO that sends the alert must have "Send Alert on Error"
-         DISABLED to avoid infinite loops (every other Business Host has it enabled).
+         DISABLED to avoid infinite loops. EVERY OTHER Business Host has it ENABLED, and that
+         is what FEEDS the circuit: BO.DemoOutbound below is an ordinary host carrying
+         AlertOnError=1, so this file shows a fed circuit and not just a wired one (a circuit
+         present structurally but never fed is conformance finding CR-3).
+
+     Form: a real class export. <Class> + XData ProductionDefinition is the shape a production
+     actually exports as, so this file loads as-is:
+       do $system.OBJ.Load("/path/to/alert-circuit-production.xml","ck")
+     The companion business rule is the second <Class> in the same export.
+     The production description belongs in <Description> inside the production definition;
+     a <Setting Target="Adapter" …> under <Production> is not a place a description can live.
+
+     Rule context: it is the ENGINE class, EnsLib.MsgRouter.RoutingEngine. There is no
+     EnsLib.MsgRouter.RoutingEngine.Context class (checked against %Dictionary.CompiledClass on
+     IRIS 2026.1), and a rule naming it will not compile or open in the Rule Editor. With the
+     engine as context the message body is reached through the engine's Document property,
+     hence Document.SourceConfigName / Document.AlertText for the Ens.AlertRequest fields.
 -->
 <Export generator="IRIS" version="26">
-  <Production name="Example.Alerting.Production">
-    <ActorPoolSize>2</ActorPoolSize>
-    <Setting Target="Adapter" Name="Description">Canonical alert circuit (per §7.1).</Setting>
 
-    <!-- ProductionMonitorService — heartbeat for the production health -->
-    <Item Name="Ens.ProductionMonitorService" Category="Alerting"
-          ClassName="Ens.MonitorService"
-          PoolSize="1" Enabled="true" Comment="§1.6 baseline">
-    </Item>
+<Class name="Example.Alerting.Production">
+<Super>Ens.Production</Super>
 
-    <!-- Ens.Alert routing engine — Send Alert on Error MUST be DISABLED here -->
-    <Item Name="Ens.Alert" Category="Alerting"
-          ClassName="EnsLib.MsgRouter.RoutingEngine"
-          PoolSize="1" Enabled="true"
-          Comment="Routes Ens.AlertRequest to the email operation; dedup rules attached.">
-      <Setting Target="Host" Name="AlertOnError">false</Setting>
-      <Setting Target="Host" Name="BusinessRuleName">Example.Alerting.RUL.AlertRouter</Setting>
-    </Item>
+<XData name="ProductionDefinition">
+<Data><![CDATA[
+<Production Name="Example.Alerting.Production" TestingEnabled="false" LogGeneralTraceEvents="false">
+  <Description>Canonical alert circuit (per §7.1).</Description>
+  <ActorPoolSize>2</ActorPoolSize>
 
-    <!-- AlertOperation — Send Alert on Error MUST be DISABLED here -->
-    <Item Name="EnsLib.EMail.AlertOperation" Category="Alerting"
-          ClassName="EnsLib.EMail.AlertOperation"
-          PoolSize="1" Enabled="true"
-          Comment="Sends Ens.AlertRequest messages to the distribution list.">
-      <Setting Target="Host" Name="AlertOnError">false</Setting>
-      <Setting Target="Adapter" Name="SMTPServer">smtp.example.org</Setting>
-      <Setting Target="Adapter" Name="Recipient">interop-alerts@example.org</Setting>
-    </Item>
+  <!-- ProductionMonitorService — heartbeat for the production health -->
+  <Item Name="Ens.ProductionMonitorService" Category="Alerting" ClassName="Ens.MonitorService" PoolSize="1" Enabled="true" Foreground="false" Comment="§1.6 baseline" LogTraceEvents="false" Schedule="">
+  </Item>
 
-  </Production>
+  <!-- Ens.Alert routing engine — Send Alert on Error MUST be DISABLED here -->
+  <Item Name="Ens.Alert" Category="Alerting" ClassName="EnsLib.MsgRouter.RoutingEngine" PoolSize="1" Enabled="true" Foreground="false" Comment="Routes Ens.AlertRequest to the email operation; dedup rules attached." LogTraceEvents="false" Schedule="">
+    <Setting Target="Host" Name="AlertOnError">0</Setting>
+    <Setting Target="Host" Name="BusinessRuleName">Example.Alerting.RUL.AlertRouter</Setting>
+  </Item>
+
+  <!-- AlertOperation — Send Alert on Error MUST be DISABLED here -->
+  <Item Name="EnsLib.EMail.AlertOperation" Category="Alerting" ClassName="EnsLib.EMail.AlertOperation" PoolSize="1" Enabled="true" Foreground="false" Comment="Sends Ens.AlertRequest messages to the distribution list." LogTraceEvents="false" Schedule="">
+    <Setting Target="Host" Name="AlertOnError">0</Setting>
+    <Setting Target="Adapter" Name="SMTPServer">smtp.example.org</Setting>
+    <Setting Target="Adapter" Name="Recipient">interop-alerts@example.org</Setting>
+  </Item>
+
+  <!-- An ORDINARY business host, and the reason the circuit above ever fires. AlertOnError=1
+       is what turns a failure here into the Ens.AlertRequest that Ens.Alert routes. Every
+       host in a real production except Ens.Alert and the alert sink looks like this one. -->
+  <Item Name="BO.DemoOutbound" Category="Demo" ClassName="EnsLib.HL7.Operation.TCPOperation" PoolSize="1" Enabled="true" Foreground="false" Comment="Ordinary BO: feeds the alert circuit." LogTraceEvents="false" Schedule="">
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
+    <Setting Target="Host" Name="QueueWaitAlert">30</Setting>
+    <Setting Target="Host" Name="FailureTimeout">30</Setting>
+    <Setting Target="Adapter" Name="IPAddress">hl7.example.org</Setting>
+    <Setting Target="Adapter" Name="Port">5000</Setting>
+  </Item>
+
+</Production>
+]]></Data>
+</XData>
+</Class>
+
+<Class name="Example.Alerting.RUL.AlertRouter">
+<Super>Ens.Rule.Definition</Super>
+
+<Parameter name="RuleAssistClass">
+<Default>EnsLib.MsgRouter.RuleAssist</Default>
+</Parameter>
+
+<XData name="RuleDefinition">
+<XMLNamespace>http://www.intersystems.com/rule</XMLNamespace>
+<Data><![CDATA[
+<ruleDefinition alias="" context="EnsLib.MsgRouter.RoutingEngine" production="Example.Alerting.Production">
+  <ruleSet name="Default" effectiveBegin="" effectiveEnd="">
+    <rule name="dedupBySession" disabled="false">
+      <when condition='##class(Demo.FilterAlerts.FunctionSet).AlreadyReportedPerSession()=1'>
+        <!-- skip: this session has already produced an alert -->
+        <return>0</return>
+      </when>
+    </rule>
+    <rule name="dedupByErrText" disabled="false">
+      <when condition='##class(Demo.FilterAlerts.FunctionSet).AlreadyReportedErr(Document.SourceConfigName,Document.AlertText,60)=1'>
+        <!-- skip: same error text already reported in this time bucket -->
+        <return>0</return>
+      </when>
+    </rule>
+    <rule name="forward" disabled="false">
+      <when condition="1">
+        <send transform="" target="EnsLib.EMail.AlertOperation"/>
+      </when>
+    </rule>
+  </ruleSet>
+</ruleDefinition>
+]]></Data>
+</XData>
+</Class>
+
 </Export>
-
-<!-- Companion business rule (paste into a Business Rule class with the dedup function-set):
-
-  Class Example.Alerting.RUL.AlertRouter Extends Ens.Rule.Definition
-  {
-    Parameter RuleAssistClass = "EnsLib.MsgRouter.RuleAssist";
-
-    XData RuleDefinition [ XMLNamespace = "http://www.intersystems.com/rule" ]
-    {
-    <ruleDefinition alias="" context="EnsLib.MsgRouter.RoutingEngine.Context" production="">
-      <ruleSet name="Default" effectiveBegin="" effectiveEnd="">
-        <rule name="dedupBySession" disabled="false">
-          <when condition='##class(PYD.FilterAlerts.FunctionSet).AlreadyReportedPerSession()=1'>
-            <return>0</return>  // skip
-          </when>
-        </rule>
-        <rule name="dedupByErrText" disabled="false">
-          <when condition='##class(PYD.FilterAlerts.FunctionSet).AlreadyReportedErr(SourceConfigName, AlertText, 60)=1'>
-            <return>0</return>
-          </when>
-        </rule>
-        <rule name="forward" disabled="false">
-          <when condition="1">
-            <send transform="" target="EnsLib.EMail.AlertOperation"/>
-          </when>
-        </rule>
-      </ruleSet>
-    </ruleDefinition>
-    }
-  }
-
--->

@@ -11,8 +11,15 @@
 Class Example.Vendor.WSC.SAPClient Extends %SOAP.WebClient
 {
 
-/// Suppress xsi:type attributes on the wire. Multiple vendor
-/// servers choke on the unexpected attribute even when the type matches.
+/// Minimum viable %SOAP.WebClient parameters - the SOAP Wizard generates both from
+/// the WSDL. Without SERVICENAME the class does not compile:
+///   ERROR #6240: SERVICENAME must be specified by overriding the SERVICENAME parameter.
+Parameter NAMESPACE = "http://vendor.example/sap";
+
+Parameter SERVICENAME = "SAPService";
+
+/// The point of this example. Suppress xsi:type attributes on the wire; multiple
+/// vendor servers choke on the unexpected attribute even when the type matches.
 Parameter OUTPUTTYPEATTRIBUTE = 0;
 
 }

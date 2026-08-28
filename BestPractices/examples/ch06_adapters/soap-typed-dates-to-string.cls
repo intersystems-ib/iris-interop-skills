@@ -11,11 +11,11 @@ Class Example.Vendor.WSC.SAPDateRequest Extends (%SerialObject, %XML.Adaptor)
 {
 
 /// Was: Property AppointmentDate As %Date(XMLTYPE = "date");
-///PYD20200310: downgraded to %String; SAP cannot parse the typed xs:date.
+///<initials>20200310: downgraded to %String; SAP cannot parse the typed xs:date.
 Property AppointmentDate As %String(MAXLEN = 10);
 
 /// Was: Property AppointmentTime As %Time(XMLTYPE = "time");
-///PYD20200310: downgraded to %String; SAP cannot parse the typed xs:time.
+///<initials>20200310: downgraded to %String; SAP cannot parse the typed xs:time.
 Property AppointmentTime As %String(MAXLEN = 8);
 
 }
