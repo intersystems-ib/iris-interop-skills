@@ -43,6 +43,22 @@ behaviour and so cannot regress to zero; check (2) might.
 """
 import sys, json, os, re
 
+# Every exit path in this hook is silent by design — an allowing hook writes no
+# attachment and produces no transcript event. That makes a hook that never fires
+# indistinguishable from a hook that fires and allows, which is exactly the position
+# the 1.8.1 eval left us in: reason text absent from 11/11 eligible runs, no way to
+# tell whether the gate ran at all. Set IRIS_INTEROP_HOOK_DEBUG to a writable path
+# and every invocation appends one JSON line saying where it exited.
+def _trace(where, **kw):
+    path = os.environ.get("IRIS_INTEROP_HOOK_DEBUG")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"hook": "conformance_stop_gate", "exit": where, **kw}) + "\n")
+    except Exception:
+        pass  # diagnostics must never break the hook
+
 # Generated in IRIS by design, exported afterwards — never hand-authored, so never orphans.
 GENERATED = re.compile(r"(?:^|\.)(?:WSC|SOAPENC)\.|\.Record$|\.Record\.cls$", re.I)
 
@@ -105,6 +121,37 @@ def find_orphans(root, classes):
     return [c for c in sorted(classes) if c not in on_disk]
 
 
+def transcript_set(path):
+    """The main transcript plus every subagent transcript belonging to this session.
+
+    THIS IS THE WHOLE BUG THE 1.8.1 EVAL FOUND. A Stop hook is handed the MAIN session's
+    transcript, and a subagent's tool calls are not in it — every entry in a main transcript
+    carries isSidechain=False, and a session that spawned five agents shows none of their
+    work. Measured on a real session: 33 classes were put into IRIS by subagents and the
+    gate saw zero of them.
+
+    That made the gate blind on exactly the path this plugin RECOMMENDS. The SessionStart
+    hook says "or hand the whole component to the interop-builder agent", and interop-builder
+    was the most-spawned agent in the corpus (79 spawns). So the gate fired only in the
+    minority of runs where the main session happened to author something itself — 2 of 11
+    sonnet runs, 0 of 11 haiku.
+
+    Subagent transcripts live at a deterministic path: strip ".jsonl" from the main
+    transcript and look under "<that>/subagents/". os.walk rather than glob("**") because
+    glob skips dot-directories.
+    """
+    files = [path]
+    base = path[:-6] if path.lower().endswith(".jsonl") else path
+    sub = os.path.join(base, "subagents")
+    if os.path.isdir(sub):
+        for dirpath, dirnames, filenames in os.walk(sub):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for fn in sorted(filenames):
+                if fn.lower().endswith(".jsonl"):
+                    files.append(os.path.join(dirpath, fn))
+    return files
+
+
 def scan_transcript(path):
     """Return (classes put into IRIS this session, whether a conformance pass ran).
 
@@ -114,57 +161,73 @@ def scan_transcript(path):
     review is the trap that made this look fine for 206 runs.
     """
     put, reviewed = set(), False
-    try:
-        fh = open(path, encoding="utf-8", errors="replace")
-    except OSError:
-        return put, True  # cannot read the transcript -> never block on a hook's blind spot
+    files = transcript_set(path)
+    opened = 0
 
-    with fh:
-        for line in fh:
-            try:
-                rec = json.loads(line)
-            except Exception:
-                continue
-            msg = rec.get("message") or {}
-            content = msg.get("content")
-            if not isinstance(content, list):
-                continue
-            for block in content:
-                if not isinstance(block, dict) or block.get("type") != "tool_use":
+    for fpath in files:
+        try:
+            fh = open(fpath, encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        opened += 1
+        with fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except Exception:
                     continue
-                tool = str(block.get("name") or "")
-                inp = block.get("input") or {}
-                if not isinstance(inp, dict):
+                msg = rec.get("message") or {}
+                content = msg.get("content")
+                if not isinstance(content, list):
                     continue
-
-                if REVIEWER_AGENT in str(inp.get("subagent_type") or ""):
-                    reviewed = True
-                if REVIEW_SKILL in str(inp.get("skill") or ""):
-                    reviewed = True
-
-                if "iris_doc" not in tool:
-                    continue
-                mode = inp.get("mode")
-
-                if mode == "put":
-                    name = str(inp.get("name") or "").strip()
-                    content_str = inp.get("content")
-                    if not name or not isinstance(content_str, str) or not content_str.strip():
+                for block in content:
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
-                    if GENERATED.search(name):
+                    tool = str(block.get("name") or "")
+                    inp = block.get("input") or {}
+                    if not isinstance(inp, dict):
                         continue
-                    put.add(strip_cls(name))
 
-                elif mode == "delete":
-                    # Staging scratch classes and deleting them afterwards is a legitimate
-                    # workflow — it is how the example bank is compile-checked. Without
-                    # this, cleaning up correctly looks identical to abandoning work in the
-                    # namespace, and the gate fires on the careful case.
-                    for n in ([inp.get("name")] + list(inp.get("names") or [])):
-                        if isinstance(n, str) and n.strip():
-                            put.discard(strip_cls(n.strip()))
+                    if REVIEWER_AGENT in str(inp.get("subagent_type") or ""):
+                        reviewed = True
+                    if REVIEW_SKILL in str(inp.get("skill") or ""):
+                        reviewed = True
 
+                    if "iris_doc" not in tool:
+                        continue
+                    mode = inp.get("mode")
+
+                    if mode == "put":
+                        name = str(inp.get("name") or "").strip()
+                        content_str = inp.get("content")
+                        if not name or not isinstance(content_str, str) or not content_str.strip():
+                            continue
+                        if GENERATED.search(name):
+                            continue
+                        put.add(strip_cls(name))
+
+                    elif mode == "delete":
+                        # Staging scratch classes and deleting them afterwards is a legitimate
+                        # workflow — it is how the example bank is compile-checked. Without
+                        # this, cleaning up correctly looks identical to abandoning work in the
+                        # namespace, and the gate fires on the careful case.
+                        for n in ([inp.get("name")] + list(inp.get("names") or [])):
+                            if isinstance(n, str) and n.strip():
+                                put.discard(strip_cls(n.strip()))
+
+    if not opened:
+        _trace("transcript_unreadable", transcript=path, candidates=len(files))
+        return put, True  # cannot read anything -> never block on a hook's blind spot
+    _trace("scanned", transcripts=opened, subagents=len(files) - 1, puts=len(put), reviewed=reviewed)
     return put, reviewed
+
+
+def _count_lines(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return sum(1 for _ in fh)
+    except OSError:
+        return -1
 
 
 def strip_cls(name):
@@ -177,26 +240,34 @@ def block(reason):
 
 
 def main():
+    _trace("invoked")
     try:
         data = json.load(sys.stdin)
     except Exception:
+        _trace("bad_stdin")
         return  # never block on a hook bug
 
     if data.get("stop_hook_active"):
+        _trace("stop_hook_active")
         return  # already interrupted once this session; say it once, not in a loop
 
     transcript = data.get("transcript_path")
     if not transcript:
+        _trace("no_transcript_path", keys=sorted(data.keys()))
         return
 
     put, reviewed = scan_transcript(transcript)
     if not put:
+        _trace("no_puts", transcript=transcript,
+               exists=os.path.exists(transcript),
+               lines=_count_lines(transcript), reviewed=reviewed)
         return  # this session authored no interop classes; nothing to gate
 
     root = project_root(data)
     orphans = find_orphans(root, put)
 
     if orphans:
+        _trace("blocking_orphans", put=len(put), orphans=len(orphans))
         listed = "\n".join(
             "  - {}   ->  write it to src/{}.cls".format(c, c.replace(".", "/"))
             for c in orphans[:15]
@@ -214,6 +285,7 @@ def main():
         )
 
     if not reviewed:
+        _trace("blocking_no_review", put=len(put))
         block(
             "The conformance pass has not run. This session authored {} interop class(es) and "
             "every one is on disk, but nothing has checked them against the twelve criteria.\n\n"
