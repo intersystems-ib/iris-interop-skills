@@ -43,6 +43,22 @@ behaviour and so cannot regress to zero; check (2) might.
 """
 import sys, json, os, re
 
+# Every exit path in this hook is silent by design — an allowing hook writes no
+# attachment and produces no transcript event. That makes a hook that never fires
+# indistinguishable from a hook that fires and allows, which is exactly the position
+# the 1.8.1 eval left us in: reason text absent from 11/11 eligible runs, no way to
+# tell whether the gate ran at all. Set IRIS_INTEROP_HOOK_DEBUG to a writable path
+# and every invocation appends one JSON line saying where it exited.
+def _trace(where, **kw):
+    path = os.environ.get("IRIS_INTEROP_HOOK_DEBUG")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"hook": "conformance_stop_gate", "exit": where, **kw}) + "\n")
+    except Exception:
+        pass  # diagnostics must never break the hook
+
 # Generated in IRIS by design, exported afterwards — never hand-authored, so never orphans.
 GENERATED = re.compile(r"(?:^|\.)(?:WSC|SOAPENC)\.|\.Record$|\.Record\.cls$", re.I)
 
@@ -117,7 +133,8 @@ def scan_transcript(path):
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except OSError:
-        return put, True  # cannot read the transcript -> never block on a hook's blind spot
+        _trace("transcript_unreadable", transcript=path)
+        return put, True  # cannot read -> never block on a hook's blind spot
 
     with fh:
         for line in fh:
@@ -167,6 +184,14 @@ def scan_transcript(path):
     return put, reviewed
 
 
+def _count_lines(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return sum(1 for _ in fh)
+    except OSError:
+        return -1
+
+
 def strip_cls(name):
     return re.sub(r"\.cls$", "", name, flags=re.I)
 
@@ -177,26 +202,34 @@ def block(reason):
 
 
 def main():
+    _trace("invoked")
     try:
         data = json.load(sys.stdin)
     except Exception:
+        _trace("bad_stdin")
         return  # never block on a hook bug
 
     if data.get("stop_hook_active"):
+        _trace("stop_hook_active")
         return  # already interrupted once this session; say it once, not in a loop
 
     transcript = data.get("transcript_path")
     if not transcript:
+        _trace("no_transcript_path", keys=sorted(data.keys()))
         return
 
     put, reviewed = scan_transcript(transcript)
     if not put:
+        _trace("no_puts", transcript=transcript,
+               exists=os.path.exists(transcript),
+               lines=_count_lines(transcript), reviewed=reviewed)
         return  # this session authored no interop classes; nothing to gate
 
     root = project_root(data)
     orphans = find_orphans(root, put)
 
     if orphans:
+        _trace("blocking_orphans", put=len(put), orphans=len(orphans))
         listed = "\n".join(
             "  - {}   ->  write it to src/{}.cls".format(c, c.replace(".", "/"))
             for c in orphans[:15]
@@ -214,6 +247,7 @@ def main():
         )
 
     if not reviewed:
+        _trace("blocking_no_review", put=len(put))
         block(
             "The conformance pass has not run. This session authored {} interop class(es) and "
             "every one is on disk, but nothing has checked them against the twelve criteria.\n\n"
