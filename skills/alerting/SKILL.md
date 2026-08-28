@@ -96,8 +96,23 @@ ClassMethod AlreadyReportedPerSession() As %Boolean
 Wire it in the `Ens.Alert` routing rule as a guard:
 
 ```
-when MyApp.UTL.AlertFilterFunctions.AlreadyReportedErr(SourceConfigName, AlertText, 60) → skip
+when AlreadyReportedErr(Document.SourceConfigName, Document.AlertText, 60) → skip
 ```
+
+Both halves of that expression are load-bearing, and getting either wrong fails in a way the error
+does not name (#113):
+
+- **Call the FunctionSet method by BARE NAME — never qualify it with its package.** The rule
+  expression parser resolves methods across every `Ens.Rule.FunctionSet` subclass in the namespace,
+  which is what the FunctionSet pattern is for. A qualified call does not parse:
+  `<Ens>ErrInvalidToken` at the offset of the `.`, surfacing as `#5490` running the generator for
+  `evaluateRuleDefinition` and `#5030` compiling the rule class — none of which says "drop the
+  package".
+- **Reach message fields through `Document.`.** With `context="EnsLib.MsgRouter.RoutingEngine"` the
+  bare form `AlreadyReportedErr(SourceConfigName, AlertText, 60)` **compiles** and is still wrong:
+  the engine context has `Document` and does not have `SourceConfigName` or `AlertText` — those are
+  properties of the `Ens.AlertRequest` message. The rule then builds and silently guards nothing,
+  which is the worse of the two failures.
 
 Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch07_alerting/alert-dedup-functionset.cls`.
 

@@ -60,13 +60,45 @@ Add a helper to your project's `FunctionSet` subclass (see `transformations` for
 ```objectscript
 ClassMethod NormalizeKey(value As %String) As %String [ Final ]
 {
-    Quit $ZSTRIP($ZCONVERT(value, "L"), "*-CWE")
+    Set tAccents = $CHAR(225,233,237,243,250,241,224,232,236,242,249,252)  // áéíóúñàèìòùü
+    Set tPlain   = "aeiounaeiouu"
     // $ZCONVERT(..,"L"): lowercase
-    // $ZSTRIP "*-CWE": strip whitespace, control chars, "E"-equivalents (covers ASCII punct)
-    // For accent stripping use $ZCONVERT(value, "O", "UTF8")$ZCONVERT(..., "I", "Latin1")
-    // followed by $TRANSLATE for the residue. Keep the policy here, not at call sites.
+    // $ZSTRIP "*WC": strip whitespace and control characters
+    // $TRANSLATE: fold accents. Keep the policy here, not at call sites.
+    Quit $TRANSLATE($ZSTRIP($ZCONVERT(value, "L"), "*WC"), tAccents, tPlain)
 }
 ```
+
+| input | result |
+|---|---|
+| `Diabética` | `diabetica` |
+| `"  DIABÉTICA  "` | `diabetica` |
+| `Diabetica` | `diabetica` |
+
+**Two `$ZSTRIP` traps, both measured on IRIS 2026.1 (#114).** They are worth stating because the
+obvious-looking mask is the broken one:
+
+- **`-` is not a `$ZSTRIP` action character.** Any mask containing it — `"*-CWE"`, `"*-CW"`, `"*-E"`
+  — raises `<FUNCTION>`, so a DTL calling the helper fails on every message. (`*'ANU`, the
+  apostrophe-negation form, throws here too.)
+- **`E` does not mean "ASCII punctuation".** It strips *everything*: `$ZSTRIP(x,"*CWE")` and
+  `$ZSTRIP(x,"*E")` both return the empty string for every input. That failure is silent — the
+  helper returns, every lookup misses, and with the DTL below's `""` default every message throws
+  `InvalidDieta` instead. Prefer `"*WC"` and fold accents explicitly.
+
+Do not reach for the `$ZCONVERT(..., "O", "UTF8")` / `$ZCONVERT(..., "I", "Latin1")` round trip to
+strip accents. Measured leg by leg on 2026.1, it fails **twice, in two different ways**:
+
+| step | result |
+|---|---|
+| `$ZCONVERT("Diab"_$CHAR(233)_"tica", "O", "UTF8")` | `DiabÃ©tica` — len 10, codes 195,169. **No error.** |
+| `$ZCONVERT(<that>, "I", "Latin1")` | **`<ILLEGAL VALUE>`** |
+| the composite, as usually written | **`<ILLEGAL VALUE>`** |
+
+The throw is the easy half — you find out. The first leg is the dangerous one: on an
+already-internal string it silently re-reads the UTF-8 bytes as single characters, and if you ever
+use it alone the double-encoded value propagates straight into the lookup key. `$TRANSLATE` above is
+self-contained and testable.
 
 ### 3. Use from DTL
 
