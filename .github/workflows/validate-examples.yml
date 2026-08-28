@@ -1,13 +1,12 @@
-# validate-examples: structural gate over the BestPractices example bank.
+# validate-examples: the gate over the BestPractices example bank.
 #
-# Runs tier 1 only. Tier 2 (compile every example against a live IRIS) needs an
-# IRIS instance with Interoperability + HL7, which this runner does not have —
-# run it locally before a release:
+#   structural  tier 1, no IRIS, ~1s — every push
+#   compile     tier 2, real IRIS in a container — every push
 #
-#   python3 scripts/validate_examples.py --compile
-#
-# See scripts/validate_examples.py for what each check does and, more importantly,
-# why each one is written in its narrow form.
+# Tier 2 is the check that matters. Tier 1 catches structure; only a compiler would have
+# caught the 10-of-18 failures found in 1.7.0, or the two #5478 signature traps that the
+# repair pass itself introduced. See scripts/validate_examples.py for what each check does
+# and why each is written in its narrow form.
 
 name: validate-examples
 
@@ -16,11 +15,14 @@ on:
     paths:
       - 'BestPractices/**'
       - 'scripts/validate_examples.py'
+      - 'scripts/examples_baseline.json'
       - '.github/workflows/validate-examples.yml'
   pull_request:
     paths:
       - 'BestPractices/**'
       - 'scripts/validate_examples.py'
+      - 'scripts/examples_baseline.json'
+      - '.github/workflows/validate-examples.yml'
   workflow_dispatch:
 
 jobs:
@@ -28,10 +30,68 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tier 1 — structural checks
+        run: python3 scripts/validate_examples.py
 
+  compile:
+    runs-on: ubuntu-latest
+    needs: structural
+    # irishealth, NOT iris: several examples use EnsLib.HL7.*, which the plain IRIS
+    # community image does not carry. On the wrong image those classes fail for a reason
+    # that has nothing to do with the bank — preflight refuses to run rather than record
+    # that as a result.
+    env:
+      IRIS_HOST: localhost
+      IRIS_PORT: '52773'
+      IRIS_NAMESPACE: USER
+      IRIS_USER: _SYSTEM
+      IRIS_PASSWORD: SYS
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Tier 1 — structural checks
-        run: python3 scripts/validate_examples.py
+      - name: Start IRIS for Health (community)
+        run: |
+          docker run -d --name iris \
+            -p 52773:52773 -p 1972:1972 \
+            intersystemsdc/irishealth-community:latest
+          echo "container started"
+
+      - name: Wait for the Atelier API
+        run: |
+          # IRIS takes 1-2 minutes to come up. Poll rather than sleep a fixed amount:
+          # a fixed sleep is either flaky or slow, and both get the job disabled.
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              -u "$IRIS_USER:$IRIS_PASSWORD" \
+              "http://localhost:$IRIS_PORT/api/atelier/v1/$IRIS_NAMESPACE" || true)
+            if [ "$code" = "200" ]; then
+              echo "ready after ${i}0s (HTTP $code)"
+              exit 0
+            fi
+            echo "  attempt $i: HTTP ${code:-none}"
+            sleep 10
+          done
+          echo "IRIS did not become ready in 10 minutes"
+          exit 1
+
+      - name: Preflight — is this target usable at all?
+        run: python3 scripts/validate_examples.py --preflight
+
+      - name: Tier 2 — compile every example
+        run: python3 scripts/validate_examples.py --compile
+
+      - name: IRIS logs (on failure)
+        if: failure()
+        run: |
+          echo "=== docker ps ==="
+          docker ps -a
+          echo "=== container logs (tail) ==="
+          docker logs --tail 200 iris || true
+          echo "=== messages.log ==="
+          docker exec iris sh -c 'tail -100 /usr/irissys/mgr/messages.log' || true
