@@ -1,0 +1,35 @@
+# test-hooks: regression tests for the two BLOCKING hooks.
+#
+# Both defects fixed in #122 and #124 shipped for many releases. One was found by reading a
+# regex, the other by a corpus sweep. Neither was caught by a test, because the hooks had
+# none — and a hook that stops firing fails OPEN: no deny, no warning, no log line, and the
+# next run looks clean because nothing was ever checked.
+#
+# These run in ~2s with no IRIS and no network. See scripts/test_hooks.py for what each
+# case was before its fix.
+
+name: test-hooks
+
+on:
+  push:
+    paths:
+      - 'hooks/**'
+      - 'scripts/test_hooks.py'
+      - '.github/workflows/test-hooks.yml'
+  pull_request:
+    paths:
+      - 'hooks/**'
+      - 'scripts/test_hooks.py'
+      - '.github/workflows/test-hooks.yml'
+  workflow_dispatch:
+
+jobs:
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: hook regression tests
+        run: python3 scripts/test_hooks.py

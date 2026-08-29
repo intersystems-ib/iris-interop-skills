@@ -32,10 +32,10 @@ def read_source(ti):
 # and NONE of "none_of" match. Conservative to avoid false positives; the agent confirms.
 CHECKS = [
     ("CR-1", "pass-through BP instead of a MessageRouter rule",
-     [r"Extends\s+Ens\.BusinessProcess\b", r"\.Transform\(", r"SendRequestAsync\("],
+     [r"Extends\s*[\s(][^{]*Ens\.BusinessProcess\b", r"\.Transform\(", r"SendRequestAsync\("],
      [r"Ens\.BusinessProcessBPL"]),
     ("CR-2", "hand-rolled file parser instead of a RecordMap",
-     [r"Extends\s+Ens\.BusinessService\b", r"EnsLib\.File\.InboundAdapter", r"(\$Piece\(|\.ReadLine\()"],
+     [r"Extends\s*[\s(][^{]*Ens\.BusinessService\b", r"EnsLib\.File\.InboundAdapter", r"(\$Piece\(|\.ReadLine\()"],
      []),
     ("CR-4", "DTL written as <code> with no <assign>",
      [r"Ens\.DataTransformDTL", r"<code>"],

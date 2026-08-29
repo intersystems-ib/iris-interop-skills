@@ -33,15 +33,21 @@ TWO CHECKS, DELIBERATELY DIFFERENT IN KIND
    never invoked the reviewer, say so once. This one is a nudge with teeth rather than a
    proof of error, so it blocks a single time and then gets out of the way.
 
-Both respect `stop_hook_active`, so the model is interrupted at most once per session and
-can always proceed after answering. A gate that cannot be satisfied is a gate that gets
-disabled.
+Both respect `stop_hook_active`, and both are additionally bounded by a session cutoff and a
+persisted latch (#122). That combination — not `stop_hook_active` alone — is what makes the
+model interrupted at most once per body of work. `stop_hook_active` is true only while the
+model is already being re-invoked by THIS hook; it resets on every new user turn, so on its
+own it prevents an infinite loop within one turn and nothing more. Relying on it for "once
+per session" is how this gate came to fire on seventeen consecutive turns, over classes
+written the previous day, in turns that authored nothing.
+
+A gate that cannot be satisfied is a gate that gets disabled.
 
 NOT MEASURED. That 0/206 is measured; whether this moves it is not, and cannot be from the
 skills session — it needs an eval pass (issue #102). Check (1) does not depend on model
 behaviour and so cannot regress to zero; check (2) might.
 """
-import sys, json, os, re
+import sys, json, os, re, hashlib, calendar, time
 
 # Every exit path in this hook is silent by design — an allowing hook writes no
 # attachment and produces no transcript event. That makes a hook that never fires
@@ -152,7 +158,126 @@ def transcript_set(path):
     return files
 
 
-def scan_transcript(path):
+
+# --- #122: recency bound + a real once-per-session latch --------------------------------
+#
+# Two defects, independent, and fixing either alone leaves the other. Both were measured
+# against a live transcript in which this gate fired on SEVENTEEN consecutive user turns.
+#
+# 1. NO RECENCY BOUND. scan_transcript accumulated `put` over the entire transcript with no
+#    horizon, so classes written on 2026-08-28 gated every turn on 2026-08-29 — through two
+#    releases, in turns that authored nothing. A transcript is not a working session: it
+#    survives /exit and resume, and spans days.
+#
+#    The proxy for a session boundary is a long gap between records. That adapts, where a
+#    fixed max-age does not: a genuine multi-hour build keeps all of its puts, while work
+#    resumed the next morning correctly starts clean.
+#
+# 2. `stop_hook_active` CANNOT EXPRESS "ONCE PER SESSION". It is true only while the model is
+#    already being re-invoked by this hook, and it resets on every new user turn. It prevents
+#    an infinite loop within one turn and nothing more. The docstring's "interrupted at most
+#    once per session" and the message's "this fires once per session, not in a loop" were
+#    both promising something the mechanism could not deliver — and the documented escape
+#    hatch ("say so and stop again") had nowhere to record that it had been said.
+#
+#    So the latch is written to disk, keyed on the transcript, holding a signature of the
+#    body of work it fired about. Same unreviewed work -> already said, stay silent. New
+#    classes -> new signature -> it speaks again, which is correct.
+#
+# The signature deliberately ignores WHICH branch fired. Clearing the orphan condition used
+# to hand the turn straight to the no-review branch, which read to the user as a gate that
+# would not stop. One body of work gets one interruption.
+
+SESSION_GAP_HOURS = float(os.environ.get("IRIS_INTEROP_STOP_GATE_GAP_HOURS", "4") or 4)
+
+
+def _epoch(rec):
+    """Epoch seconds from a transcript record's ISO-8601 timestamp, or None."""
+    ts = rec.get("timestamp")
+    if not isinstance(ts, str) or not ts:
+        return None
+    t = ts.strip().replace("Z", "+0000").replace("z", "+0000")
+    t = re.sub(r"\.(\d{1,6})\d*", r".\1", t)          # trim over-long fractional seconds
+    t = re.sub(r"([+-]\d{2}):(\d{2})$", r"\1\2", t)     # +00:00 -> +0000
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z",
+                "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            d = time.strptime(t, fmt)
+        except ValueError:
+            continue
+        try:
+            return calendar.timegm(d) - (d.tm_gmtoff or 0) if getattr(d, "tm_gmtoff", None) else calendar.timegm(d)
+        except Exception:
+            return calendar.timegm(d)
+    return None
+
+
+def session_cutoff(path):
+    """Epoch second at which the CURRENT working session starts.
+
+    The last inter-record gap longer than SESSION_GAP_HOURS is treated as a session
+    boundary; anything before it belongs to a previous sitting. Returns 0.0 when there is
+    no such gap (one continuous session) or when timestamps cannot be read, so an
+    unparseable transcript degrades to the old behaviour rather than to silence.
+    """
+    stamps = []
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    e = _epoch(json.loads(line))
+                except Exception:
+                    continue
+                if e:
+                    stamps.append(e)
+    except OSError:
+        return 0.0
+    stamps.sort()
+    gap, cutoff = SESSION_GAP_HOURS * 3600.0, 0.0
+    for a, b in zip(stamps, stamps[1:]):
+        if b - a > gap:
+            cutoff = b
+    return cutoff
+
+
+def _latch_path(transcript):
+    d = os.path.join(os.path.expanduser("~"), ".claude", "iris-interop-skills", "stop-gate")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        return None
+    key = hashlib.sha1(os.path.abspath(transcript).encode("utf-8")).hexdigest()[:16]
+    return os.path.join(d, key + ".json")
+
+
+def latch_seen(transcript, signature):
+    """True if this exact body of unreviewed work has already been raised once."""
+    p = _latch_path(transcript)
+    if not p:
+        return False
+    try:
+        with open(p, encoding="utf-8") as fh:
+            return json.load(fh).get("signature") == signature
+    except Exception:
+        return False
+
+
+def latch_record(transcript, signature):
+    p = _latch_path(transcript)
+    if not p:
+        return
+    try:
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump({"signature": signature, "at": int(time.time())}, fh)
+    except OSError:
+        pass  # a latch we cannot write costs a repeat, never a crash
+
+
+def put_signature(put):
+    return hashlib.sha1("\n".join(sorted(put)).encode("utf-8")).hexdigest()
+
+
+def scan_transcript(path, cutoff=0.0):
     """Return (classes put into IRIS this session, whether a conformance pass ran).
 
     Matches the JSON keys of genuine tool invocations, never prose: the router's own text
@@ -176,6 +301,10 @@ def scan_transcript(path):
                     rec = json.loads(line)
                 except Exception:
                     continue
+                if cutoff:
+                    e = _epoch(rec)
+                    if e and e < cutoff:
+                        continue  # #122: a previous working session, not this one
                 msg = rec.get("message") or {}
                 content = msg.get("content")
                 if not isinstance(content, list):
@@ -256,12 +385,21 @@ def main():
         _trace("no_transcript_path", keys=sorted(data.keys()))
         return
 
-    put, reviewed = scan_transcript(transcript)
+    cutoff = session_cutoff(transcript)
+    put, reviewed = scan_transcript(transcript, cutoff)
     if not put:
         _trace("no_puts", transcript=transcript,
                exists=os.path.exists(transcript),
-               lines=_count_lines(transcript), reviewed=reviewed)
+               lines=_count_lines(transcript), reviewed=reviewed, cutoff=cutoff)
         return  # this session authored no interop classes; nothing to gate
+
+    # #122: one body of unreviewed work earns one interruption, across BOTH branches.
+    # Clearing the orphan condition used to hand the turn straight to the no-review
+    # branch, which reads to the user as a gate that will not stop.
+    signature = put_signature(put)
+    if latch_seen(transcript, signature):
+        _trace("latched", puts=len(put), signature=signature[:12])
+        return
 
     root = project_root(data)
     orphans = find_orphans(root, put)
@@ -273,6 +411,7 @@ def main():
             for c in orphans[:15]
         )
         more = "\n  ... and {} more".format(len(orphans) - 15) if len(orphans) > 15 else ""
+        latch_record(transcript, signature)
         block(
             "CR-12 — {} of the {} class(es) this session wrote into IRIS exist ONLY in the "
             "namespace:\n\n{}{}\n\n"
@@ -286,6 +425,7 @@ def main():
 
     if not reviewed:
         _trace("blocking_no_review", put=len(put))
+        latch_record(transcript, signature)
         block(
             "The conformance pass has not run. This session authored {} interop class(es) and "
             "every one is on disk, but nothing has checked them against the twelve criteria.\n\n"
