@@ -32,26 +32,70 @@ no symptom at all. Audited on one real VM at the end of a workshop:
 **Six existed only on disk** — written but never compiled, or compiled and later deleted from the
 namespace. Both directions had happened, and nothing made it visible.
 
-The check is cheap:
+The check is cheap, and it has to report **both** directions to earn the words "in sync":
 
 ```objectscript
 ClassMethod DriftReport(pPkg As %String, pSrcDir As %String) As %String [ SqlProc ]
 {
-    Set onlyIris = "", n = $Length(pPkg) + 1, k = ""
-    For {
-        Set k = $Order(^oddCOM(k))  Quit:k=""
-        Continue:$Extract(k, 1, n) '= (pPkg _ ".")
-        Set f = pSrcDir _ "/" _ $Replace(k, ".", "/") _ ".cls"
-        If '##class(%Library.File).Exists(f) {
+    Set onlyIris = "", onlyDisk = ""
+    // Namespace side: %Dictionary SQL, never ^oddCOM/^oddDEF. The dictionary globals are
+    // undocumented internals whose layout is not a contract, and the conformance gate denies
+    // reading them — see `introspect-dont-guess`.
+    Set sql = "SELECT Name FROM %Dictionary.ClassDefinition WHERE Name %STARTSWITH ?"
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, sql, pPkg _ ".")
+    While rs.%Next() {
+        Set k = rs.%Get("Name")
+        Set inIris(k) = ""
+        If '##class(%File).Exists(pSrcDir _ "/" _ $Replace(k, ".", "/") _ ".cls") {
             Set onlyIris = onlyIris _ $Select(onlyIris="":"", 1:", ") _ k
         }
     }
-    Quit $Select(onlyIris="":"in sync", 1:"ONLY IN IRIS: " _ onlyIris)
+    // Disk side: walk the tree, so a file that was never compiled is visible too.
+    Do ..DriftDisk(pSrcDir, pSrcDir, .onDisk)
+    Set k = ""
+    For {
+        Set k = $Order(onDisk(k))  Quit:k=""
+        If '$Data(inIris(k)) {
+            Set onlyDisk = onlyDisk _ $Select(onlyDisk="":"", 1:", ") _ k
+        }
+    }
+    Set out = ""
+    If onlyIris '= "" { Set out = "ONLY IN IRIS: " _ onlyIris }
+    If onlyDisk '= "" { Set out = out _ $Select(out="":"", 1:" | ") _ "ONLY ON DISK: " _ onlyDisk }
+    Quit $Select(out="":"in sync", 1:out)
+}
+
+ClassMethod DriftDisk(pRoot As %String, pDir As %String, ByRef pOut) [ Private ]
+{
+    Set rs = ##class(%ResultSet).%New("%File:FileSet")
+    Do rs.Execute(pDir, "*")
+    While rs.Next() {
+        Set nm = rs.Get("Name")
+        If rs.Get("Type") = "D" { Do ..DriftDisk(pRoot, nm, .pOut)  Continue }
+        If $ZConvert($Piece(nm, ".", *), "L") '= "cls" Continue
+        Set rel = $Extract(nm, $Length(pRoot) + 2, *)
+        Set pOut($Replace($Extract(rel, 1, *-4), "/", ".")) = ""
+    }
 }
 ```
 
 Run it before declaring a production done, and after any session that used the Management Portal
 or a wizard — those write straight into the namespace and never touch disk.
+
+**Two traps this snippet is written around, both measured on 2026.1 (#118):**
+
+- **ObjectScript postconditionals end at the first space.** The earlier form of this helper wrote
+  `Continue:$Extract(k, 1, n) '= (pPkg _ ".")` and did not compile —
+  `#1012: Expected EOL or spaces : 'n) '='`. A postconditional argument must be unbroken:
+  `Continue:$Extract(k,1,n)'=(pPkg_".")`. It is the one snippet this skill tells you to run at the
+  end of every build, so it is the worst possible place for a parse error.
+- **`%File` sees the IRIS host's filesystem, not yours.** When IRIS runs in a container,
+  `pSrcDir` is a path *inside* the container. A source tree that is not mounted there reads as
+  entirely missing, and the report says every class is `ONLY IN IRIS` — the alarming answer, for
+  an environment reason. Check the mount before believing the output.
+
+Verified end to end: `in sync` when the tree matches, `ONLY ON DISK: <pkg>.BO.Ghost` for a `.cls`
+that was never compiled, and `ONLY IN IRIS: ...` when `pSrcDir` does not exist.
 
 Layout (VS Code ObjectScript plugin convention — **Atelier-style nested**, NOT flat dotted filenames):
 

@@ -1,6 +1,6 @@
 ---
 name: alerting
-description: Ens.Alert router, dedup, monitor, per-BO alert settings. Routed from interop. Triggers: Ens.Alert, alert, alerta, dedup, AlertOperation, ProductionMonitorService, Send Alert on Error, notificación, paging.
+description: Ens.Alert router, alert dedup, production monitor, per-BO alert settings in IRIS Interoperability. Routed from interop. Triggers: Ens.Alert, Ens.AlertRequest, Send Alert on Error, alert on error, IRIS alert routing, alert dedup FunctionSet, AlertOperation, ProductionMonitorService, alerta de producción, ruta de alertas.
 ---
 
 # Alert circuit for IRIS Interop productions

@@ -124,7 +124,31 @@ The `NormalizeKey` helper is a plain class method — test with `%UnitTest.TestP
 
 ## Cookbook — loading lookups via MCP (no portal access)
 
-When you're driving IRIS from MCP and can't reach the Management Portal UI, **direct SQL into `Ens_Util.LookupTable` works** — but only inside a SqlProc (loose `iris_execute` with `&sql` inserts via the object-generator path doesn't persist reliably). Canonical pattern:
+**Reach for the typed tools first.** Two exist for exactly this job, and neither needs a class:
+
+| tool | actions | use it for |
+|---|---|---|
+| `iris_lookup_manage` | `get`, `set`, `delete`, `list_keys`, `list_tables` | one row at a time, and discovering what tables exist |
+| `iris_lookup_transfer` | `export`, `import` | a whole table as IRIS lookup XML |
+
+```xml
+<lookupTable>
+  <entry table="GeneroSOAP" key="M">1</entry>
+  <entry table="GeneroSOAP" key="F">2</entry>
+</lookupTable>
+```
+
+> **`import` REPLACES the table — it does not merge.** `iris_lookup_transfer` requires `table`, and
+> passes it to `Ens.Util.LookupTable.%Import` as `pForceTableName`. IRIS's own documentation for
+> that parameter: *"If `pForceTableName` is specified then the particular Lookup Table will be
+> **replaced if it exists** by the entries being imported."* `%Import` does have a merge mode — it
+> is what you get by omitting that parameter — but the tool makes `table` mandatory, so **merge is
+> not reachable through it.** Import a partial table and you delete every row you left out.
+
+### When you need SQL instead
+
+Row-by-row `iris_lookup_manage(action="set")` is fine for a handful of entries; for a few hundred,
+direct SQL into `Ens_Util.LookupTable` from a `[SqlProc]` is still the most compact option:
 
 ```objectscript
 ClassMethod ImportLookups() As %String [ SqlProc ]
@@ -139,6 +163,21 @@ ClassMethod ImportLookups() As %String [ SqlProc ]
 ```
 
 Invoke from MCP: `SELECT MyApp_Bootstrap_ImportLookups()`. Idempotent because of the prior `DELETE`. Place the SqlProc in your project's `Bootstrap` class so it lives next to other workshop-setup helpers and ships in the same `.cls` file as the rest of the setup.
+
+**Why a SqlProc rather than a loose `iris_execute` with `&sql`** — and the reason is not the one
+this skill used to give (#119). The inserts **do** persist; what breaks is the error check. The MCP
+rewrites `&sql(...)` into a `%SQL.Statement` call and binds its status to a generated local
+(`sqlSQLCODE1`, `sqlSQLCODE2`, …), never to the bare `SQLCODE` the idiom expects. So:
+
+```objectscript
+&sql(INSERT INTO Ens_Util.LookupTable ...)
+If SQLCODE<0 { ... }        // <UNDEFINED> — and the INSERT already succeeded
+```
+
+fails *after* the write went through, which reads exactly like a failed insert and invites you to
+retry or abandon a load that actually worked. Tracked as intersystems-ib/iris-interop-dev#145.
+Inside a compiled `[SqlProc]` the macro is handled by the class compiler, `SQLCODE` is set the
+normal way, and the idiom behaves.
 
 Verify with: `SELECT TableName, COUNT(*) FROM Ens_Util.LookupTable WHERE TableName LIKE 'YourPrefix%' GROUP BY TableName`.
 
