@@ -1,6 +1,6 @@
 ---
 name: transformations
-description: DTL transforms, lookups, HL7 field paths, XSLT for CDA. Routed from interop. Triggers: DTL, transformación, data transform, mapear, subtransform, HL7 field path, XSLT, CDA, Lookup().
+description: DTL transforms, lookups, HL7 field paths, XSLT for CDA in IRIS Interoperability. Routed from interop. Triggers: DTL, Ens.DataTransformDTL, DTL data transform, transformación DTL, mapear segmentos HL7, subtransform, HL7 field path, XSLT for CDA, Ens.Util.FunctionSet Lookup().
 ---
 
 # Transformations — DTL, subtransforms, XSLT for CDA

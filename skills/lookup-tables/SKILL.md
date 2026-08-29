@@ -138,12 +138,22 @@ The `NormalizeKey` helper is a plain class method — test with `%UnitTest.TestP
 </lookupTable>
 ```
 
-> **`import` REPLACES the table — it does not merge.** `iris_lookup_transfer` requires `table`, and
-> passes it to `Ens.Util.LookupTable.%Import` as `pForceTableName`. IRIS's own documentation for
-> that parameter: *"If `pForceTableName` is specified then the particular Lookup Table will be
-> **replaced if it exists** by the entries being imported."* `%Import` does have a merge mode — it
-> is what you get by omitting that parameter — but the tool makes `table` mandatory, so **merge is
-> not reachable through it.** Import a partial table and you delete every row you left out.
+> **`import` picks replace or merge off the `table` value, and the destructive one is the default
+> reading.** `iris_lookup_transfer` passes `table` straight to `Ens.Util.LookupTable.%Import` as
+> `pForceTableName`, whose documented behaviour is: *"If `pForceTableName` is specified then the
+> particular Lookup Table will be **replaced if it exists** … If `pForceTableName` is not specified
+> and the Lookup Table exists then entries … will be **merged**."*
+>
+> | `table` | what happens |
+> |---|---|
+> | `"GeneroSOAP"` | **REPLACE** — every row not in your XML is deleted |
+> | `""` (empty string) | **MERGE** — each `<entry table="…">` is upserted, other rows untouched |
+> | field omitted | schema error — `table` is a required parameter, so merge must be asked for explicitly |
+>
+> "Specified" is an ObjectScript emptiness test, not a Rust one: the field is mandatory in the tool's
+> schema, but an empty *value* still reaches the merge branch. Measured both ways (#119,
+> intersystems-ib/iris-interop-dev#144). **Import a partial table with `table` set and you delete
+> every row you left out** — so name the table only when you mean to replace it.
 
 ### When you need SQL instead
 
