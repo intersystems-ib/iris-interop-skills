@@ -78,6 +78,15 @@ DICT_GLOBAL = re.compile(r"(?i)\^odd(DEF|COM)")
 #     iris_credential_list   14/14 failed      iris_production_item   7/7 failed
 #     iris_production        15/17 failed      iris_lookup_manage      1/1 failed
 #
+# THAT 95% IS VERSION-BOUND, and the file must say so. It was measured against MCP <= 0.8.4,
+# where all six of these tools declared an EMPTY input schema — `namespace` was on the wire but
+# undeclared, so a model could not discover it from the handshake. MCP 0.11.0 declares it on all
+# six. The wire key did not move and this rule still works, but the deny-rate WILL fall on
+# 0.11.0+ for that reason alone. Do not read the drop as agents getting better; to separate the
+# effects, measure deny-rate on 0.8.4 vs 0.11.0 with everything else held. The rule stays either
+# way: passing `namespace` explicitly is never wrong, and declared-but-optional is not the same
+# as reliably passed. See #125.
+#
 # Deliberately NOT listed, because the same capture proves they are fine without it:
 # `check_config` (0/41 failures) and `iris_get_log` (0/40). A blanket rule would be wrong.
 # Also not listed: iris_doc / iris_compile / iris_query / iris_execute / iris_test /
@@ -206,18 +215,29 @@ def main():
                 )
 
     if content:
-        m = re.search(r"Extends\s+([A-Za-z0-9_.%]*(?:Inbound|Outbound)Adapter)\b", content)
-        if m:
-            looks_bs_bo = any(s in BS_BO_SEGS for nm in names for s in nm.split("."))
-            if looks_bs_bo:
-                adapter = m.group(1)
-                deny(
-                    "A Business Service/Operation must Extend Ens.BusinessService / Ens.BusinessOperation "
-                    "and declare its adapter as `Parameter ADAPTER = \"%s\";` — not Extend the adapter "
-                    "(%s) directly (that yields an empty, non-functional component). Fix the superclass + "
-                    "ADAPTER parameter and retry. See Skill(iris-interop-skills:business-services) / "
-                    ":business-operations." % (adapter, adapter)
-                )
+        # Anchored to a real class-definition line: skips /// comments and prose, and accepts both
+        # `Extends Super` and the parenthesized list `Extends (A, B)` the plugin's own examples use.
+        cm = re.search(r"(?im)^\s*Class\s+([A-Za-z0-9_.%]+)\s+Extends\s+(\(?[^{\n]+)", content)
+        if cm:
+            cls_name = cm.group(1)
+            supers = [s.strip().strip("()") for s in cm.group(2).split(",")]
+            adapter = next((s for s in supers if re.search(r"(?:Inbound|Outbound)Adapter$", s)), None)
+            if adapter:
+                # Pair against the class declared IN THIS CONTENT, not the union of `names`.
+                base = cls_name[:-4] if cls_name.lower().endswith(".cls") else cls_name
+                segs = base.split(".")
+                type_segs = segs[1:-1] if len(segs) > 2 else []
+                # Honour the docstring: a genuine custom adapter is left alone.
+                is_adapter = cls_name.endswith("Adapter") or "Adapter" in type_segs
+                if not is_adapter and any(s in BS_BO_SEGS for s in type_segs):
+                    deny(
+                        "A Business Service/Operation must Extend Ens.BusinessService / Ens.BusinessOperation "
+                        "and declare its adapter as `Parameter ADAPTER = \"%s\";` — not Extend the adapter "
+                        "(%s) directly (that yields an empty, non-functional component). Fix the superclass + "
+                        "ADAPTER parameter and retry. See Skill(iris-interop-skills:business-services) / "
+                        ":business-operations." % (adapter, adapter)
+                    )
+
     # no output -> allow
 
 

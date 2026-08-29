@@ -31,6 +31,12 @@ def main():
         data = json.load(sys.stdin)
     except Exception:
         return
+    # NOTE (#125): this reads the tool RESPONSE, so it never sees a call the client rejected
+    # locally on schema grounds. MCP 0.11.0 added `required` entries to tools that previously
+    # declared no schema, so incomplete calls that used to travel and fail at the server can now
+    # be refused client-side, producing no tool_response and no PostToolUse event at all. This
+    # hook does not break; its denominator quietly loses those calls. Do not compare rates
+    # across that pin boundary without accounting for it.
     resp = data.get("tool_response", data.get("tool_output", {}))
     p = payload(resp)
     out = p.get("output", None)
