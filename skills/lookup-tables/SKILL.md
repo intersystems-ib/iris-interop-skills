@@ -124,7 +124,41 @@ The `NormalizeKey` helper is a plain class method — test with `%UnitTest.TestP
 
 ## Cookbook — loading lookups via MCP (no portal access)
 
-When you're driving IRIS from MCP and can't reach the Management Portal UI, **direct SQL into `Ens_Util.LookupTable` works** — but only inside a SqlProc (loose `iris_execute` with `&sql` inserts via the object-generator path doesn't persist reliably). Canonical pattern:
+**Reach for the typed tools first.** Two exist for exactly this job, and neither needs a class:
+
+| tool | actions | use it for |
+|---|---|---|
+| `iris_lookup_manage` | `get`, `set`, `delete`, `list_keys`, `list_tables` | one row at a time, and discovering what tables exist |
+| `iris_lookup_transfer` | `export`, `import` | a whole table as IRIS lookup XML |
+
+```xml
+<lookupTable>
+  <entry table="GeneroSOAP" key="M">1</entry>
+  <entry table="GeneroSOAP" key="F">2</entry>
+</lookupTable>
+```
+
+> **`import` picks replace or merge off the `table` value, and the destructive one is the default
+> reading.** `iris_lookup_transfer` passes `table` straight to `Ens.Util.LookupTable.%Import` as
+> `pForceTableName`, whose documented behaviour is: *"If `pForceTableName` is specified then the
+> particular Lookup Table will be **replaced if it exists** … If `pForceTableName` is not specified
+> and the Lookup Table exists then entries … will be **merged**."*
+>
+> | `table` | what happens |
+> |---|---|
+> | `"GeneroSOAP"` | **REPLACE** — every row not in your XML is deleted |
+> | `""` (empty string) | **MERGE** — each `<entry table="…">` is upserted, other rows untouched |
+> | field omitted | schema error — `table` is a required parameter, so merge must be asked for explicitly |
+>
+> "Specified" is an ObjectScript emptiness test, not a Rust one: the field is mandatory in the tool's
+> schema, but an empty *value* still reaches the merge branch. Measured both ways (#119,
+> intersystems-ib/iris-interop-dev#144). **Import a partial table with `table` set and you delete
+> every row you left out** — so name the table only when you mean to replace it.
+
+### When you need SQL instead
+
+Row-by-row `iris_lookup_manage(action="set")` is fine for a handful of entries; for a few hundred,
+direct SQL into `Ens_Util.LookupTable` from a `[SqlProc]` is still the most compact option:
 
 ```objectscript
 ClassMethod ImportLookups() As %String [ SqlProc ]
@@ -139,6 +173,21 @@ ClassMethod ImportLookups() As %String [ SqlProc ]
 ```
 
 Invoke from MCP: `SELECT MyApp_Bootstrap_ImportLookups()`. Idempotent because of the prior `DELETE`. Place the SqlProc in your project's `Bootstrap` class so it lives next to other workshop-setup helpers and ships in the same `.cls` file as the rest of the setup.
+
+**Why a SqlProc rather than a loose `iris_execute` with `&sql`** — and the reason is not the one
+this skill used to give (#119). The inserts **do** persist; what breaks is the error check. The MCP
+rewrites `&sql(...)` into a `%SQL.Statement` call and binds its status to a generated local
+(`sqlSQLCODE1`, `sqlSQLCODE2`, …), never to the bare `SQLCODE` the idiom expects. So:
+
+```objectscript
+&sql(INSERT INTO Ens_Util.LookupTable ...)
+If SQLCODE<0 { ... }        // <UNDEFINED> — and the INSERT already succeeded
+```
+
+fails *after* the write went through, which reads exactly like a failed insert and invites you to
+retry or abandon a load that actually worked. Tracked as intersystems-ib/iris-interop-dev#145.
+Inside a compiled `[SqlProc]` the macro is handled by the class compiler, `SQLCODE` is set the
+normal way, and the idiom behaves.
 
 Verify with: `SELECT TableName, COUNT(*) FROM Ens_Util.LookupTable WHERE TableName LIKE 'YourPrefix%' GROUP BY TableName`.
 
