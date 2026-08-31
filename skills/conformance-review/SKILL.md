@@ -61,6 +61,12 @@ re-plan from scratch and it never rewrites silently.
 5. **Emit the report** (severity-tagged) → **a scoped remediation plan** → offer to **apply the safe
    fixes** (P0/P1 with an unambiguous canonical fix) only after the user confirms. Leave defensible
    choices as notes, not edits.
+6. **For *confirmed* P0/P1 findings, offer to file them** — load
+   `Skill(iris-interop-skills:report-issue)`, which dedups against existing issues and asks before
+   creating anything. Do this even when the review was asked for in its own words ("review this",
+   "is this idiomatic") and nobody mentioned an issue: filing is the *consequence* of a review, so
+   the prompt that started it will not name it. Never auto-file; `report-issue` always confirms
+   first. Skip it for P2/P3 and for anything you are not sure reproduces.
 
 ## Severity
 

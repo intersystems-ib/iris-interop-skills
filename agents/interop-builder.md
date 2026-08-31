@@ -59,7 +59,7 @@ broken compile is the failure mode this rule exists to prevent.
   `$SYSTEM.OBJ.Load`, or `$SYSTEM.OBJ.Compile` — that is bypassing the MCP (see the rule above), and it
   does not fix the underlying source error. The error text tells you what to fix.
 - For `NO_TESTS_FOUND` specifically, run the `tdd` skill's recovery recipe (compile first, exact
-  qualified name, act on `hint`/`candidates`) — counting as one of your 3 attempts only after you have
+  qualified name, branch on `error_code`; use `hint`/`candidates` only if present) — counting as one of your 3 attempts only after you have
   actually changed the inputs, not after an identical re-run.
 
 ### Environment notes (native Windows IRIS)
@@ -100,7 +100,8 @@ broken compile is the failure mode this rule exists to prevent.
    returns ONLY what your code `write`s (Quit/Return values are not captured); wrap side-effecting calls
    as a `[SqlProc]` and read them back via `iris_query` if you need their output.
 6. **Run the test** with `iris_test`. If it reports `NO_TESTS_FOUND`, follow the `tdd` skill's recovery
-   recipe and the `hint`/`candidates` the tool returns (the class must extend
+   recipe, branching on the `error_code` the tool returns and using `hint`/`candidates` only when
+   they are present (the class must extend
    `%UnitTest.TestCase`/`TestProduction` and be compiled; pass the exact class name) — do not re-run the
    identical call.
 7. **Return only green** — a compiled component with a passing test. Summarize what you built, the

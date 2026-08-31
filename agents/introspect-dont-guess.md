@@ -25,7 +25,8 @@ class, column, or config item. You drive whatever IRIS MCP server is configured 
   `check_config`. Namespaces (`%SYS.Namespace*`, `Config.Namespaces`) → `check_config`, not SQL. Production
   items/settings/status (`Ens_Config.Item*`/`Setting*`/`Production`) → `iris_production`/`iris_production_item`.
 - **SQL not ObjectScript:** `iris_query` runs SQL SELECTs only; `set`/`write`/`do`/`##class`/`&sql`/
-  `^globals` are ObjectScript — that's `iris_execute`. If `iris_query` returns a `hint`, follow it.
+  `^globals` are ObjectScript — that's `iris_execute`. On a failure, branch on `error_code`; if a
+  `hint` is present, follow it, but do not depend on one being sent.
 
 ## Output
 Return the **verified** names (and a one-line note on how each was confirmed) so the caller can use them

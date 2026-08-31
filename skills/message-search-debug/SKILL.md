@@ -34,7 +34,7 @@ Heuristic: start at the Production Status page (red items?). Follow up in Event 
 
 When inspecting a running production through the IRIS MCP, reach for `iris_interop_query` / `iris_production` / `iris_production_item`. Do **not** hand-write SQL against `Ens_Util.Log` / `Ens.MessageHeader`, and never guess `%SYS.*` / `Config.*` / `Ens_Config.*` catalog tables — those guesses fail ~⅔ of the time. One typed call replaces the multi-query reconstruction (and the `SELECT MAX(ID)` watermark dance).
 
-> **The `<SYNTAX>errdone+2^%qaqqt` signature = you hand-rolled SQL through `iris_execute`.** `%qaqqt` is the SQL query compiler; it chokes on malformed/dynamic SQL (invalid predicates like `%STARTSWITH`/`%LIKE`, or `SELECT … FROM` a table that doesn't exist — `Ens_Config.Setting`, `Config.config`, `%SYS.*ELS*`). Two fixes: (1) a read-only SELECT → use `iris_query` (it goes through a real result-set path and returns a `hint` naming the right typed tool on "table not found"); (2) anything that runs ObjectScript or **generates classes** → wrap it in a `[SqlProc]` class method and call it via `iris_query`, never embed `&sql`/`%SQL.Statement` inside an `iris_execute` snippet.
+> **The `<SYNTAX>errdone+2^%qaqqt` signature = you hand-rolled SQL through `iris_execute`.** `%qaqqt` is the SQL query compiler; it chokes on malformed/dynamic SQL (invalid predicates like `%STARTSWITH`/`%LIKE`, or `SELECT … FROM` a table that doesn't exist — `Ens_Config.Setting`, `Config.config`, `%SYS.*ELS*`). Two fixes: (1) a read-only SELECT → use `iris_query` (it goes through a real result-set path and returns a structured failure envelope — branch on its `error_code`; a `hint` naming the right typed tool is usually included but is not guaranteed); (2) anything that runs ObjectScript or **generates classes** → wrap it in a `[SqlProc]` class method and call it via `iris_query`, never embed `&sql`/`%SQL.Statement` inside an `iris_execute` snippet.
 
 > **Always pass `namespace`.** It is documented as optional on these tools and it is not: it
 > resolves `Ens.Director` / `Ens_Config.*` in whatever namespace the connection defaults to, and if
@@ -63,7 +63,7 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 | SQL-Gateway connections | `introspect-dont-guess` plugin agent (an agent, not a skill; no agent tool → `interop` §"Resolving real names") / `iris_table_info` (no SQL catalog table) |
 | Namespaces | `check_config` (not a SQL table) |
 
-If you do fall back to raw `iris_query` and hit "table not found", **read the `hint`** it returns — it names the typed tool for that exact case.
+If you do fall back to raw `iris_query` and hit a table-not-found failure, **branch on the `error_code`** — it and `error` are the only fields guaranteed on a failure envelope. A `hint` naming the typed tool is *usually* there and worth reading when it is, but its wording is not stable across server releases and one of the two supported MCP servers may not send one at all. If there is no hint, go to the typed-tool table above rather than waiting for the server to name it.
 
 ### Where raw SQL IS the right answer
 

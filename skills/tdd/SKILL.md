@@ -368,9 +368,36 @@ error. Work the cause instead, in this exact order:
 2. **Run `iris_test` with the EXACT compiled class name** — fully qualified, case-correct
    (`MyApp.Tests.DT.Censo2Menus`, not `Censo2Menus`, not `myapp.tests...`). An unqualified or
    mis-cased name is the most common cause.
-3. **Act on the tool's `hint` / `candidates`.** `iris_test` returns these on a miss — they list the
-   names it *can* see. Pick the matching candidate and re-run with that exact name; do not guess a third
-   variant or fall back to running `Run()` from the terminal.
+3. **Branch on `error_code`, not on the prose.** `error_code` and `error` are the only fields
+   guaranteed on every failure envelope. `hint`, `candidates`, `did_you_mean` and `cause` are
+   **optional enrichment** — use them when present, never depend on them. Hint *wording* is not
+   stable across server releases, and one of the two supported MCP servers returns no `candidates`
+   at all, so a step that waits for them strands you.
+
+   ```
+   NO_TESTS_FOUND      the pattern matched no test class.
+                       If `candidates` is present and non-empty, pick the match and re-run with
+                       that exact name.
+                       An EMPTY `candidates` is a DIFFERENT FACT, not a missing field: it means
+                       the namespace holds no compiled test classes at all — go back to step 1,
+                       the compile is what failed.
+                       If `candidates` is absent entirely, the server does not send them. Do not
+                       wait for it; go to step 4.
+
+   NO_RUNNABLE_TESTS   the class exists and exposes nothing runnable. Here — and only here —
+                       `cause` is present and says which:
+                         NOT_A_TEST_CLASS            wrong superclass          -> step 4
+                         NO_TEST_METHODS             no Test* method           -> step 4
+                         PRODUCTION_PARAMETER_EMPTY  missing Parameter PRODUCTION -> step 1 (#5001)
+                         UNKNOWN, or anything not listed above
+                                                     -> report `cause` verbatim and stop
+                       `cause` values change between releases too; never assume the list is closed.
+
+   anything else       report `error_code` and `error` verbatim and STOP. There are ~88 codes and
+                       new ones ship; a ladder that recognises a few and silently does nothing on
+                       the rest is the bug this step exists to prevent. Do not guess a third name
+                       variant, and do not fall back to running `Run()` from the terminal.
+   ```
 4. **Verify the superclass.** The class must extend `%UnitTest.TestProduction` — never
    `%UnitTest.TestCase`, which is not an escape hatch from a `#5001` here any more than anywhere
    else (see §"Baseline class" and the fixed-points rule below) — and have at least one `Test*`
