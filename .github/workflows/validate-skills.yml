@@ -1,0 +1,34 @@
+# validate-skills: structural gate over skill frontmatter.
+#
+# Exists because of #131. Two sessions independently split trigger lists on the literal
+# `Triggers:`, silently dropped the four skills that use `Triggers EN:` / `Triggers ES:`, and
+# both reported those four as carrying zero triggers. Neither query errored; a filter can only
+# confirm the rows it already matches. S4 therefore ENUMERATES the label space on every run.
+#
+# ~1s, no IRIS, no network.
+
+name: validate-skills
+
+on:
+  push:
+    paths:
+      - 'skills/**'
+      - 'scripts/validate_skills.py'
+      - '.github/workflows/validate-skills.yml'
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'scripts/validate_skills.py'
+      - '.github/workflows/validate-skills.yml'
+  workflow_dispatch:
+
+jobs:
+  skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: skill frontmatter checks
+        run: python3 scripts/validate_skills.py
