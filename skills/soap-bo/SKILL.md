@@ -156,6 +156,48 @@ Document every patch in the class header with a stable tag (e.g. `///PYD20260513
 
 For diagnosing wire-level issues on a SOAP BO, use a per-BO `SoapLogFile` setting rather than the namespace-wide `^ISCSOAP("Log")` toggle. Each BO writes to its own log file path, settable at runtime from the portal — covered in `message-search-debug` §"Per-BO SOAP tracing".
 
+## Canonical pattern — the SOAP BO class
+
+The wizard generates the *client* (`Pkg.WSC.*`); it does **not** generate the Business Operation.
+You write that, and it is an ordinary `Ens.BusinessOperation` whose adapter is the typed SOAP one:
+
+```objectscript
+Class MyApp.BO.WeatherService Extends Ens.BusinessOperation
+{
+Parameter ADAPTER = "EnsLib.SOAP.OutboundAdapter";
+Parameter INVOCATION = "Queue";
+
+/// Re-declare Adapter with the concrete type so `..Adapter.<method>` resolves to the
+/// adapter's own API instead of the generic Ens.OutboundAdapter.
+Property Adapter As EnsLib.SOAP.OutboundAdapter;
+
+Method GetForecast(pReq As MyApp.SOAP.WeatherService.GetForecastRequest,
+                   Output pResp As MyApp.SOAP.WeatherService.GetForecastResponse) As %Status
+{
+    Set tClient = ##class(MyApp.WSC.WeatherService).%New()
+    Set tClient.Location = ..Adapter.WebServiceURL   // adapter owns the endpoint + credentials
+    // ... invoke the generated client method, map its result onto pResp ...
+    Quit $$$OK
+}
+
+XData MessageMap
+{
+<MapItems>
+  <MapItem MessageType="MyApp.SOAP.WeatherService.GetForecastRequest">
+    <Method>GetForecast</Method>
+  </MapItem>
+</MapItems>
+}
+}
+```
+
+**`Parameter ADAPTER = "EnsLib.SOAP.OutboundAdapter";` is the line that makes this a SOAP BO.**
+Extending the adapter directly instead yields an empty, non-functional component — and a
+PreToolUse gate blocks that put (see `component-map` for the task→component map). Take the
+endpoint, credentials and timeout from the adapter's settings rather than hard-coding them in the
+generated client; that is the whole reason for using the typed adapter over a bare
+`%SOAP.WebClient`.
+
 ## Canonical pattern — calling the SOAP BO
 
 ```objectscript
