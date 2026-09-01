@@ -202,7 +202,8 @@ ClassMethod ValidateProduction(pProductionName As %String) As %String [ SqlProc 
 }
 ```
 
-Invoke via `SELECT MyApp_Bootstrap_ValidateProduction('MyApp.Production')` before every restart. CI step. Test fixture. This catches 90% of the "BP fails with weird error" class of bugs at edit time.
+Invoke via `SELECT MyApp.Bootstrap_ValidateProduction('MyApp.Production')` before every restart
+(schema `MyApp`, function `Bootstrap_ValidateProduction` — see the `interop` router for the rule). CI step. Test fixture. This catches 90% of the "BP fails with weird error" class of bugs at edit time.
 
 For multi-router productions, extend step 2 to iterate every `EnsLib.MsgRouter.RoutingEngine` item (drop the `TOP 1`) and concatenate the results. The string-scan parser is good enough for `<send>` extraction (rule XData uses a stable shape) — replace with `%XML.TextReader` only if you start tracking `<assign>` or `<switch>` activities.
 

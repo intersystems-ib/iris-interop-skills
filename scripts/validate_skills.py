@@ -92,6 +92,32 @@ for slug, desc in parsed.items():
 
 check("S4", "every description carries a non-empty trigger list", no_trigger + empty_trigger)
 
+# --- S5: the #141 check. A [SqlProc] projects as <schema>.<Class>_<Method>, where <schema> is the
+# package with dots turned into underscores. `SELECT Pkg_Bootstrap_Method(...)` carries no schema
+# qualifier at all, so IRIS resolves it against SQLUSER and always answers SQLCODE -359. Four skills
+# shipped that form and an eval agent copied one verbatim, so this is a literal-token gate, not a
+# style rule. Two or more underscore-joined identifiers before the paren, with no dot, is the defect.
+SQLPROC_CALL = re.compile(r"SELECT\s+(%?\w+(?:_\w+){2,})\s*\(")
+
+# A line that cites SQLCODE -359 is TEACHING the bad form, not committing it — the router carries
+# both wrong shapes on purpose. Narrow and deliberate: a line that ships the defect and also names
+# its error code would slip through, which is why the exemption is the error code and not a
+# hand-wavier marker like "example" or a fenced-block test.
+TEACHING_THE_FAILURE = re.compile(r"-359\b")
+
+bad_sqlproc = []
+for path in skills:
+    slug = os.path.basename(os.path.dirname(path))
+    for n, line in enumerate(open(path, encoding="utf-8"), 1):
+        if TEACHING_THE_FAILURE.search(line):
+            continue
+        for m in SQLPROC_CALL.finditer(line):
+            bad_sqlproc.append("{}:{}: {} — needs a schema qualifier, e.g. {}".format(
+                slug, n, m.group(1),
+                m.group(1).replace("_", ".", 1)))
+
+check("S5", "no schema-less `SELECT Pkg_Class_Method(...)` SqlProc call (#141)", bad_sqlproc)
+
 print("\n  label space in use (S4 enumerates rather than filters — see #131):")
 for lab, who in sorted(labels.items(), key=lambda kv: -len(kv[1])):
     print("    {:>3}x  {:<16} {}".format(
@@ -107,5 +133,5 @@ if len(labels) > 1:
           "  content must accept every form above; use the S4 regex, never a literal.")
 
 print("\nSkills: {}\n".format(
-    "all {} checks pass".format(4) if not failures else "{} FAILED".format(", ".join(failures))))
+    "all {} checks pass".format(5) if not failures else "{} FAILED".format(", ".join(failures))))
 sys.exit(1 if failures else 0)

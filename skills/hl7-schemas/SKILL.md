@@ -151,6 +151,10 @@ Set tSC = $$$OK
 Write msg.GetValueAt("ZAL:1", , .tSC), " ", $System.Status.GetErrorText(tSC), !
 ```
 
+Do **not** write `$G(msg.GetValueAt("ZAL:1"))` to be safe here — `$GET` forces property syntax, so it
+fails with `<PROPERTY DOES NOT EXIST> GetValueAt` on a method that works unwrapped. Guard the object
+(`$IsObject`) instead; see `message-search-debug`.
+
 Prefer top-level placement for a trailing Z-segment unless the partner's own
 specification genuinely nests it — the path stays short, and DTL authors in the visual
 editor get `ZAL:…` rather than a four-part group path.

@@ -268,7 +268,8 @@ ClassMethod GenerateRecordMap(pRM As %String) As %String [ SqlProc ]
 }
 ```
 
-Invoke with `SELECT Pkg_Bootstrap_GenerateRecordMap('Pkg.RecordMap.X')`. Notes:
+Invoke with `SELECT Pkg.Bootstrap_GenerateRecordMap('Pkg.RecordMap.X')` — schema `Pkg`, function
+`Bootstrap_GenerateRecordMap`. Notes:
 - `GenerateObject` errors `#5768 Class already exists` if the `.Record` already exists — delete it first, then regenerate.
 - **`GetObject` lives on the RecordMap class, not on `.Record`.** Verifying with
   `##class(Pkg.RecordMap.X.Record).GetObject(...)` raises the same `<METHOD DOES NOT EXIST>` as
