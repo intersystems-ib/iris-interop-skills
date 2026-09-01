@@ -36,6 +36,20 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 
 > **The `<SYNTAX>errdone+2^%qaqqt` signature = you hand-rolled SQL through `iris_execute`.** `%qaqqt` is the SQL query compiler; it chokes on malformed/dynamic SQL (invalid predicates like `%STARTSWITH`/`%LIKE`, or `SELECT … FROM` a table that doesn't exist — `Ens_Config.Setting`, `Config.config`, `%SYS.*ELS*`). Two fixes: (1) a read-only SELECT → use `iris_query` (it goes through a real result-set path and returns a structured failure envelope — branch on its `error_code`; a `hint` naming the right typed tool is usually included but is not guaranteed); (2) anything that runs ObjectScript or **generates classes** → wrap it in a `[SqlProc]` class method and call it via `iris_query`, never embed `&sql`/`%SQL.Statement` inside an `iris_execute` snippet.
 
+> **`<PROPERTY DOES NOT EXIST>` naming a method you know exists = you wrapped the call in `$GET()`.**
+> `$G()` takes a variable or property reference, so `$G(seg.GetValueAt("1"))` makes IRIS resolve
+> `GetValueAt` as a *property* and fail — while `seg.GetValueAt("1")` on the line above works. The
+> error is anti-diagnostic: it sends you hunting for a method name that was already right. **Guard
+> the object, not the call.**
+>
+> ```objectscript
+> Set tVal = ""
+> If $IsObject(seg) { Set tVal = seg.GetValueAt("1") }   // not $G(seg.GetValueAt("1"))
+> ```
+>
+> With a by-reference argument (`$G(m.GetValueAt(p,m.Separators,.sc))`) the same mistake surfaces as
+> `<SYNTAX>` instead, which looks like a typo rather than a category error.
+
 > **Always pass `namespace`.** It is documented as optional on these tools and it is not: it
 > resolves `Ens.Director` / `Ens_Config.*` in whatever namespace the connection defaults to, and if
 > that one is not interop-enabled the call dies with an error that never names the cause —

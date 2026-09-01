@@ -139,6 +139,35 @@ A class `Demo.Enc.Encounter` carrying `SqlTableName = "PatEncounter"` projects a
 derivable from the class definition's names alone. Derive nothing; confirm with `iris_table_info`.
 On `SQLCODE -30` (Table not found), the next call is introspection — never another guessed name.
 
+### Calling a `[SqlProc]` — the name is not the class name
+
+A `[SqlProc]` class method projects as **`<package, dots→underscores>.<Class>_<Method>`**: everything
+up to the *last* dot becomes the SQL schema, then the final class name and the method name join with
+an underscore. Measured against `INFORMATION_SCHEMA.ROUTINES` on IRIS 2026.1:
+
+| class :: method | schema | function | call as |
+|---|---|---|---|
+| `Demo.Bootstrap` :: `Ping` | `Demo` | `Bootstrap_Ping` | `SELECT Demo.Bootstrap_Ping(…)` |
+| `ImgLink.HL7.SchemaImport` :: `ImportSchema` | `ImgLink_HL7` | `SchemaImport_ImportSchema` | `SELECT ImgLink_HL7.SchemaImport_ImportSchema(…)` |
+
+The two forms that feel right and are not:
+
+```sql
+SELECT Demo_Bootstrap_Ping('x')   -- -359 'SQLUSER.DEMO_BOOTSTRAP_PING' does not exist
+SELECT Demo.Bootstrap.Ping('x')   -- -359 'DEMO.BOOTSTRAP.PING' does not exist
+```
+
+All-underscores carries no schema qualifier at all, so IRIS resolves it against the default schema
+`SQLUSER` and never finds it. Don't derive the name — read it:
+
+```sql
+SELECT ROUTINE_SCHEMA, ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_NAME LIKE 'Bootstrap%'
+SELECT parent, Name FROM %Dictionary.CompiledMethod WHERE SqlProc = 1 AND parent %STARTSWITH 'MyApp'
+```
+
+**`-149 <PRIVATE METHOD>` is a different failure and does not look like one.** It means the name
+resolved but the method has no `[SqlProc]` keyword — the fix is on the class, not in the query.
+
 SQL-BO worked flow (child-table projections, invented system catalogs): see `business-operations`
 (section "Resolve real table names BEFORE the first query").
 

@@ -115,7 +115,7 @@ assert-scanning form reported `passed=2 failed=0` on the same class.
 Invoke from MCP:
 
 ```sql
-SELECT MyApp_Bootstrap_RunTestClass('MyApp.Tests.DT.Censo2Menus')
+SELECT MyApp.Bootstrap_RunTestClass('MyApp.Tests.DT.Censo2Menus')
 ```
 
 ### Qualifier syntax pitfall — booleans only
