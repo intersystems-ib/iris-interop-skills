@@ -116,6 +116,45 @@ Notes:
 - `required` = `'R'` (required) or `'O'` (optional). `ifrepeating` = `'0'` or `'1'`.
 - A `<MessageType>` linking the message-type name to its structure is required for DTLs that reference `PharmacySchema:ORM_O01` to resolve.
 
+### Where you place the segment in the definition decides how you address it — HIGH severity
+
+The `definition` string is not just a validity rule; it *is* the path grammar. Put the
+Z-segment at the top level and it is `ZAL:1`. Put the same segment inside a repeating
+group and that path stops resolving — and nothing tells you, because
+`ResolveSchemaTypeToDocType` still returns the DocType and the DTL still compiles.
+
+Measured on IRIS 2026.1, same message and same category, only the placement changed:
+
+| placement in `definition` | path that reads field 1 |
+|---|---|
+| top level — `…~}~}~[~ZAL~]~[~DSC~]` | `ZAL:1` |
+| inside the repeating order group — `…~[~{~OBX~…~}~]~[~{~ZAL~}~]~…` | `PIDgrpgrp(1).ORCgrp(1).ZAL(1):1` |
+
+Two traps in the nested form:
+
+- **The group prefix is mandatory.** Plain `ZAL:1` returns `""` with
+  `<Ens>ErrGeneral: No segment found at path 'ZAL'` — the same error a *missing* category
+  produces, so it reads like the schema never imported when in fact it imported fine.
+- **So is the repetition index.** `PIDgrpgrp(1).ORCgrp(1).ZAL:1` also fails; only
+  `ZAL(1)` resolves. A segment inside `{~…~}` is always subscripted.
+
+In a DTL this surfaces as a target property that is simply empty — `<assign>` with an
+unresolvable source path is not a compile error. Confirm the path before writing the
+transform:
+
+```objectscript
+// The segment is present either way — this is only a check that it parsed,
+// NOT the way to read it (that is the character-counting shortcut in disguise).
+Write msg.GetSegmentAt(5).Name, " ", msg.GetSegmentAt(5).GetValueAt(1), !
+// The real question: does the path you are about to put in the DTL resolve?
+Set tSC = $$$OK
+Write msg.GetValueAt("ZAL:1", , .tSC), " ", $System.Status.GetErrorText(tSC), !
+```
+
+Prefer top-level placement for a trailing Z-segment unless the partner's own
+specification genuinely nests it — the path stays short, and DTL authors in the visual
+editor get `ZAL:…` rather than a four-part group path.
+
 ### SqlProc wrapper
 
 ```objectscript
