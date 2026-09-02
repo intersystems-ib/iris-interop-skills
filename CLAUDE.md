@@ -59,3 +59,8 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   **This licenses not-adding, not shortening**: the probe measured *adding* 60 words, and whether
   removing words is symmetric is untested. Existing descriptions stay as they are until an arm
   measures the removal direction, and any description edit still needs a before/after (#126, #127).
+- **A grep gate guards a spelling, not the rule it is named after — say so at the gate** (#151).
+  Verifying a home-grown check in both directions (S5 was) proves that one known-bad input reaches
+  its failure path. It does not prove the check recognises every violation of the constraint. Where
+  the gate is narrower than the rule, write the gap next to the check, so a clean run cannot be read
+  as coverage it does not have.

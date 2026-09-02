@@ -118,6 +118,14 @@ for path in skills:
 
 check("S5", "no schema-less `SELECT Pkg_Class_Method(...)` SqlProc call (#141)", bad_sqlproc)
 
+# COVERAGE OF S5, stated here because a clean run reads like more than it is. This gate guards a
+# SPELLING in skill text; it does not guard the rule "a [SqlProc] call resolves". It cannot see a
+# wrong schema prefix, a name assembled at runtime, or a method that never got the [SqlProc]
+# keyword (-149). Verifying it in both directions — done, and it named bpl:205 when the defect was
+# reintroduced — proves one known-bad input reaches its failure path; it does not prove the check
+# recognises every violation of the constraint it is named after. S5 green == no skill DOCUMENTS
+# the -359 form. It is NOT evidence that any call in the corpus resolves.
+
 print("\n  label space in use (S4 enumerates rather than filters — see #131):")
 for lab, who in sorted(labels.items(), key=lambda kv: -len(kv[1])):
     print("    {:>3}x  {:<16} {}".format(

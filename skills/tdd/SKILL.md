@@ -100,6 +100,16 @@ namespace and the compiler result was read, and (b) its `%UnitTest.TestProductio
 via `iris_test`. Files on local disk are a scaffold, not a deliverable. Do not write a completion
 summary unless both happened in this session; if either is missing, say plainly which one and stop.
 
+Two rules about the numbers you quote for (b):
+
+- **They come from one final run, made after the last edit.** A green from earlier in the task went
+  stale the moment you recompiled — it measured a class that no longer exists. Never assemble one
+  result out of several runs.
+- **Record the baseline first, then hold at zero NEW failures.** Where the namespace already has red
+  tests, capture which ones fail *before* you start, verbatim. Green then means *no new failure*,
+  not an empty list — and repairing an unrelated pre-existing failure is scope creep: surface it,
+  don't quietly fix it.
+
 Stepping over 1-2-3 ("just write the DTL first") is the most common anti-pattern. Refuse it:
 
 > "I'll write the test first. It defines what 'done' means, and we'll know we're done when it passes."
@@ -145,6 +155,24 @@ against an implementation that silently drops every field.
 Write assertions only with macros that exist — there is no `$$$AssertNotNull` or `$$$AssertGreater`,
 and inventing one fails the compile with `MPP5610`. Mechanism: see `unit-tests` (section "Assertion
 macros — the inventory").
+
+### The checklist says what to write — one mutation says whether it worked
+
+A class can satisfy all five rows and still assert nothing that matters, and no amount of *reading*
+it tells you which. The detector is to break the implementation on purpose and watch the suite go
+red:
+
+1. Pick the logic carrying the most weight in what you just wrote.
+2. Introduce ONE plausible bug — flip a comparison, delete an `<assign>` from the DTL, remove a
+   `<when>` from the rule, return a constant from the BO method.
+3. `iris_compile`, then `iris_test` the same class. **It must fail** — and read *which* `Test*`
+   method failed. A mutant killed by an unrelated test says nothing about the behaviour you meant
+   to check.
+4. Restore the source, `iris_compile`, `iris_test`: green again before you continue.
+
+Three to five mutants is a normal pass; one is far better than none. A survivor is not a mutation
+problem, it is a missing assertion — add the test that kills it. Never skip step 4: an unrestored
+mutant sitting compiled in the namespace looks exactly like a component that was never built.
 
 ## What's testable in IRIS Interop — decision table
 
