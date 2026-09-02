@@ -163,12 +163,14 @@ it tells you which. The detector is to break the implementation on purpose and w
 red — **once per component, after the whole suite is green**, never inside the per-behaviour loop:
 
 1. Pick the logic carrying the most weight in what you just wrote.
-2. Introduce ONE plausible bug — flip a comparison, delete an `<assign>` from the DTL, remove a
-   `<when>` from the rule, return a constant from the BO method.
-3. `iris_compile`, then `iris_test` the same class. **It must fail** — and read *which* `Test*`
-   method failed. A mutant killed by an unrelated test says nothing about the behaviour you meant
-   to check.
-4. Restore the source, `iris_compile`, `iris_test`: green again before you continue.
+2. Introduce ONE plausible bug in the source file — flip a comparison, delete an `<assign>` from
+   the DTL, remove a `<when>` from the rule, return a constant from the BO method.
+3. **Push it with `iris_doc(mode=put, compile=true)`.** Editing `src/` does nothing on its own:
+   `iris_compile` takes a class NAME and recompiles what is already in the namespace, so a mutant
+   that was never `put` leaves the original class standing and the suite stays green.
+4. `iris_test` the same class. **It must fail** — and read *which* `Test*` method failed. A mutant
+   killed by an unrelated test says nothing about the behaviour you meant to check.
+5. Restore the source, `iris_doc(mode=put, compile=true)`, `iris_test`: green before you continue.
 
 **How many is decided by whether you watched RED, not by taste.** A mutation and an observed RED are
 the same proof at two different times — a test you saw fail before the code existed has already
@@ -176,10 +178,15 @@ proven it can fail. So: **one** mutant by default, spot-checking logic that arri
 GREEN/REFACTOR with no test driving it. **Three to five** where the class was green on its first
 run, because there the RED proof was never taken and this is the only detector left.
 
-Budget it honestly: a mutant is three MCP calls and the restore three more — six for the default
-pass, eighteen for the full one. A survivor is not a mutation problem, it is a missing assertion —
-add the test that kills it. Never skip step 4: an unrestored mutant sitting compiled in the
-namespace looks exactly like a component that was never built.
+Budget it honestly: with `compile=true` a mutant is two MCP calls and the restore two more — four
+for the default pass, twelve for the full one.
+
+A survivor is a missing assertion — but **confirm the mutant actually landed before calling it
+one.** `iris_doc(mode=get)` and look at the mutated line. A green suite over a `put` that did not
+happen is a result for a mutant that never ran, and on screen it is indistinguishable from a
+genuinely vacuous test — you would then add a test to kill a bug that was never there. Never skip
+the restore either: an unrestored mutant sitting compiled in the namespace looks exactly like a
+component that was never built.
 
 ## What's testable in IRIS Interop — decision table
 
