@@ -50,3 +50,12 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   reintroduce client/site names, internal document names, or real endpoints when
   editing — keep examples vendor-neutral (`Demo.*` package names, `example.org`
   hosts, generic descriptors).
+- **Don't add PROSE to a `description:`; trigger words are free** (#127). Measured on the
+  `alerting` probe cells, codex / `gpt-5.6-luna`, n=100 per cell: 60 filler words added to the
+  prose half cost **13.3 points of precision** (90.3% → 77.0%, p=0.006) and bought
+  **+0.7 points of recall** (90.3% → 91.0%, p=1.000). The identical 60 words added to the
+  `Triggers:` list cost nothing on either side (+1.7 precision, +3.7 recall, both null). Prose
+  broadens the match surface without improving it — a tax, not a dial.
+  **This licenses not-adding, not shortening**: the probe measured *adding* 60 words, and whether
+  removing words is symmetric is untested. Existing descriptions stay as they are until an arm
+  measures the removal direction, and any description edit still needs a before/after (#126, #127).
