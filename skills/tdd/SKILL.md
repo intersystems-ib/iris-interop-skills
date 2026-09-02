@@ -160,7 +160,7 @@ macros — the inventory").
 
 A class can satisfy all five rows and still assert nothing that matters, and no amount of *reading*
 it tells you which. The detector is to break the implementation on purpose and watch the suite go
-red:
+red — **once per component, after the whole suite is green**, never inside the per-behaviour loop:
 
 1. Pick the logic carrying the most weight in what you just wrote.
 2. Introduce ONE plausible bug — flip a comparison, delete an `<assign>` from the DTL, remove a
@@ -170,9 +170,16 @@ red:
    to check.
 4. Restore the source, `iris_compile`, `iris_test`: green again before you continue.
 
-Three to five mutants is a normal pass; one is far better than none. A survivor is not a mutation
-problem, it is a missing assertion — add the test that kills it. Never skip step 4: an unrestored
-mutant sitting compiled in the namespace looks exactly like a component that was never built.
+**How many is decided by whether you watched RED, not by taste.** A mutation and an observed RED are
+the same proof at two different times — a test you saw fail before the code existed has already
+proven it can fail. So: **one** mutant by default, spot-checking logic that arrived during
+GREEN/REFACTOR with no test driving it. **Three to five** where the class was green on its first
+run, because there the RED proof was never taken and this is the only detector left.
+
+Budget it honestly: a mutant is three MCP calls and the restore three more — six for the default
+pass, eighteen for the full one. A survivor is not a mutation problem, it is a missing assertion —
+add the test that kills it. Never skip step 4: an unrestored mutant sitting compiled in the
+namespace looks exactly like a component that was never built.
 
 ## What's testable in IRIS Interop — decision table
 
