@@ -153,6 +153,7 @@ Switch to UPSERT (`INSERT ... ON CONFLICT (paciente_id) DO NOTHING` / `DO UPDATE
 
 ## Common pitfalls
 
+- **`##class(Pkg.BO.X).%New()` to test the operation directly** → a BO does not instantiate. `Ens.BusinessOperation` declares no `%New`; a subclass returns `""`, and the error surfaces a line later as `<INVALID OREF>`. The adapter beside it *does* instantiate, which makes the BO look like the broken one. See `tdd` §"Pitfalls specific to Interop TDD".
 - **Concatenating values into SQL strings** instead of parameterizing → injection + escaping bugs.
 - **Writing SQL from an assumed table name, then guessing again on `-30`** → see §"Resolve real table names BEFORE the first query" above.
 - **Forgetting `MessageMap`** → every request hits the default `OnMessage` method which then has to dispatch by type manually.

@@ -50,6 +50,11 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 > With a by-reference argument (`$G(m.GetValueAt(p,m.Separators,.sc))`) the same mistake surfaces as
 > `<SYNTAX>` instead, which looks like a typo rather than a category error.
 
+> **`<METHOD DOES NOT EXIST>` on a stream = you reached for the `%File` API.** `%Stream.FileCharacter`
+> has **no `Open()` and no `Save()`** — those are `%File` and `%Save` respectively. Verified on IRIS
+> 2026.1: `.Open()` and `.Save()` both abort; `.LinkToFile()` and `.%Save()` are the real members.
+> The class instantiates fine with `%New()`, so the failure lands on the second line, not the first.
+
 > **Always pass `namespace`.** It is documented as optional on these tools and it is not: it
 > resolves `Ens.Director` / `Ens_Config.*` in whatever namespace the connection defaults to, and if
 > that one is not interop-enabled the call dies with an error that never names the cause —

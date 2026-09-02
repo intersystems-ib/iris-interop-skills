@@ -443,6 +443,15 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
 
 - **Extending `%UnitTest.TestCase` instead of `%UnitTest.TestProduction`** — you lose everything the superclass provides and reinvent it by hand. Nor is `%UnitTest.TestCase` an escape hatch for a compile error: `Extends %UnitTest.TestProduction` and `Parameter PRODUCTION` are fixed points — fix the error, never remove the parameter or change the superclass to silence it. See §"Baseline class" above.
 - **Omitting `Parameter PRODUCTION` (or leaving it `= ""`)** — `#5001` at compile time; the class never exists to any runner. See §"Required parameters" above.
+- **`%New()`-ing a Business Service or Operation to test it directly — it does not instantiate.** The cheap move from conventional software is to new the host up and call `OnMessage()` with a request. It cannot work: `Ens.BusinessOperation` and `Ens.BusinessService` do not declare `%New`, and a concrete subclass returns `""` rather than erroring — so the failure arrives a line later, as `<INVALID OREF>` that never mentions the host. Measured on IRIS 2026.1:
+
+  | `##class(…).%New()` | result |
+  |---|---|
+  | `Ens.BusinessOperation`, `Ens.BusinessService` | `<METHOD DOES NOT EXIST>` |
+  | `Ens.BusinessProcess` | returns `""` — `$IsObject` = 0, no error |
+  | `EnsLib.File.OutboundAdapter` and other adapters | a real object, `$IsObject` = 1 |
+
+  **The adapter instantiating is the trap.** `ad=1` printed beside `bo=0` reads as "objects work here, so my class is broken", and sends you to re-inspect the one thing that was fine. A BS/BO is exercised only by the production framework: run it through `%UnitTest.TestProduction` + `iris_test`, or send it a message with the `deploy-smoke-test` agent. If you want to unit-test logic in isolation, put that logic in a plain `%RegisteredObject` helper the host delegates to, and test the helper.
 - **Stubbing the adapter in BO tests.** In conventional software you'd unit-test the BO method with a mocked adapter — in IRIS Interop that's an anti-pattern. The adapter boundary is exactly where the defects you care about live (auth, classpath, type marshalling, encoding, timeouts). Stubs make the test green while the real thing breaks. Use a real adapter against a real test endpoint.
 - **Forgetting to override `TestControl()`** — TestProduction will start/stop your production every time you `Run()`. Override to no-op when the production is managed externally.
 - **Forgetting to seed `..BaseLogId`** — `GetEventLog` returns nothing if `BaseLogId` is empty. Seed it in `OnBeforeAllTests` from `MAX(ID) FROM Ens_Util.Log`.
