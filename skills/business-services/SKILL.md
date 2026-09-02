@@ -123,6 +123,7 @@ The user-stated principle: a BS that needs a setting should refuse to start if t
 
 ## Common pitfalls
 
+- **`##class(Pkg.BS.X).%New()` to test the service directly** → a BS does not instantiate. `Ens.BusinessService` declares no `%New`; a subclass returns `""`, and the error surfaces a line later as `<INVALID OREF>`. See `tdd` §"Pitfalls specific to Interop TDD".
 - **One BS handling multiple HL7 schema versions** → not allowed; each BS is one schema. Create separate BSes for v2.3 and v2.5.
 - **Hand-rolled CSV parser** → use Record Mapper. Hand-rolled parsing fails on quoted fields, embedded delimiters, encoding edge cases.
 - **Sending Sync when Async would do** → blocks pool slots, kills throughput.
