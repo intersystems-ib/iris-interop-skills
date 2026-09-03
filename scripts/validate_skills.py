@@ -22,9 +22,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRIGGER_LABEL = re.compile(r"\bTriggers?\b[^:\n]{0,10}:", re.I)
 
 failures = []
+checks_run = 0
 
 
 def check(cid, what, bad, detail=lambda x: x):
+    global checks_run
+    checks_run += 1
     if bad:
         failures.append(cid)
         print("  FAIL  {}  {}".format(cid, what))
@@ -126,6 +129,43 @@ check("S5", "no schema-less `SELECT Pkg_Class_Method(...)` SqlProc call (#141)",
 # recognises every violation of the constraint it is named after. S5 green == no skill DOCUMENTS
 # the -359 form. It is NOT evidence that any call in the corpus resolves.
 
+# S6 -- the shipped hook count is DERIVED here rather than trusted (#167).
+#
+# Both descriptions said "Ships 8 hooks" and enumerated 1 + 2 + 5, silently omitting the
+# conformance-stop-gate -- the only BLOCKING Stop hook in the package, and the single most
+# surprising thing installing this plugin does. It was hand-maintained, so it went stale the
+# release the Stop gate was added and nothing noticed for nine versions.
+#
+# The check is the arithmetic, not the wording: whatever number the description states must
+# equal the number of hook COMMANDS in hooks.json. Reword freely; the count cannot drift.
+import json as _json
+
+with open(os.path.join(ROOT, "hooks", "hooks.json")) as fh:
+    _hooks = _json.load(fh).get("hooks", {})
+_actual = sum(len(e.get("hooks", [])) for entries in _hooks.values() for e in entries)
+
+_stated = []
+for _f in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
+    with open(os.path.join(ROOT, _f)) as fh:
+        _d = _json.load(fh)
+    _descs = ([_d["description"]] if "description" in _d else []) + \
+             [_p.get("description", "") for _p in _d.get("plugins", [])]
+    for _x in _descs:
+        _m = re.search(r"Ships (\d+) hooks", _x)
+        if _m:
+            _stated.append((_f, int(_m.group(1))))
+
+bad_hookcount = ["{} says {} hooks; hooks.json has {} ({})".format(
+                     _f, _n, _actual,
+                     ", ".join("{} {}".format(len([h for e in _v for h in e.get("hooks", [])]), _k)
+                               for _k, _v in sorted(_hooks.items())))
+                 for _f, _n in _stated if _n != _actual]
+if not _stated:
+    bad_hookcount.append("no shipped description states a hook count — the claim this check "
+                         "guards has vanished, which is a silent pass, not a clean one")
+
+check("S6", "shipped descriptions state the real hook count (#167)", bad_hookcount)
+
 print("\n  label space in use (S4 enumerates rather than filters — see #131):")
 for lab, who in sorted(labels.items(), key=lambda kv: -len(kv[1])):
     print("    {:>3}x  {:<16} {}".format(
@@ -140,6 +180,9 @@ if len(labels) > 1:
           "  description edits need a before/after (#126, #127). Any ANALYSIS of trigger\n"
           "  content must accept every form above; use the S4 regex, never a literal.")
 
+# The count is derived, not typed. It used to be a literal 5 -- the same hand-maintained-number
+# defect S6 exists to catch, sitting in the summary line of the gate that now catches it.
 print("\nSkills: {}\n".format(
-    "all {} checks pass".format(5) if not failures else "{} FAILED".format(", ".join(failures))))
+    "all {} checks pass".format(checks_run) if not failures
+    else "{} FAILED".format(", ".join(failures))))
 sys.exit(1 if failures else 0)
