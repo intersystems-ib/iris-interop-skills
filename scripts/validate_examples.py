@@ -128,6 +128,52 @@ def doc_headings() -> set[str]:
 # Tier 1 -- structural
 # --------------------------------------------------------------------------
 
+FIXTURES = Path(__file__).with_name("atelier_fixtures.json")
+
+
+def tier0() -> bool:
+    """Check the INSTRUMENT before measuring the bank with it.
+
+    Tier 2's verdict is only as good as `parse_failures`, and for one whole family of IRIS
+    errors that verdict was silently inverted: the gate printed "compiled clean" for a class
+    IRIS had refused (#159). A green tier 2 could not have revealed that -- it IS the thing
+    that was wrong -- so the parser gets its own red case, from real captured payloads.
+
+    No IRIS and no network: these are frozen responses, so this runs in CI on every PR while
+    the live `--compile` job runs only where an instance exists.
+
+    WHAT THESE FIXTURES DO AND DO NOT PIN DOWN, established by mutating the parser and watching
+    which case went red -- not by reading it:
+
+      dependency_5373           carried by the params scan OR the quoted-name extraction
+      dependency_console_only   carried by the quoted-name extraction OR `Skipping class`
+      unattributed              carried by the reconciliation ALONE
+
+    So the first two survive any SINGLE mechanism being removed and only die when two are
+    (mutants M1, M2, M4, M5, M7 all survived; M6 killed both). That redundancy is deliberate
+    -- the original defect was three paths failing on the same input at once -- but it means
+    a green here does NOT prove each mechanism is individually live. The reconciliation is the
+    exception and the one that matters: it is singly covered, and its mutant dies.
+    """
+    print("Tier 0 -- the compile-result parser\n")
+    rep = Report()
+    try:
+        cases = json.loads(read(FIXTURES))
+    except (OSError, ValueError) as exc:
+        print(f"  FAIL  fixtures unreadable: {exc}")
+        return False
+
+    for name, case in cases.items():
+        if name.startswith("_"):
+            continue
+        got = sorted(parse_failures(case["payload"], set(case["staged"])))
+        want = sorted(case["expect"])
+        rep.check(f"P-{name}", f"{name} -> {want or 'clean'}",
+                  [] if got == want else [f"expected {want}, got {got}"])
+
+    return rep.done("Tier 0")
+
+
 def tier1() -> bool:
     print("Tier 1 -- structural\n")
     r = Report()
@@ -484,7 +530,8 @@ def main() -> int:
     if args.preflight:
         return 0 if preflight() else 1
 
-    ok = tier1()
+    ok = tier0()
+    ok = tier1() and ok
     if args.compile:
         # A failed preflight means the environment is wrong, not the bank. Say which,
         # and do not stage 34 classes into an instance that cannot compile them.
