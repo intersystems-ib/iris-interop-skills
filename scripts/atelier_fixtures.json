@@ -174,5 +174,25 @@
         "Detected 1 errors during compilation in 0.003s."
       ]
     }
+  },
+  "detected_zero": {
+    "_origin": "derived: the real clean-compile console with a 'Detected 0 errors' line spliced in from the real failing-compile console (count changed 1 -> 0)",
+    "_why": "Guards the reconciliation against the OPPOSITE error. The TESTSUITE session shipped `Detected \\d+ error` as their equivalent check and found by mutation that it matches 'Detected 0 errors', so a clean compile printing that line would be reported FAILED. Ours reads the integer and tests truthiness, so it is already correct -- this fixture exists so that a later 'simplification' to a bare regex match cannot pass. Note IRIS prints 'Compilation finished successfully' on a clean run here and no Detected line at all was observed with 0; the shape is defended against, not claimed to occur.",
+    "staged": [
+      "ZZProbe.Good"
+    ],
+    "expect": [],
+    "payload": {
+      "status": {
+        "errors": []
+      },
+      "console": [
+        "",
+        "Compilation started on 09/03/2026 09:28:36 with qualifiers 'cuk'",
+        "Compiling class ZZProbe.Good",
+        "Compiling routine ZZProbe.Good.1",
+        "Detected 0 errors during compilation in 0.002s."
+      ]
+    }
   }
 }
