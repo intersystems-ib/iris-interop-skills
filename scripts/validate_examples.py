@@ -291,13 +291,39 @@ def preflight() -> bool:
     return True
 
 
+UNATTRIBUTED = "<unattributed compile errors>"
+
+
+def _class_candidates(text: str):
+    """Every class name a diagnostic mentions, member suffixes stripped.
+
+    A #5373 reads: Class 'A', used by 'B:property:P', does not exist. **A is the class
+    that is MISSING and B is the class that FAILED.** Yield both and let `known` decide
+    which one was staged — picking one position is how this went wrong before.
+    """
+    for raw in re.findall(r"'([^']+)'", text):
+        yield raw.split(":")[0]
+    for raw in re.findall(r"([A-Za-z0-9_.%]+)\.cls", text):
+        yield raw
+
+
 def parse_failures(result: dict, known: set[str]) -> dict[str, str]:
     """Pull class -> first error out of an Atelier compile response.
 
-    Errors arrive in `status.errors` as dicts whose `params[0]` names the routine
-    and whose `error` text embeds `<Class>.cls`. The console echoes them too. Both
-    are scanned, because a class-level failure and a routine-level failure do not
-    always surface in the same place.
+    VERIFIED against live IRIS 2026.1 on a two-class batch, one deliberately broken.
+    The previous version of this function returned {} for that batch — i.e. reported
+    "all classes compile" for a class IRIS had refused — on three independent counts:
+
+      1. It read `params[0]` as the failing class. For the whole dependency family of
+         errors `params[0]` is the class that is ABSENT, which is never in `known`, so
+         it was dropped. The failing class sits in `params[1]` as `B:property:P`.
+      2. The `\\.cls` regex found nothing: Atelier diagnostics name classes bare and
+         quoted, not with a file extension.
+      3. The console line that states the outcome is `Skipping class B`, which carries
+         no ERROR token and so was `continue`d past by the ERROR filter.
+
+    Attribution is still best-effort — IRIS's error vocabulary is larger than anything
+    verified here — so the GUARANTEE does not rest on it; see the reconciliation below.
     """
     failed: dict[str, str] = {}
 
@@ -308,19 +334,51 @@ def parse_failures(result: dict, known: set[str]) -> dict[str, str]:
     for err in (result.get("status") or {}).get("errors") or []:
         text = err.get("error", "") if isinstance(err, dict) else str(err)
         params = err.get("params") or [] if isinstance(err, dict) else []
-        if params and isinstance(params[0], str):
-            note(params[0], text)
-        for cn in re.findall(r"([A-Za-z0-9_.%]+)\.cls", text):
+        for p in params:
+            if isinstance(p, str) and p:
+                note(p.split(":")[0], text)
+        for cn in _class_candidates(text):
             note(cn, text)
 
-    for line in result.get("console") or []:
-        if "ERROR" not in line.upper():
-            continue
-        for cn in re.findall(r"([A-Za-z0-9_.%]+)\.cls", line):
-            note(cn, line)
-        m = re.search(r"compiling class '([\w.%]+)'", line)
+    console = result.get("console") or []
+    for line in console:
+        # IRIS's own statement that a class did not compile. It carries no ERROR token,
+        # so it must be matched BEFORE the ERROR filter below, not after it.
+        m = re.search(r"Skipping class ([A-Za-z0-9_.%]+)", line)
         if m:
             note(m.group(1), line)
+        if "ERROR" not in line.upper():
+            continue
+        for cn in _class_candidates(line):
+            note(cn, line)
+        m = re.search(r"compiling class '([\w.%]+)'", line, re.IGNORECASE)
+        if m:
+            note(m.group(1), line)
+
+    # RECONCILIATION -- the actual guarantee.
+    #
+    # Every check above is a pattern match against error text, and a pattern match only
+    # ever covers the shapes someone thought of. IRIS independently reports HOW MANY
+    # errors it detected, so use that as the oracle: a non-zero count with nothing
+    # attributed is an unattributed failure and must fail the run LOUDLY. Returning {}
+    # there is precisely what let a class print "Skipping class X" and be recorded clean.
+    #
+    # Scope, stated so a clean run is not read as more than it is: this catches TOTAL
+    # attribution failure only. Errors do not map 1:1 to classes (one class easily
+    # produces several), so a partial miss cannot be detected by counting -- but a
+    # partial miss still leaves `failed` non-empty, which already fails the build and
+    # puts a human in front of the console. The silent-green case is the one closed here.
+    detected = 0
+    for line in console:
+        m = re.search(r"Detected (\d+) error", line)
+        if m:
+            detected = max(detected, int(m.group(1)))
+    if detected and not failed:
+        failed[UNATTRIBUTED] = (
+            f"IRIS detected {detected} compile error(s) that could not be attributed to "
+            "any staged class. Read the console below before trusting this run: "
+            + " | ".join(l for l in console if l.strip())[:400]
+        )
 
     return failed
 
