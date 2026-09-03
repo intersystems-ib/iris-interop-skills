@@ -104,6 +104,19 @@ def rec(off, tool, inp):
                        "message": {"content": [{"type": "tool_use", "name": tool, "input": inp}]}})
 
 
+def rec_id(off, tool, inp, tuid):
+    return json.dumps({"timestamp": iso(off),
+                       "message": {"content": [{"type": "tool_use", "name": tool,
+                                                "input": inp, "id": tuid}]}})
+
+
+def res(off, tuid, content, is_error=False):
+    b = {"type": "tool_result", "tool_use_id": tuid, "content": content}
+    if is_error:
+        b["is_error"] = True
+    return json.dumps({"timestamp": iso(off), "message": {"content": [b]}})
+
+
 def transcript(lines):
     fd, p = tempfile.mkstemp(suffix=".jsonl")
     with os.fdopen(fd, "w") as fh:
@@ -179,6 +192,44 @@ clear(t)
 check("stop_hook_active short-circuits", "ALLOW", stop(t, work, stop_hook_active=True))
 
 check("unreadable transcript", "ALLOW", stop(transcript(["{not json"]), work))
+
+# --------------------------------------------------------------------------- #157
+# A put that src_before_iris BLOCKED is not a class written into IRIS. The two
+# "must still fire" rows are the load-bearing half: excluding every is_error
+# would turn this false positive into a FALSE NEGATIVE and switch CR-12 off for
+# exactly the orphaned work it exists to catch. Bodies are the real shapes taken
+# from 37 transcript specimens, not invented ones.
+print("\n#157  conformance_stop_gate — a put counts only if it reached IRIS")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+BLOCKED = ("Source-of-truth: `Demo.BO.Ghost` would exist only in the IRIS namespace. "
+           "No file for it was found under this project, and the namespace is not "
+           "version-controlled, not reviewable, and does not survive the instance.")
+STORAGE = json.dumps({"error": "The class content includes an explicit Storage definition. "
+                               "Writing it via iris_doc would strip the Storage block."})
+# The real C shape, key-for-key from all 9 specimens in the corpus: it carries an
+# "error" key ALONGSIDE the compile markers. An invented fixture without "error"
+# passes for the wrong reason -- it falls through the final return instead of
+# exercising REACHED_IRIS_KEYS, and a mutant that deletes that check survives.
+COMPILE_FAIL = json.dumps({"compile_console": ["Compiling class Demo.BO.Ghost",
+                                               "Skipping class Demo.BO.Ghost"],
+                           "compile_errors": ["ERROR #5373: Class 'X' does not exist"],
+                           "compiled": False, "open_uri": "isfs://APP/Demo.BO.Ghost.cls",
+                           "storage_stripped": False,
+                           "error": "Compilation failed", "name": "Demo.BO.Ghost.cls"})
+OK_PUT = [{"type": "text", "text": json.dumps(
+    {"name": "Demo.BO.Ghost.cls", "open_uri": "isfs://APP/Demo.BO.Ghost.cls",
+     "storage_stripped": False, "success": True})}]
+
+for label, body, err, want in [
+        ("A  src_before_iris blocked the put", BLOCKED,      True,  "ALLOW"),
+        ("B  MCP refused it (storage guard)",  STORAGE,      True,  "ALLOW"),
+        ("C  stored, compile failed",          COMPILE_FAIL, True,  "BLOCK/orphan"),
+        ("D  put succeeded",                   OK_PUT,       False, "BLOCK/orphan")]:
+    t = transcript([rec_id(-300, "iris_doc", PUT_GHOST, "tu_1"),
+                    res(-299, "tu_1", body, err)])
+    clear(t)
+    check(label, want, stop(t, work))
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
