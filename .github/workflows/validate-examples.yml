@@ -16,12 +16,14 @@ on:
       - 'BestPractices/**'
       - 'scripts/validate_examples.py'
       - 'scripts/examples_baseline.json'
+      - 'scripts/atelier_fixtures.json'
       - '.github/workflows/validate-examples.yml'
   pull_request:
     paths:
       - 'BestPractices/**'
       - 'scripts/validate_examples.py'
       - 'scripts/examples_baseline.json'
+      - 'scripts/atelier_fixtures.json'
       - '.github/workflows/validate-examples.yml'
   workflow_dispatch:
 

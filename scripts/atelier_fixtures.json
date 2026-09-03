@@ -1,0 +1,178 @@
+{
+  "_README": [
+    "Real Atelier /action/compile?flags=cuk responses, captured from live IRIS 2026.1 (ns APP)",
+    "on 2026-09-03 by staging deliberately broken classes. Consumed by tier 0 in",
+    "validate_examples.py, which checks the INSTRUMENT before the bank is measured with it.",
+    "",
+    "Every case says how it was obtained. 'captured' == verbatim from IRIS. 'derived' == a",
+    "captured payload with named fields removed to model a shape observed on another call",
+    "path. Nothing here is hand-written: an invented fixture is how a mutant survived in",
+    "test_hooks.py (#157), because it passed for a reason the real payload would not have."
+  ],
+  "dependency_5373": {
+    "_origin": "captured",
+    "_why": "The regression case. OLD parse_failures returned {} here and the gate printed 'compiled clean' for a class IRIS had skipped. params[0] is the ABSENT class (ZZProbe.DoesNotExistAnywhere), never in `staged`; the failing class is params[1] as 'ZZProbe.Bad:property:P'.",
+    "staged": [
+      "ZZProbe.Good",
+      "ZZProbe.Bad"
+    ],
+    "expect": [
+      "ZZProbe.Bad"
+    ],
+    "payload": {
+      "status": {
+        "errors": [
+          {
+            "error": "ERROR #5373: Class 'ZZProbe.DoesNotExistAnywhere', used by 'ZZProbe.Bad:property:P', does not exist",
+            "code": 5373,
+            "domain": "%ObjectErrors",
+            "id": "PredecessorClassDoesNotExist",
+            "params": [
+              "ZZProbe.DoesNotExistAnywhere",
+              "ZZProbe.Bad:property:P",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ]
+          }
+        ]
+      },
+      "console": [
+        "",
+        "Compilation started on 09/03/2026 09:18:51 with qualifiers 'cuk'",
+        "ERROR #5373: Class 'ZZProbe.DoesNotExistAnywhere', used by 'ZZProbe.Bad:property:P', does not exist",
+        "Skipping class ZZProbe.Bad",
+        "Compiling class ZZProbe.Good",
+        "Compiling routine ZZProbe.Good.1",
+        "Detected 1 errors during compilation in 0.003s."
+      ]
+    }
+  },
+  "syntax_5475": {
+    "_origin": "captured",
+    "_why": "A DIFFERENT failure family, kept to prove the fix did not narrow to one shape. Stated honestly: the OLD code already handled this one, because the console line 'ERROR: ZZProbe.BadSyn.cls(Oops+3)' carries a .cls the old regex matched. It is a control, not a regression.",
+    "staged": [
+      "ZZProbe.Good",
+      "ZZProbe.BadSyn"
+    ],
+    "expect": [
+      "ZZProbe.BadSyn"
+    ],
+    "payload": {
+      "status": {
+        "errors": [
+          {
+            "error": "ERROR #5475: Error compiling routine: ZZProbe.BadSyn.1.  Errors:  ERROR: ZZProbe.BadSyn.cls(Oops+3) #1010: Missing right parenthesis : '}' : Offset:9 [Oops+2^ZZProbe.BadSyn.1]\r\n  > ERROR #5030: An error occurred while compiling class 'ZZProbe.BadSyn'",
+            "code": 5475,
+            "domain": "%ObjectErrors",
+            "id": "RoutineCompilationErrorWithInfo",
+            "params": [
+              "ZZProbe.BadSyn.1",
+              "ERROR: ZZProbe.BadSyn.cls(Oops+3) #1010: Missing right parenthesis : &#39;}&#39; : Offset:9 [Oops+2^ZZProbe.BadSyn.1]",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "errors": [
+              {
+                "error": "ERROR #5030: An error occurred while compiling class 'ZZProbe.BadSyn'",
+                "code": 5030,
+                "domain": "%ObjectErrors",
+                "id": "ErrorCompilingClass",
+                "params": [
+                  "ZZProbe.BadSyn"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "console": [
+        "",
+        "Compilation started on 09/03/2026 09:18:52 with qualifiers 'cuk'",
+        "Compiling 2 classes",
+        "Compiling class ZZProbe.BadSyn",
+        "Compiling class ZZProbe.Good",
+        "Compiling routine ZZProbe.Good.1",
+        "Compiling routine ZZProbe.BadSyn.1",
+        "ERROR: ZZProbe.BadSyn.cls(Oops+3) #1010: Missing right parenthesis : '}' : Offset:9 [Oops+2^ZZProbe.BadSyn.1]",
+        " TEXT:  Quit x }",
+        "Detected 1 errors during compilation in 0.004s."
+      ]
+    }
+  },
+  "all_valid": {
+    "_origin": "captured",
+    "_why": "Negative control. A fix that reddens everything is not a fix.",
+    "staged": [
+      "ZZProbe.Good",
+      "ZZProbe.Good2"
+    ],
+    "expect": [],
+    "payload": {
+      "status": {
+        "errors": []
+      },
+      "console": [
+        "",
+        "Compilation started on 09/03/2026 09:18:52 with qualifiers 'cuk'",
+        "Compiling 2 classes",
+        "Compiling class ZZProbe.Good2",
+        "Compiling class ZZProbe.Good",
+        "Compiling routine ZZProbe.Good2.1",
+        "Compiling routine ZZProbe.Good.1",
+        "Compilation finished successfully in 0.004s."
+      ]
+    }
+  },
+  "dependency_console_only": {
+    "_origin": "derived: captured dependency_5373 with status.errors emptied",
+    "_why": "The TESTSUITE session saw #5373 arrive with status.errors EMPTY through iist's client, while the raw Atelier path here populates it on both passes. Same error, different shape by call path -- so attribution must survive on console alone.",
+    "staged": [
+      "ZZProbe.Good",
+      "ZZProbe.Bad"
+    ],
+    "expect": [
+      "ZZProbe.Bad"
+    ],
+    "payload": {
+      "status": {
+        "errors": []
+      },
+      "console": [
+        "",
+        "Compilation started on 09/03/2026 09:18:51 with qualifiers 'cuk'",
+        "ERROR #5373: Class 'ZZProbe.DoesNotExistAnywhere', used by 'ZZProbe.Bad:property:P', does not exist",
+        "Skipping class ZZProbe.Bad",
+        "Compiling class ZZProbe.Good",
+        "Compiling routine ZZProbe.Good.1",
+        "Detected 1 errors during compilation in 0.003s."
+      ]
+    }
+  },
+  "unattributed": {
+    "_origin": "derived: captured console reduced to the lines that name no class",
+    "_why": "Guards the RECONCILIATION, which is the actual guarantee. Attribution is pattern-matching and can only cover shapes someone thought of; IRIS states how many errors it found, so a non-zero count with nothing attributed must fail loudly instead of returning {}.",
+    "staged": [
+      "ZZProbe.Good",
+      "ZZProbe.Bad"
+    ],
+    "expect": [
+      "<unattributed compile errors>"
+    ],
+    "payload": {
+      "status": {
+        "errors": []
+      },
+      "console": [
+        "",
+        "Compilation started on 09/03/2026 09:17:56 with qualifiers 'cuk'",
+        "Detected 1 errors during compilation in 0.003s."
+      ]
+    }
+  }
+}
