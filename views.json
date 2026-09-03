@@ -91,9 +91,13 @@
     "2026-09-01": {
       "count": 10,
       "uniques": 6
+    },
+    "2026-09-02": {
+      "count": 1,
+      "uniques": 1
     }
   },
-  "total_count": 112,
-  "daily_uniques_sum": 32,
-  "updated_at": "2026-09-02T07:56:52+00:00"
+  "total_count": 113,
+  "daily_uniques_sum": 33,
+  "updated_at": "2026-09-03T08:05:37+00:00"
 }
