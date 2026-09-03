@@ -154,6 +154,18 @@ def tier0() -> bool:
     -- the original defect was three paths failing on the same input at once -- but it means
     a green here does NOT prove each mechanism is individually live. The reconciliation is the
     exception and the one that matters: it is singly covered, and its mutant dies.
+
+    AND THE REDUNDANCY IS NOT SYMMETRIC IN PRACTICE. A batch document that succeeds AND compiles
+    a table clears `status.errors` for the whole batch (isolated by experiment: same batch, same
+    #5373, ok classes as %RegisteredObject -> populated, as %Persistent -> empty). 6 of the bank's
+    34 classes are persistent, so EVERY real tier 2 run returns `status.errors == []` and the
+    status-side scanning contributes nothing. Verified end to end with two real bank classes plus
+    one broken class: status.errors=0, failure still attributed from the console.
+
+    So for the bank this gate exists to guard, `Skipping class` and the console scan are not a
+    backup for the status path -- they ARE the path, and the reconciliation is the floor beneath
+    them. Read the mutation map above with that in mind: M2 survives the fixtures, but removing
+    `Skipping class` in the real single-error-family case would leave only the quoted-name match.
     """
     print("Tier 0 -- the compile-result parser\n")
     rep = Report()
