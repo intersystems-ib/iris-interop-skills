@@ -273,6 +273,71 @@ def latch_record(transcript, signature):
         pass  # a latch we cannot write costs a repeat, never a crash
 
 
+# --- #157: a put that never reached IRIS is not a write -----------------------
+#
+# The gate used to match on the CALL and never on its outcome, so an
+# iris_doc(mode=put) that src_before_iris.py BLOCKED was counted as a class
+# written into IRIS -- and CR-12's remedy then told the session to create a
+# source file for a class that deliberately does not exist. The correct
+# behaviour (respecting the sibling gate) was punished, and the prescribed fix
+# manufactured the very evidence the gate asks for.
+#
+# Four result shapes appear in real transcripts (37 specimens, 2026-09-03):
+#
+#   A  PreToolUse block   is_error, content is this plugin's own prose
+#                         ("Source-of-truth: ... would exist only in ...")   NOT written
+#   B  MCP refusal        is_error, {"error": "...explicit Storage definition..."}  NOT written
+#   C  compile failed     is_error, {"compile_console": [...], "compile_errors": [...]}
+#                         -> the document IS stored, only the compile was skipped.  WRITTEN
+#   D  success            no is_error, {"open_uri": ..., "storage_stripped": ...}   WRITTEN
+#
+# C is why "is_error means not written" would be wrong: it would switch CR-12 off
+# for orphaned work that really is sitting in the namespace -- turning a false
+# positive into a false negative, which is the failure this criterion exists for.
+#
+# So the test is not "did it error" but "is there positive evidence it never got
+# to IRIS". Anything unrecognised, unparseable, or missing a result still counts,
+# so this can only ever REMOVE a false positive.
+
+# Keys only present once iris_doc has actually written and/or compiled.
+# Matched as JSON KEYS, never as substrings of prose -- a substring gate here
+# would guard a spelling rather than the outcome.
+REACHED_IRIS_KEYS = ("compile_console", "compile_errors", "compiled",
+                     "open_uri", "storage_stripped")
+
+
+def _result_text(block):
+    c = block.get("content")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        return "\n".join(b["text"] for b in c
+                          if isinstance(b, dict) and isinstance(b.get("text"), str))
+    return ""
+
+
+def put_reached_iris(block):
+    """False only with positive evidence the put never reached the namespace."""
+    if not isinstance(block, dict):
+        return True                       # no result recorded -> unchanged behaviour
+    if not block.get("is_error"):
+        return True                       # D
+    txt = _result_text(block).strip()
+    if not txt:
+        return True
+    try:
+        payload = json.loads(txt)
+    except Exception:
+        return False                      # A -- prose, so nothing was stored
+    if not isinstance(payload, dict):
+        return True
+    if any(k in payload for k in REACHED_IRIS_KEYS):
+        return True                       # C
+    if "error" in payload:
+        return False                      # B
+    return True
+
+
 def put_signature(put):
     return hashlib.sha1("\n".join(sorted(put)).encode("utf-8")).hexdigest()
 
@@ -288,6 +353,7 @@ def scan_transcript(path, cutoff=0.0):
     put, reviewed = set(), False
     files = transcript_set(path)
     opened = 0
+    results, events = {}, []          # #157: correlate each put with its outcome
 
     for fpath in files:
         try:
@@ -310,7 +376,14 @@ def scan_transcript(path, cutoff=0.0):
                 if not isinstance(content, list):
                     continue
                 for block in content:
-                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "tool_result":
+                        rid = block.get("tool_use_id")
+                        if rid:
+                            results[rid] = block
+                        continue
+                    if block.get("type") != "tool_use":
                         continue
                     tool = str(block.get("name") or "")
                     inp = block.get("input") or {}
@@ -333,7 +406,7 @@ def scan_transcript(path, cutoff=0.0):
                             continue
                         if GENERATED.search(name):
                             continue
-                        put.add(strip_cls(name))
+                        events.append(("put", block.get("id"), strip_cls(name)))
 
                     elif mode == "delete":
                         # Staging scratch classes and deleting them afterwards is a legitimate
@@ -342,12 +415,23 @@ def scan_transcript(path, cutoff=0.0):
                         # namespace, and the gate fires on the careful case.
                         for n in ([inp.get("name")] + list(inp.get("names") or [])):
                             if isinstance(n, str) and n.strip():
-                                put.discard(strip_cls(n.strip()))
+                                events.append(("del", None, strip_cls(n.strip())))
+
+    # replay in encounter order so a later delete still cancels an earlier put
+    skipped = 0
+    for kind, tid, cname in events:
+        if kind == "del":
+            put.discard(cname)
+        elif put_reached_iris(results.get(tid)):
+            put.add(cname)
+        else:
+            skipped += 1
 
     if not opened:
         _trace("transcript_unreadable", transcript=path, candidates=len(files))
         return put, True  # cannot read anything -> never block on a hook's blind spot
-    _trace("scanned", transcripts=opened, subagents=len(files) - 1, puts=len(put), reviewed=reviewed)
+    _trace("scanned", transcripts=opened, subagents=len(files) - 1, puts=len(put),
+           blocked_puts=skipped, reviewed=reviewed)
     return put, reviewed
 
 
