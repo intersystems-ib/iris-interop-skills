@@ -131,7 +131,7 @@
   },
   "dependency_console_only": {
     "_origin": "derived: captured dependency_5373 with status.errors emptied",
-    "_why": "The TESTSUITE session saw #5373 arrive with status.errors EMPTY through iist's client, while the raw Atelier path here populates it on both passes. Same error, different shape by call path -- so attribution must survive on console alone.",
+    "_why": "Models an environment where status.errors arrives EMPTY for a failure that this instance reports in BOTH fields -- so attribution must survive on console alone. NOT hypothetical: the TESTSUITE session measures, on their IRIS, that any document succeeding in the batch empties status.errors, while on ours (2026.1, ns APP, /api/atelier/v1, flags cuk) it is populated whenever anything failed -- verified across 1-doc all-fail, 2-doc all-fail, 2-doc mixed both orders, 3-doc mixed, and five qualifier strings. THREE explanations were proposed and all THREE were falsified by experiment: the #5373 error shape, the document-list arity, and whether the good document was merely up-to-date (everything is deleted cold here, and the console shows real 'Compiling class' lines). The cause is still unknown and is environmental, not client-side. That unresolved divergence is exactly WHY the parser reads both fields and then reconciles against IRIS's own count: this plugin ships to IRIS instances we cannot inspect, and a parser tuned to the one instance we can would be correct here and wrong there.",
     "staged": [
       "ZZProbe.Good",
       "ZZProbe.Bad"
