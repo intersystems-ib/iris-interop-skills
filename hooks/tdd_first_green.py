@@ -15,6 +15,10 @@ in the project, not first in the session. Advisory only; never blocks.
 """
 import sys, json, os, re, hashlib
 
+# Stable marker (#162): prepended, never woven into the prose, so a reword cannot
+# switch a corpus detector off. One grep for `[IIS-` finds every gate and guard.
+MARKER = "[IIS-TDD-GREEN] "
+
 LEDGER = ".claude/.iris-interop-tdd-seen"
 
 
@@ -90,7 +94,8 @@ def main():
         "See iris-interop-skills:tdd, 'How much test is enough'."
     )
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": msg}}))
+        "hookEventName": "PostToolUse",
+        "additionalContext": MARKER + msg}}))
 
 
 if __name__ == "__main__":

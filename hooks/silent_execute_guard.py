@@ -8,6 +8,10 @@ Reads the PostToolUse JSON on stdin; defensive about field names across CC versi
 """
 import sys, json
 
+# Stable marker (#162): prepended, never woven into the prose, so a reword cannot
+# switch a corpus detector off. One grep for `[IIS-` finds every gate and guard.
+MARKER = "[IIS-SILENT] "
+
 
 def payload(r):
     if isinstance(r, str):
@@ -52,7 +56,8 @@ def main():
             "[SqlProc] and SELECT it, or verify the effect with iris_query."
         )
         print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": msg}}))
+            "hookEventName": "PostToolUse",
+            "additionalContext": MARKER + msg}}))
 
 
 if __name__ == "__main__":

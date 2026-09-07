@@ -447,8 +447,14 @@ def strip_cls(name):
     return re.sub(r"\.cls$", "", name, flags=re.I)
 
 
-def block(reason):
-    print(json.dumps({"decision": "block", "reason": reason}))
+def block(rule, reason):
+    """Block with a stable leading marker (#162).
+
+    The corpus counts Stop-gate activity from `hook_blocking_error` records (62 across
+    49 runs), which says a block happened but not WHICH branch. The marker says which.
+    """
+    print(json.dumps({"decision": "block",
+                      "reason": "[IIS-STOP-" + rule + "] " + reason}))
     sys.exit(0)
 
 
@@ -525,6 +531,7 @@ def main():
         more = "\n  ... and {} more".format(len(orphans) - 15) if len(orphans) > 15 else ""
         latch_record(transcript, signature)
         block(
+            "CR12",
             "CR-12 \u2014 {} of the {} class(es) this session wrote into IRIS exist ONLY in the "
             "namespace:\n\n{}{}\n\n"
             "The namespace is not version-controlled, not reviewable, and does not survive the "
@@ -546,6 +553,7 @@ def main():
         _trace("blocking_no_review", put=len(put))
         latch_record(transcript, signature)
         block(
+            "REVIEW",
             "The conformance pass has not run. This session authored {} interop class(es) and "
             "every one is on disk, but nothing has checked them against the twelve criteria.\n\n"
             "Run it now:\n"

@@ -11,7 +11,7 @@ controls matter more than the negative ones. Run from the repo root:
 
     python3 scripts/test_hooks.py
 """
-import json, os, subprocess, sys, tempfile, time
+import io, json, os, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GATE = os.path.join(ROOT, "hooks", "interop_conformance_gate.py")
@@ -272,7 +272,120 @@ check("names the absent-class outcome", True, "not in the namespace" in reason)
 check("no longer says only `write it to`", False, "write it to src/" in reason)
 # Positive control: the reason is non-empty and really is the CR-12 branch, so the four
 # assertions above are reading text that exists rather than passing on an empty string.
-check("positive control — CR-12 branch fired", True, reason.startswith("CR-12"))
+check("positive control — CR-12 branch fired", True,
+      reason.startswith("[IIS-STOP-CR12] CR-12"))
+
+# --------------------------------------------------------------------------------------
+print("\n#162  every gate and guard message carries a stable marker")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# A corpus can only count gate activity by grepping the message text, so every reword has
+# silently degraded a measurement. The concrete cost, measured by the testsuite session:
+# their parser was blind from plugin 1.6.0 through 1.8.8 -- EIGHT releases -- because their
+# pattern said "an interop component" and the hook says "the interop component". One word,
+# and the failure reads as "the gate did not fire", which is silence, which nothing notices.
+#
+# So markers are PREPENDED and the prose is left byte-identical. That is the whole design:
+# a prefix cannot break an unanchored downstream search, so the marker can land in one
+# release and detectors can migrate to it in their own time, with no window where the old
+# pattern has stopped matching and the new one has not started.
+#
+# COVERAGE: this checks that a marker is EMITTED and is unique. It cannot check that the
+# marker means what it says, and it is not evidence about how often any rule fires.
+import ast as _ast, glob as _glob, re as _re
+
+_markers, _unmarked = {}, []
+for _path in sorted(_glob.glob(os.path.join(ROOT, "hooks", "*.py"))):
+    _fn = os.path.basename(_path)
+    _src = io.open(_path, encoding="utf-8").read()
+    _tree = _ast.parse(_src)
+    # The prefix is read out of the module's own deny()/block() body rather than hardcoded
+    # here, so uniqueness is checked on the marker that is actually EMITTED. Two hooks may
+    # legitimately share a rule name ("NAME") under different prefixes; they may not share
+    # a full marker, because a corpus cannot tell those apart.
+    _prefix = ""
+    for _node in _tree.body:
+        if isinstance(_node, _ast.FunctionDef) and _node.name in ("deny", "block"):
+            for _sub in _ast.walk(_node):
+                if isinstance(_sub, _ast.Constant) and isinstance(_sub.value, str) \
+                        and _sub.value.startswith("[IIS-"):
+                    _prefix = _sub.value
+    # (a) deny()/block() call sites must pass a rule literal as their first argument.
+    for _node in _ast.walk(_tree):
+        if not isinstance(_node, _ast.Call) or not isinstance(_node.func, _ast.Name):
+            continue
+        if _node.func.id not in ("deny", "block") or not _node.args:
+            continue
+        _first = _node.args[0]
+        if isinstance(_first, _ast.Constant) and isinstance(_first.value, str) \
+                and _re.fullmatch(r"[A-Z0-9]+(-[A-Z0-9]+)*", _first.value):
+            _markers.setdefault(_prefix + _first.value + "]", []).append(
+                "%s:%d" % (_fn, _node.lineno))
+        else:
+            _unmarked.append("%s:%d  %s()" % (_fn, _node.lineno, _node.func.id))
+    # (b) a PostToolUse guard carries its marker as a module constant instead.
+    for _node in _tree.body:
+        if isinstance(_node, _ast.Assign) and any(
+                isinstance(t, _ast.Name) and t.id == "MARKER" for t in _node.targets):
+            _lit = getattr(_node.value, "value", None)
+            _markers.setdefault(str(_lit), []).append("%s:%d" % (_fn, _node.lineno))
+    if "additionalContext" in _src and "MARKER" not in _src:
+        _unmarked.append("%s  emits additionalContext with no MARKER" % _fn)
+
+_dupes = ["%s at %s" % (k, ", ".join(v)) for k, v in sorted(_markers.items()) if len(v) > 1]
+check("every deny/block/guard site is marked", 0, len(_unmarked))
+check("no marker is used twice", 0, len(_dupes))
+for _bad in _unmarked + _dupes:
+    print("          - {}".format(_bad))
+# A clean list is not evidence until it is non-empty: nine sites exist, and an AST walk that
+# silently matched nothing would also report zero unmarked. This is the control.
+check("positive control — sites were actually found", True, len(_markers) >= 15)
+
+print("\n  marker inventory (enumerated, not filtered — see #131):")
+for _m, _where in sorted(_markers.items()):
+    print("    {:<28} {}".format(_m, ", ".join(_where)))
+
+# --------------------------------------------------------------------------------------
+# Source-level checks prove the literal is PRESENT; they do not prove it reaches the
+# output. These two run the gate for real and read the emitted reason, which is the only
+# thing a corpus ever sees.
+def gate_reason(payload):
+    p = subprocess.run([sys.executable, GATE], input=json.dumps(payload),
+                       capture_output=True, text=True)
+    if p.returncode != 0 or not p.stdout.strip():
+        return ""
+    return json.loads(p.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+_emitted = gate_reason(
+    doc("Demo.BS.FileIn.cls", "Class Demo.BS.FileIn Extends EnsLib.File.InboundAdapter\n{\n}"))
+check("marker reaches the emitted reason", True, _emitted.startswith("[IIS-CG-ADAPTER] "))
+check("and the keyed prose survives it", True,
+      bool(_re.search(r"must Extend Ens\.BusinessService", _emitted)))
+
+print("\n#162  the prose downstream detectors key on is UNCHANGED")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# Pinned from iris-interop-skills-test `src/iist/grading/taxonomy.py` GATE_PATTERN_STRINGS.
+# That repo greps these literals out of hook output. They are recorded HERE so that a future
+# reword sees the cost before making it, rather than discovering it as eight releases of
+# silence. This is a COUPLING, not a style rule: if one of these must change, tell that
+# session first and let the marker-keyed detector land ahead of the change.
+for _label, _pat, _fn in [
+        ("naming-convention",         r"Naming convention:",                          "interop_conformance_gate.py"),
+        ("adapter-extended-directly", r"must Extend Ens\.BusinessService",            "interop_conformance_gate.py"),
+        ("load-via-iris_execute",     r"Loading/compiling classes through iris_execute", "interop_conformance_gate.py"),
+        ("tdd-without-test",          r"TDD: you just wrote the interop component",   "tdd_enforcement.py"),
+        ("source-of-truth",           r"Source-of-truth:",                            "src_before_iris.py")]:
+    _src = io.open(os.path.join(ROOT, "hooks", _fn), encoding="utf-8").read()
+    check(_label, True, bool(_re.search(_pat, _src)))
+# Negative control: their shipped pattern for the TDD rule said "an interop component" and
+# never matched any release from 1.6.0 to 1.8.8. Pinning the wrong string is the failure this
+# section exists to prevent, so assert the wrong one does NOT match.
+check("negative control — \"an\" must not match", False,
+      bool(_re.search(r"TDD: you just wrote an interop component",
+                      io.open(os.path.join(ROOT, "hooks", "tdd_enforcement.py"),
+                              encoding="utf-8").read())))
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:

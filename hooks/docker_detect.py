@@ -7,6 +7,10 @@ note so the model retries over HTTP instead of giving up or re-trying with a con
 """
 import sys, json
 
+# Stable marker (#162): prepended, never woven into the prose, so a reword cannot
+# switch a corpus detector off. One grep for `[IIS-` finds every gate and guard.
+MARKER = "[IIS-DOCKER] "
+
 
 def payload(r):
     if isinstance(r, str):
@@ -39,7 +43,8 @@ def main():
             "need a container. Retry WITHOUT IRIS_CONTAINER; set it only if IRIS actually runs in Docker."
         )
         print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": msg}}))
+            "hookEventName": "PostToolUse",
+            "additionalContext": MARKER + msg}}))
 
 
 if __name__ == "__main__":
