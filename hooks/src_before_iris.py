@@ -48,11 +48,12 @@ INTEROP_NAME = re.compile(r"\.(BS|BP|BO|DT|DTS|RUL|MSG|DAT|ADP|UTL|HL7)\.[^.]+$"
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".idea", ".vscode"}
 
 
-def deny(reason):
+def deny(rule, reason):
+    """Deny with a stable leading marker (#162) -- see interop_conformance_gate.deny."""
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": reason,
+        "permissionDecisionReason": "[IIS-SRC-" + rule + "] " + reason,
     }}))
     sys.exit(0)
 
@@ -131,6 +132,7 @@ def main():
 
     rel = "src/" + cls.replace(".", "/") + ".cls"
     deny(
+        "DISK",
         "Source-of-truth: `" + cls + "` would exist only in the IRIS namespace. No file for it "
         "was found under this project, and the namespace is not version-controlled, not "
         "reviewable, and does not survive the instance.\n\n"

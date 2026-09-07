@@ -10,6 +10,10 @@ source of the verdict; this only decides whether a review is worth running.
 """
 import sys, json, os, re
 
+# Stable marker (#162): prepended, never woven into the prose, so a reword cannot
+# switch a corpus detector off. One grep for `[IIS-` finds every gate and guard.
+MARKER = "[IIS-PRESCAN] "
+
 
 def read_source(ti):
     """Best-effort: the .cls content from disk (post-write) or from the tool input."""
@@ -91,7 +95,8 @@ def main():
         "tests via the real iris_test tool, not a [SqlProc] self-report. Advisory."
     )
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": msg}}))
+        "hookEventName": "PostToolUse",
+        "additionalContext": MARKER + msg}}))
 
 
 if __name__ == "__main__":

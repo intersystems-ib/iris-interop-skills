@@ -23,6 +23,10 @@ fired zero times, then a corpus where every fire was a false positive):
 """
 import sys, json, os, re, glob
 
+# Stable marker (#162): prepended, never woven into the prose, so a reword cannot
+# switch a corpus detector off. One grep for `[IIS-` finds every gate and guard.
+MARKER = "[IIS-TDD-NOTEST] "
+
 # Type segment delimited by a dot OR a path separator on BOTH sides: matches `Pkg.BO.Name`
 # and `src/Pkg/BO/Name.cls`, never a substring of a directory name. `DTL`/`Rule` are kept
 # as segment-anchored aliases for projects that don't use the Tipo abbreviations.
@@ -96,7 +100,8 @@ def main():
         "green on a test that was red before."
     )
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": msg}}))
+        "hookEventName": "PostToolUse",
+        "additionalContext": MARKER + msg}}))
 
 
 if __name__ == "__main__":

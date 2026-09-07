@@ -98,11 +98,17 @@ NS_REQUIRED = {
 }
 
 
-def deny(reason):
+def deny(rule, reason):
+    """Emit a deny whose reason LEADS with a stable marker (#162).
+
+    The marker names which rule fired; the prose after it is free to change. Corpus
+    measurement keys on `[IIS-...]`, so improving a denial can no longer silently
+    switch a detector off. See MARKERS below for why this is prepend-only.
+    """
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": reason,
+        "permissionDecisionReason": "[IIS-CG-" + rule + "] " + reason,
     }}))
     sys.exit(0)
 
@@ -135,6 +141,7 @@ def main():
     tool = str(data.get("tool_name") or "").split("__")[-1]
     if tool in NS_REQUIRED and not ti.get("namespace"):
         deny(
+            "NS",
             "`" + tool + "` was called without `namespace`. The parameter is documented as optional, "
             "but it resolves Ens.Director / Ens_Config.* in the connection's default namespace — and "
             "when that one is not interop-enabled the call fails with an internal error that never "
@@ -151,6 +158,7 @@ def main():
         m = OBJ_BYPASS.search(code)
         if m:
             deny(
+                "EXEC",
                 "Loading/compiling classes through iris_execute (matched '%s') bypasses the MCP's "
                 "iris_doc/iris_compile path and this conformance gate. Write source with "
                 "iris_doc(mode=put) and compile with iris_compile — never $SYSTEM.OBJ.Load / "
@@ -165,6 +173,7 @@ def main():
             m = pattern.search(code)
             if m:
                 deny(
+                    "DICTW",
                     "Creating class source through iris_execute (matched '%s') bypasses the MCP's "
                     "iris_doc/iris_compile path, this gate, and the source-of-truth gate — so the "
                     "class lands in the namespace with no file on disk, which is not "
@@ -182,6 +191,7 @@ def main():
         m = DICT_GLOBAL.search(code)
         if m:
             deny(
+                "DICTR",
                 "`%s` is the undocumented internal class dictionary. Reading it is guessing at "
                 "IRIS internals, and its layout is not a contract — the supported APIs are.\n\n"
                 "Use, in order of preference:\n"
@@ -208,6 +218,7 @@ def main():
         for seg in type_segs:
             if seg in NONSTD:
                 deny(
+                    "NAME",
                     "Naming convention: '%s' uses the non-standard package segment '.%s.'. "
                     "iris-interop uses <Package>.<Tipo>.<Name> with Tipo in BS/BP/BO/DT/RUL/MSG — "
                     "rename '.%s.' to '.%s.' and retry. Load Skill(iris-interop-skills:component-map) "
@@ -231,6 +242,7 @@ def main():
                 is_adapter = cls_name.endswith("Adapter") or "Adapter" in type_segs
                 if not is_adapter and any(s in BS_BO_SEGS for s in type_segs):
                     deny(
+                        "ADAPTER",
                         "A Business Service/Operation must Extend Ens.BusinessService / Ens.BusinessOperation "
                         "and declare its adapter as `Parameter ADAPTER = \"%s\";` — not Extend the adapter "
                         "(%s) directly (that yields an empty, non-functional component). Fix the superclass + "

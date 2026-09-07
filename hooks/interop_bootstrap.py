@@ -8,6 +8,13 @@ being installed + instructed). This is the "make it available up front" half; th
 """
 import sys, json
 
+# Stable marker (#162): prepended, never woven into the prose. #115 detects "did any
+# hook run in this CLI at all" from this very message -- 318/318 claude runs carry it,
+# 0/676 codex and 0/289 opencode do -- so its text is load-bearing for a published
+# measurement and must stay greppable across rewordings.
+MARKER = "[IIS-BOOTSTRAP] "
+
+
 MSG = (
     "iris-interop-skills active. For ANY IRIS Interoperability work, BEFORE writing classes: load "
     "Skill(iris-interop-skills:interop) (router) + Skill(iris-interop-skills:component-map) + "
@@ -48,7 +55,8 @@ def main():
     except Exception:
         pass
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "SessionStart", "additionalContext": MSG}}))
+        "hookEventName": "SessionStart",
+        "additionalContext": MARKER + MSG}}))
 
 
 if __name__ == "__main__":
