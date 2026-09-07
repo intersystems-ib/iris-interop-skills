@@ -231,6 +231,49 @@ for label, body, err, want in [
     clear(t)
     check(label, want, stop(t, work))
 
+# --------------------------------------------------------------------------------------
+print("\n#169  conformance_stop_gate — the CR-12 remedy must be RECOVERABLE")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# The demand used to name the requirement ("write it to disk with the same content that
+# is in IRIS") and never the route, so the only way to comply for a class that does not
+# exist was to invent one. These assert the route is named, because the route is what
+# makes the instruction unfabricatable -- iris_doc(mode=get) cannot return source for a
+# class that was never there.
+#
+# COVERAGE, stated here because a clean run reads like more than it is: this checks the
+# SPELLING of the remedy, not that an agent follows it. It cannot see whether the file
+# an agent writes actually came from the namespace. What it does guarantee is that the
+# instruction can never silently drift back to the unfabricatable-free form (#169).
+
+
+def stop_reason(tpath, cwd, **extra):
+    p = subprocess.run([sys.executable, STOP],
+                       input=json.dumps(dict({"transcript_path": tpath, "cwd": cwd}, **extra)),
+                       capture_output=True, text=True)
+    if p.returncode != 0 or not p.stdout.strip():
+        return ""
+    return json.loads(p.stdout)["reason"]
+
+
+t = transcript([rec(-300, "iris_doc", PUT_GHOST)])
+clear(t)
+reason = stop_reason(t, work)
+
+# Two DISTINCT strings, because the route appears twice and one `in reason` test is
+# satisfied by either. A first draft asserted only "iris_doc(mode=get" and a mutant that
+# deleted the entire numbered-step block SURVIVED -- the per-class lines carried it.
+check("numbered step names the route", True, "1. iris_doc(mode=get" in reason)
+check("per-class line carries the route", True,
+      'iris_doc(mode=get, name="Demo.BO.Ghost.cls")' in reason)
+check("names the absent-class outcome", True, "not in the namespace" in reason)
+# A pin on the exact pre-#169 wording, not a general property: no grep can express "does
+# not tell the agent to write a file without saying where the content comes from".
+check("no longer says only `write it to`", False, "write it to src/" in reason)
+# Positive control: the reason is non-empty and really is the CR-12 branch, so the four
+# assertions above are reading text that exists rather than passing on an empty string.
+check("positive control — CR-12 branch fired", True, reason.startswith("CR-12"))
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)
