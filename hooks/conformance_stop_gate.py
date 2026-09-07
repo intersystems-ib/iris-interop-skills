@@ -488,23 +488,58 @@ def main():
     root = project_root(data)
     orphans = find_orphans(root, put)
 
+    # --- #169: the remedy has to be RECOVERABLE, not just mandatory ----------
+    #
+    # It used to say "write each class to disk with the same content that is in IRIS"
+    # -- naming the requirement and never the route. On a TRUE positive that invites a
+    # reconstruction from memory, which is not what compiled. On a FALSE positive the
+    # only way to comply is to invent source for a class that exists nowhere, which is
+    # strictly worse than the orphan CR-12 guards against. Both observed instances were
+    # an agent deliberately building a broken class to prove a check can fail, so the
+    # misfire selectively punished the discipline we are trying to instil.
+    #
+    # `iris_doc(mode=get)` answers both halves with one call: it returns the real source
+    # when the class is there, and it cannot return source when it is not. So the remedy
+    # is unfabricatable by construction -- an agent following it literally cannot produce
+    # a file for a class that never existed.
+    #
+    # This deliberately does NOT say "check first, and skip the gate if absent". Naming
+    # the escape route in a denial hands the agent its own bypass (upstream 1.2.7, fork
+    # #169/#170). The absence branch is phrased as an OUTCOME of doing the work, and it
+    # asks for the tool result rather than an assertion. Note also which way it moves the
+    # cheapest escape: today an agent that wants past this gate writes a plausible file,
+    # which is undetectable and pollutes the tree; now it has to run a tool and report
+    # what came back, which the transcript records. Adversarially this is a strict
+    # improvement, not a new hole.
+    #
+    # The criterion itself already had this right -- conformance-review/SKILL.md CR-12
+    # says "iris_doc(mode=get) the namespace-only classes and write them to src/". The
+    # fix never propagated to the enforcement message. Same defect, one layer down.
     if orphans:
         _trace("blocking_orphans", put=len(put), orphans=len(orphans))
         listed = "\n".join(
-            "  - {}   ->  write it to src/{}.cls".format(c, c.replace(".", "/"))
+            "  - {}   ->  iris_doc(mode=get, name=\"{}.cls\")  ->  src/{}.cls".format(
+                c, c, c.replace(".", "/"))
             for c in orphans[:15]
         )
         more = "\n  ... and {} more".format(len(orphans) - 15) if len(orphans) > 15 else ""
         latch_record(transcript, signature)
         block(
-            "CR-12 — {} of the {} class(es) this session wrote into IRIS exist ONLY in the "
+            "CR-12 \u2014 {} of the {} class(es) this session wrote into IRIS exist ONLY in the "
             "namespace:\n\n{}{}\n\n"
             "The namespace is not version-controlled, not reviewable, and does not survive the "
-            "instance, so this work is already lost — it just has not been noticed yet. Write "
-            "each class to disk with the same content that is in IRIS, then stop.\n\n"
+            "instance, so this work is already lost \u2014 it just has not been noticed yet.\n\n"
+            "RECOVER each one from IRIS \u2014 do not retype it from memory. What is in the "
+            "namespace is what actually compiled, and a reconstruction is not it:\n"
+            "  1. iris_doc(mode=get, name=\"<Class>.cls\", namespace=\"<NS>\")\n"
+            "  2. Write the returned source to src/<Pkg>/<Tipo>/<Name>.cls\n"
+            "then stop.\n\n"
+            "If mode=get answers that the class is not in the namespace, then it never reached "
+            "IRIS, there is nothing to save, and this demand was spurious. Report that tool "
+            "result and stop \u2014 do NOT create the file.\n\n"
             "(Measured: 16 runs finished with no .cls on disk at all and 12 of them scored as "
-            "passes, one at 96.45 — ground truth is read from the namespace, so saving nothing "
-            "still grades green.)".format(len(orphans), len(put), listed, more)
+            "passes, one at 96.45 \u2014 ground truth is read from the namespace, so saving "
+            "nothing still grades green.)".format(len(orphans), len(put), listed, more)
         )
 
     if not reviewed:
