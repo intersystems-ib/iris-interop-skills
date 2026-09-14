@@ -51,26 +51,101 @@ Use `EnsLib.HL7.Segment` as source/target class for reusable segment-level trans
 
 ## Lookup tables in DTL
 
-`Lookup("TableName", source.field, "default-or-empty")` translates codes via a lookup table. See `lookup-tables`. Always specify the third parameter (default value or behaviour on miss) — the default-on-miss is silent and surprising otherwise.
+`..Lookup("TableName", source.field, "default-or-empty")` translates codes via a lookup table — note
+the **two leading dots**, see the syntax rule below. See `lookup-tables`. Always specify the third
+parameter (default value or behaviour on miss) — the default-on-miss is silent and surprising otherwise.
+
+## Calling a utility function — `..Func()` in DTL, `Func()` in a business rule
+
+**This is the single most expensive one-character mistake in a DTL.** The call syntax for the same
+utility function differs between the two places you use it:
+
+| Where | Syntax | Example |
+|---|---|---|
+| **DTL** (`<assign>`, `<if>`, `<code>`, `<trace>`) | **two leading dots** | `..ConvertDateTime(source.X,"%d/%m/%Y","%Y-%m-%d")` |
+| **Business rule** (condition, `<when>`) | bare name | `ConvertDateTime(source.X,"%d/%m/%Y","%Y-%m-%d")` |
+
+> "In a business rule, simply refer to the utility function by name, along with any arguments:
+> `ToUpper(value)`. In DTL, use two leading dots before the function name, along with any arguments:
+> `..ToUpper(value)`."
+> — `EBUS § A.2 Usage Differences between Business Rules and DTL`
+
+**A bare call in a DTL compiles clean and throws `<UNDEFINED>` on the first `Transform()`.** There is
+no compile error because ObjectScript reads the bare token as a *local variable*, which is legal
+syntax and simply undefined at runtime:
+
+```
+ERROR #5002: ObjectScript error: <UNDEFINED>Transform+29^MyApp.DT.X.1
+  *ConvertDateTime("22/07/1958","%d/%m/%Y","%Y-%m-%d")
+```
+
+The `*` before the name is the tell: IRIS is naming an undefined **variable**, not a missing method.
+
+Do **not** "fix" this with `##class(Ens.Util.FunctionSet).ConvertDateTime(...)`. That does run —
+which is why it looks like a solution — but it bypasses the function registry and the editor's
+function picker, and it is the wrong idiom for a built-in. (For a *custom* FunctionSet it is
+the **required** form — see §"Custom DTL functions via FunctionSet subclass".) The Portal's editors generate the `..` form automatically, so a DTL
+built in the UI never has this bug; one authored as XML through the MCP is where it bites.
+
+This is also why a DTL needs a `%UnitTest` that actually calls `Transform()`. A compile-only gate
+cannot distinguish the two forms — both compile.
 
 ## Built-in DTL functions worth knowing
 
-The DTL function picker exposes class methods registered via `Ens.Util.FunctionSet` and its subclasses. **Use them before dropping to `<code>`** — they're shorter, testable independently, and visible in the picker.
+The DTL function picker exposes class methods registered via `Ens.Rule.FunctionSet` and its
+subclasses (`Ens.Util.FunctionSet` is a superclass of it). **Use them before dropping to `<code>`** —
+they're shorter, testable independently, and visible in the picker. All are shown below in DTL
+syntax; drop the `..` in a business rule.
 
 | Function | Use case |
 |---|---|
-| `ConvertDateTime(value, sourceFormat, targetFormat)` | Date format conversion. Default for parsing DD/MM/YYYY → `%Date` is `ConvertDateTime(source.X, "%d/%m/%Y", "%Q")` — clearer than a `<code>` block with `$ZDATEH`. |
-| `Lookup(table, key, default)` | Lookup table consumption (see above). |
-| `In(value, "csv,list")` | Membership test against a comma-separated literal. |
-| `Translate(value, from, to)` | Character-level translation (`$TRANSLATE` semantics). |
-| `Upper`, `Lower`, `Length`, `Find`, `Piece`, `Replace` | String primitives — direct `<assign>` instead of `<code>`. |
+| `..ConvertDateTime(value, in, out, file)` | Date format conversion — see the cheat-sheet below. `in`/`out` both default to `%Q`. The 4th argument only matters for `%f` filename elements. |
+| `..Lookup(table, key, default)` | Lookup table consumption (see above). |
+| `..In(value, "csv,list")` | Membership test against a comma-separated literal. |
+| `..Translate(value, from, to)` | Character-level translation (`$TRANSLATE` semantics). |
+| `..Upper`, `..Lower`, `..Length`, `..Find`, `..Piece`, `..Replace` | String primitives — direct `<assign>` instead of `<code>`. |
+
+### Date / timestamp conversion cheat-sheet
+
+`..ConvertDateTime` is the most-used and most re-derived of these. Verified conversions:
+
+| Goal | `in` | `out` | Example |
+|---|---|---|---|
+| CSV `DD/MM/YYYY` → SQL `DATE` | `%d/%m/%Y` | `%Y-%m-%d` | `22/07/1958` → `1958-07-22` |
+| US `MM/DD/YYYY` → SQL `DATE` | `%m/%d/%Y` | `%Y-%m-%d` | `07/22/1958` → `1958-07-22` |
+| SQL `DATE` → CSV `DD/MM/YYYY` | `%Y-%m-%d` | `%d/%m/%Y` | `1958-07-22` → `22/07/1958` |
+| HL7 TS → SQL `TIMESTAMP` | `%Y%m%d%H%M%S` | `%Y-%m-%d %H:%M:%S` | `19580722143000` → `1958-07-22 14:30:00` |
+| SQL `TIMESTAMP` → HL7 TS | `%Y-%m-%d %H:%M:%S` | `%Y%m%d%H%M%S` | `1958-07-22 14:30:00` → `19580722143000` |
+
+Three traps:
+
+- **`%Q` is a full ODBC timestamp, not a date.** It is the *default* for both `in` and `out`, so it
+  is easy to reach for — but `..ConvertDateTime(x,"%d/%m/%Y","%Q")` yields
+  `1958-07-22 00:00:00.000`, which a `DATE` column will reject or silently truncate. For a date-only
+  target use `%Y-%m-%d`.
+- **It does not validate the calendar, and a bad value is returned unchanged.** Per `EBUS § A.1`:
+  *"If `val` does not match the `in` format, `out` is ignored and `val` is returned unchanged."* So
+  `31/02/1958` comes back as `1958-02-31` and free text passes straight through, reaching the column
+  and failing at the JDBC bind — far from the DTL that caused it. Per-record validation belongs in
+  the DTL (the `Valido`/`ErrorMotivo` pattern below), not in the date function.
+- **`ConvertDateTimeToUTC` does not exist** (verified absent on IRIS for Health 2026.1 —
+  `<METHOD DOES NOT EXIST>`). For timezone work, look up the actual available API rather than
+  guessing a symmetrical name.
+
+The raw ObjectScript equivalent is `$ZDATE($ZDATEH("22/07/1958",4),3)` → `1958-07-22` (format 4 =
+`DD/MM/YYYY` in, 3 = `YYYY-MM-DD` out), but prefer `..ConvertDateTime` in a DTL: it is in the picker,
+it round-trips through the visual editor, and it does not need a `<code>` block.
 
 ## Custom DTL functions via FunctionSet subclass
 
-When the built-ins don't cover the case (custom date format with an error branch, project-specific normalization, lookups that need post-processing), subclass `Ens.Util.FunctionSet`:
+When the built-ins don't cover the case (custom date format with an error branch, project-specific
+normalization, lookups that need post-processing), subclass **`Ens.Rule.FunctionSet`** — not
+`Ens.Util.FunctionSet`, which is its superclass. Per `EGDV § 12.1`: only class methods defined in
+*your* class become utility functions, and "there is no support for polymorphism, so to be precise,
+you must mark these class methods as final".
 
 ```objectscript
-Class MyApp.Util.FunctionSet Extends Ens.Util.FunctionSet
+Class MyApp.UTL.FunctionSet Extends Ens.Rule.FunctionSet
 {
 ClassMethod ParseFechaDDMMYYYY(value As %String) As %Date [ Final ]
 {
@@ -86,7 +161,27 @@ ClassMethod NormalizeKey(value As %String) As %String [ Final ]
 }
 ```
 
-Once compiled, `MyApp.Util.FunctionSet.ParseFechaDDMMYYYY(...)` and `NormalizeKey(...)` appear in the DTL function picker and are callable from routing-rule conditions. Keep **one FunctionSet per project**; don't fragment per DTL. Tests for these helpers are plain `%UnitTest.TestCase` (no production needed) — fast and isolated.
+### A custom function is called `##class(...)`-qualified — the opposite of a built-in
+
+This is the exception to the `..Func()` rule above, and the two are easy to swap by mistake:
+
+| Function | DTL syntax | Business rule syntax |
+|---|---|---|
+| **Built-in** (`Strip`, `ConvertDateTime`, `Lookup`, …) | `..Strip(source.{ID},"<>CW")` | `Strip(source.{ID},"<>CW")` |
+| **Your FunctionSet subclass** | `##class(MyApp.UTL.FunctionSet).NormalizeKey(source.{Sex})` | same — fully qualified |
+
+> "It is not enough simply to identify the function; you must also identify the full class name for
+> the class that contains the class method for your function. … You need to be aware of this syntax
+> variation if you wish to type statements like this directly into your DTL code, rather than using
+> the Data Transformation Builder to generate the code."
+> — `EGDV § 12.1 Defining Custom Utility Functions`
+
+That last sentence is this plugin's exact situation: authoring DTL XML through the MCP *is* typing
+it directly, so the Builder is not there to generate the right form for you.
+
+Once compiled, both functions appear in the DTL function picker and are callable from routing-rule
+conditions. Keep **one FunctionSet per project**; don't fragment per DTL. Tests for these helpers are
+plain `%UnitTest.TestCase` (no production needed) — fast and isolated.
 
 ## Canonical pattern — HL7 v2.5 ADT_A01 → v2.3 ADT_A01
 
@@ -101,7 +196,7 @@ Actions:
     set target.{PIDgrpgrp(k1).PID:5} = source.{PIDgrpgrp(k1).PID:5}
     ...
   if source.PV1:2 = "I":
-    set target.PV1:3 = Lookup("FacilityCodes", source.PV1:3, "UNKNOWN")
+    set target.PV1:3 = ..Lookup("FacilityCodes", source.PV1:3, "UNKNOWN")
 ```
 
 ## XSLT for CDA
@@ -178,14 +273,17 @@ Why the DTL and not elsewhere:
 - **Don't validate in the Record Map / field datatypes.** Strict field types or Record-Map-level rejection drop the record *before* it becomes a routable message — but the requirement is usually "valid records still persist, invalid go to an error sink + alert", which needs every record to survive as a message and branch downstream.
 - **Don't scatter it into the routing rule or BP.** The rule/BP then just reads the computed `Valido` flag and branches (e.g. `Valido=1` → DB operation, `Valido=0` → error operation + `SendAlert`). No duplicated logic.
 
-Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Util.FunctionSet` (e.g. `EsDniValido`, `EsFechaValida`, `EsImporteValido`) so the DTL stays declarative and the rules are unit-testable on their own.
+Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Rule.FunctionSet` (e.g. `EsDniValido`, `EsFechaValida`, `EsImporteValido`) so the DTL stays declarative and the rules are unit-testable on their own. Call them `##class(App.UTL.FunctionSet).EsDniValido(...)` — custom functions are qualified, built-ins are `..Func()`.
 
 ## Common pitfalls
 
 - **Defaulting to Create=New** when source and target shapes match → costly rebuilding of every segment.
 - **Forgetting to compile before testing** → the editor lies (runs the previous compiled version).
-- **Lookup() without a default parameter** → silent "" on miss, hard to debug.
-- **Validation lists / `In()` checks that don't tolerate diacritic and case variants** → `"Diabetica"` ≠ `"Diabética"` ≠ `"diabética"`; a hardcoded literal list rejects legitimate input silently. Normalize **both sides** before comparing — see `NormalizeKey` in the FunctionSet section above; normalized lookup-table keys: `lookup-tables`.
+- **Calling a utility function bare in a DTL** (`ConvertDateTime(...)`, `Lookup(...)`) → compiles
+  clean, throws `<UNDEFINED>` on the first `Transform()`. DTL needs `..Func()`; the bare form is the
+  *business rule* syntax. See the syntax rule above.
+- **`..Lookup()` without a default parameter** → silent "" on miss, hard to debug.
+- **Validation lists / `In()` checks that don't tolerate diacritic and case variants** → `"Diabetica"` ≠ `"Diabética"` ≠ `"diabética"`; a hardcoded literal list rejects legitimate input silently. Normalize **both sides** before comparing — see `NormalizeKey` in the FunctionSet section above (called `##class(...)`-qualified); normalized lookup-table keys: `lookup-tables`.
 - **Switch cases ordered generic-to-specific** → generic case matches first, specific cases never run.
 - **Foreach over the wrong group** in HL7 nested structures (e.g. iterating PIDgrp when you wanted PIDgrpgrp).
 - **Bounding a repeating-segment loop with `AL1Count`** → returns `""` on schemas that don't expose it; the loop runs zero times and the transform "succeeds" having processed nothing. See §"Iterating repeating segments" below for the safe pattern.
