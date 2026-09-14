@@ -31,10 +31,11 @@ Is the data HL7 v2.x?
 
 ## Canonical pattern — custom persistent message
 
-A custom message in IRIS Interoperability inherits **both** `Ens.Request` (or `Ens.Response`) **and** `%Persistent`. Without `%Persistent`, the message body is stored in the shared `Ens.MessageBodyD` global, which is hard to query, hard to purge, and inflates retention storage.
+A custom message in IRIS Interoperability inherits **both** `%Persistent` **and** `Ens.Request` (or
+`Ens.Response`) — **and the order matters**. `%Persistent` goes **first**:
 
 ```objectscript
-Class MyApp.Msg.PatientCensusRequest Extends (Ens.Request, %Persistent)
+Class MyApp.MSG.PatientCensusRequest Extends (%Persistent, Ens.Request)
 {
 Property PatientId As %String;
 Property AdmissionDate As %TimeStamp;
@@ -42,9 +43,35 @@ Property Department As %String(MAXLEN=80);
 }
 ```
 
-Do **not** write a `Storage` block. Extending `%Persistent` is what gives the message its own extent — `MyApp.Msg.PatientCensusRequestD`, not `Ens.MessageBodyD` — and IRIS generates the storage definition on first compile. Hand-writing one makes `iris_doc` refuse the write until `allow_storage_regeneration: true` is passed; the guard is protecting generated storage, so the fix is to leave the block out, not to pass the flag.
+### Why `%Persistent` must be leftmost
 
-Pair Request with a Response class extending `(Ens.Response, %Persistent)`. If the operation is fire-and-forget, return `Ens.Response` directly — no custom Response class needed.
+IRIS treats the **leftmost superclass as primary**, and the primary superclass is what drives
+storage. `Ens.Request` is *already* persistent — it inherits `Ens.MessageBody`, which owns
+`^Ens.MessageBodyD` — so putting it first makes your message inherit that **shared** extent. Listing
+`%Persistent` merely somewhere in the list is necessary but **not sufficient**; only being *first*
+makes IRIS generate its own `DataLocation`/`IdLocation`/`IndexLocation`/`StreamLocation`.
+
+Measured on IRIS for Health 2026.1 — two classes identical but for the order of their superclasses:
+
+| `Extends` clause | resulting `data_global` |
+|---|---|
+| `(Ens.Request, %Persistent)` | `^Ens.MessageBodyD` — **shared with every other message body** |
+| `(%Persistent, Ens.Request)` | `^MyApp.MSG.PatientCensusRequestD` — own extent ✅ |
+
+Both compile, both project an SQL table, and both read and write their properties correctly, so
+nothing in the build or the tests distinguishes them. What the shared extent costs you is
+searchability by property, independent purge/retention, and a message table that grows with every
+other body class in the namespace.
+
+The `%Persistent`-first form is still a fully-fledged message: `%Extends("Ens.Request")` and
+`%Extends("Ens.MessageBody")` both remain true, and it saves, reopens and routes normally.
+
+Do **not** write a `Storage` block. IRIS generates the storage definition on first compile — from
+the primary superclass, which is the whole point above. Hand-writing one makes `iris_doc` refuse the
+write until `allow_storage_regeneration: true` is passed; the guard is protecting generated storage,
+so the fix is to leave the block out, not to pass the flag.
+
+Pair Request with a Response class extending `(%Persistent, Ens.Response)` — same leftmost rule. If the operation is fire-and-forget, return `Ens.Response` directly — no custom Response class needed.
 
 **Identifiers are letters and digits only — never `_`.** `_` is the concatenation operator, so
 `Property patient_id As %String;` cannot parse — and the error is actively misleading:
@@ -75,7 +102,7 @@ Property Ciudad   As %String(MAXLEN = 100);
 Property CodPostal As %String(MAXLEN = 10);
 }
 
-Class MyApp.MSG.PersonReq Extends (Ens.Request, %Persistent)
+Class MyApp.MSG.PersonReq Extends (%Persistent, Ens.Request)
 {
 Property Nombre  As %String(MAXLEN = 100);
 Property Address As MyApp.DAT.Address;   // embedded — purged with the message
@@ -102,7 +129,7 @@ namespace.
 The cascade goes on the class that **references** the object — the message — not on the child:
 
 ```objectscript
-Class MyApp.MSG.PersonReq Extends (Ens.Request, %Persistent)
+Class MyApp.MSG.PersonReq Extends (%Persistent, Ens.Request)
 {
 Property Address As MyApp.DAT.Address;   // %Persistent in this variant
 
@@ -198,6 +225,11 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/xml-p
 ## Common pitfalls
 
 - **Custom message without `%Persistent`** → bodies stored in `Ens.MessageBodyD`, unsearchable by property, slow to purge.
+- **`%Persistent` present but NOT leftmost** (`Extends (Ens.Request, %Persistent)`) → same outcome as
+  omitting it: the message still shares `^Ens.MessageBodyD`, because IRIS takes the leftmost
+  superclass as primary and `Ens.Request` is already persistent. Nothing fails — it compiles, the
+  SQL table projects, the properties read back — so only `iris_table_info` reveals it. Write
+  `Extends (%Persistent, Ens.Request)`.
 - **Hand-written `Storage` block** → `iris_doc` refuses the write (storage guard). See §**Canonical pattern — custom persistent message**.
 - **Subclassing `EnsLib.HL7.Message`** → almost always wrong; HL7 is structurally defined by DocType, not by class hierarchy.
 - **Putting business properties on the carrier instead of the payload** in SOAP scenarios → wizard regeneration overwrites them.
@@ -220,7 +252,7 @@ After compiling the message class:
 When a second consumer needs **richer** data than the original canonical (e.g. an existing flow uses `MenuRequest` with `Alergias` as a pipe-string, and a new SOAP/REST destination wants `Alergias` as a typed `list of %String`), **don't replace the canonical** — extend it with a subclass:
 
 ```objectscript
-Class MyApp.Msg.MenuRequest Extends (Ens.Request, %Persistent)
+Class MyApp.MSG.MenuRequest Extends (%Persistent, Ens.Request)
 {
 Property PacienteId As %String(MAXLEN = 20) [ Required ];
 Property Nombre     As %String(MAXLEN = 100) [ Required ];
@@ -228,7 +260,7 @@ Property Alergias   As %String(MAXLEN = 500);   ; pipe-separated, legacy consume
 // ... other 3.1 properties ...
 }
 
-Class MyApp.Msg.MenuRequestRich Extends MyApp.Msg.MenuRequest
+Class MyApp.MSG.MenuRequestRich Extends MyApp.MSG.MenuRequest
 {
 Property AlergiasList            As list Of %String(MAXLEN = 100);   ; typed collection
 Property AlergiasAcompananteList As list Of %String(MAXLEN = 100);
