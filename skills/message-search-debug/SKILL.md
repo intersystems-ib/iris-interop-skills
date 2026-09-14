@@ -247,6 +247,39 @@ Non-HL7 virtual documents follow the same shape with their own base extent
 extend `Ens.CustomSearchTable`, whose own extent is `Ens.CustomSearchTable` with the same
 `DocId` key.
 
+### Why this one is hand-written SQL, when the rest of this skill says never to
+
+The rule at the top of this skill — reach for `iris_interop_query`, do not hand-write SQL against
+`Ens.MessageHeader` — has exactly one standing exception, and this is it.
+
+`iris_interop_query(what="messages")` advertises a `search_table={prop, value|value_like, class?,
+extent?}` filter. **On MCP `iris-interop-dev` 0.19.0 that parameter is silently ignored**: the call
+succeeds, `success: true`, and returns the *unfiltered* message list. Verified against a live
+instance carrying exactly one indexed HL7 message:
+
+| Call | Rows |
+|---|---|
+| no filter at all | 2 |
+| `search_table={prop:"PatientID", value:"16284718"}` (a real match) | 2 |
+| `search_table={prop:"PatientID", value:"NO-SUCH-PATIENT-ZZZ"}` | **2** |
+| `search_table={prop:"ThisPropDoesNotExist", value:"x"}` | **2** |
+| `search_table={prop:"PatientID"}` (missing the required value) | **2** |
+| control: `target="BO.AdtOut"` | **1** ✅ |
+
+The control matters: other filters on the same tool work, so this is specific to `search_table`,
+not a broken call. The last row of the group is the diagnostic one — a `search_table` with no
+`value` is supposed to be rejected outright, so getting results back proves the filter never
+reached the query logic at all.
+
+**A filter that cannot return zero is not a filter.** Treat a `search_table` result as unfiltered
+until you have re-run the impossible-value probe above on your own MCP version and seen it return
+nothing. Until then, use the `PropId` join below — it is longer, and it is the one that answers the
+question you asked.
+
+Tracked upstream as **intersystems-ib/iris-interop-dev#202** — the parameter is parsed with a
+`.ok()` that discards a deserialisation failure instead of erroring, so a rejected filter degrades
+into no filter. When that closes, re-run the probe and delete this section.
+
 ### Authoring a Search Table
 
 Everything above assumes someone already declared the fields. Authoring one is a single subclass
@@ -273,12 +306,64 @@ XData SearchSpec [ XMLNamespace = "http://www.intersystems.com/EnsSearchTable" ]
   `PropType="String:25"` fail with `ErrDatatypeValidationFailed`. **Omitting the attribute
   entirely also works and is the safe default.** (`DateTime` / `Numeric` are unverified against
   that catalogue — don't reach for them without checking.)
-- **A search table indexes nothing until it is assigned**: set `SearchTableClass` on the BS/BO
-  item, target **`Host`** — and only messages received from that point on are indexed. Nothing
-  back-indexes existing messages (same caveat as in the query section above).
+- **A search table indexes nothing until it is assigned** — and only messages received from that
+  point on are indexed. Nothing back-indexes existing messages (same caveat as in the query section
+  above).
+
+#### Assigning it — `SearchTableClass` is a `Host` setting on the service and the operation
+
+This is the step that is easy to read past, because the class compiles happily without it and the
+search table simply stays empty. `SearchTableClass` is declared on `EnsLib.HL7.Service.Standard`
+and `EnsLib.HL7.Operation.Standard`, so **every** HL7 service and operation carries it, always with
+`Target="Host"`:
+
+```xml
+<Item Name="BS.AdtIn" ClassName="EnsLib.HL7.Service.FileService" Enabled="true">
+  <Setting Target="Adapter" Name="FilePath">/data/hl7in</Setting>
+  <Setting Target="Host"    Name="MessageSchemaCategory">2.5</Setting>
+  <Setting Target="Host"    Name="SearchTableClass">MyApp.Search.HL7</Setting>
+  <Setting Target="Host"    Name="TargetConfigNames">BO.AdtOut</Setting>
+</Item>
+```
+
+Or on a running production, without editing the class:
+
+```
+iris_production_item(action="set_settings", item="BS.AdtIn", production="MyApp.Production",
+                     settings={"SearchTableClass": "MyApp.Search.HL7"}, namespace="APP")
+```
+
+(That changes the namespace only — pull the production class back to `src/` afterwards, see
+`production-lifecycle`.)
+
+**Routers do not carry `SearchTableClass`.** `EnsLib.HL7.MsgRouter.RoutingEngine` has no such
+property, so assigning it there is not an option you have missed — index at the **service** (and/or
+the operation) instead. The one exception is `EnsLib.MsgRouter.RoutingEngineST`, a routing engine
+whose whole purpose is to carry one.
 
 Once compiled and assigned, the rows land in the shared base extent `EnsLib_HL7.SearchTable` and
 are queried by `PropId` exactly as shown in Join 2 — the subclass never gets a table of its own.
+Verified end to end: an `ADT_A01` through a `FileService` with the above settings produced six rows
+for one message — four built-in (`MSHControlID`, `MSHTypeName`, `PatientID`, `PatientName`) and two
+from the custom subclass, the latter carrying
+`ClassDerivation = MyApp.Search.HL7~EnsLib.HL7.SearchTable`. A built-in prop whose field is empty
+in the message simply gets no row (`PatientAcct` was absent because PID-18 was).
+
+#### `PropValue` is stored LOWERCASED under the default `PropType`
+
+The default (and the `String:CaseInsensitive` setting) normalises on the way in. Measured on the
+message above:
+
+| Message field | Stored `PropValue` |
+|---|---|
+| `ADT^A01` | `adt_a01` |
+| `GARCIA^MARIA` | `garcia^maria` |
+| `HOUSE` | `house` |
+| `I` | `i` |
+
+So `WHERE st.PropValue = 'GARCIA^MARIA'` returns **nothing** and reads as "that patient was never
+here". Lowercase the literal, or use `%STARTSWITH`/`LIKE` against a lowercased pattern. The
+`PatientID` example in Join 2 dodges this only because it is numeric.
 
 ## Searching by message body content
 
@@ -457,6 +542,13 @@ Verify purge actually runs: Management Portal → Interoperability → Manage �
   it was a resend. Use `Ens.MessageHeader::ResendDuplicatedMessage`.
 - **Editing the original message body in place before a resend** → a plain resend shares that body,
   so you have rewritten history. Clone it and pass the clone as `pNewBody`.
+- **Trusting a `search_table=` result on MCP 0.19.0** → the filter is silently dropped and you get
+  every message back, with `success: true`. Probe it with an impossible value before believing it.
+- **Searching `PropValue` with an upper-case literal** → search-table values are stored lowercased
+  under the default `PropType`, so `= 'SMITH'` matches nothing while `= 'smith'` works.
+- **Expecting a search table to index retroactively, or to be assignable on a router** →
+  `SearchTableClass` is a `Host` setting on the service/operation, and only messages received after
+  it is set are indexed.
 - **Bulk-resending without dedup** — a 200-row failure window resent against a non-idempotent BO creates 200 duplicates downstream.
 - **Leaving `^ISCSOAP("Log")` enabled namespace-wide** — log file grows fast, mixes all BO traffic, disk fills. Per-BO `SoapLogFile` only.
 - **No purge task** → tables grow forever; eventually the namespace becomes slow and large backups become unwieldy.
