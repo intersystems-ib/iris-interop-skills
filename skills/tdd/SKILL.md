@@ -199,6 +199,7 @@ component that was never built.
 | **BO `OnInit`/settings validation** | Test* method invokes `..OnInit()` on a manually-wired BO instance with adapter settings matching production XML. |
 | **BPL Business Process** | `..SendRequest("BP.MyProcess", req, .resp, 1)` against the running production (with `TestingEnabled="true"`). Inspect side-effects via `..GetEventLog` or `Ens.MessageHeader`. |
 | **End-to-end inside production (BS→BP→BO chain)** | Same: `..SendRequest` to the entry point (BP, BO, or Router), assert on side-effects. |
+| **Custom HL7 schema** | Two tests, not one. **(a)** the category registered — `EnsLib.HL7.Schema.ResolveSegNameToStructure` / `ResolveSchemaTypeToDocType`. **(b)** the structure is right — drive a real message through an `EnsLib.HL7.MsgRouter.RoutingEngine` whose **`Validation="dm"`** and assert it routes, plus a malformed one that must land on the `BadMessageHandler`. Parsing alone (`ImportFromString`+`DocTypeSet`+`GetValueAt`) reads fields and **never checks segment order**, so a wrong `MessageStructure` passes. See `hl7-schemas`. |
 | **Business Service (entry point)** | **Not testable from inside IRIS.** Test from *outside*: copy a file into the BS's `FilePath`, send TCP to its port, POST to its REST URL. Use `pytest`, `curl`, or equivalent external clients. The BS adapter is the contract; it must be exercised via its actual transport. |
 | **Custom inbound adapter** | Same as BS — exercise from outside. |
 
@@ -535,6 +536,12 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
 - **Asserting on internal state** instead of public contract. Assert on what the next consumer (DTL, BO, downstream system) actually sees.
 - **No fixture strategy** — paste-in literals everywhere. Centralize sample inputs in a fixtures class (`MyApp.Tests.Fixtures.Censo`).
 - **File fixtures on a path only the agent can see.** A test that reads sample data from a file (`CopyFile`, an HL7 drop, a CSV) runs **inside IRIS** — and when IRIS is in a container, your working directory does not exist there. The red assert says "file not found" against a path that plainly exists on *your* side, and the fix is never to retry the path. Put server-read fixtures on a **server-visible path**: the container's mounted data directory, or ferry the content in via the MCP (`iris_execute` writing a temp file server-side, or inline the fixture as a string in the test class — the most portable option).
+- **Testing a custom HL7 schema by parsing it.** `ImportFromString` + `DocTypeSet` + `GetValueAt`
+  returns field values without validating the message structure, so a schema whose `MessageStructure`
+  has the segments in the wrong order passes every assertion and fails later in the routing engine
+  with `<EnsEDI>ErrMapSegUnrecog`. Worse, routing it through an HL7 router proves nothing either
+  *unless that router's `Validation` setting is non-empty* — it defaults to empty, meaning "route
+  everything unchecked". See `hl7-schemas` §"Verification part 2".
 - **`TestingEnabled="true"` left in a deployed production** — treat it like a debug flag. See §"Enabling the Testing Service" (security note).
 - **Asserting only on `$$$LOGINFO` presence in the event log** ("INSERT OK paciente_id=...") instead of on the row's actual contents → the log proves the BO method ran, not that the destination has the right values. Add at least one assert that reads the side-effect back: a `SELECT` via psql/`Adapter` in `OnAfterAllTests`, or a small **verifier BO** callable via `..SendRequest(verifier, query, .resp, 1)` that returns the row for property-by-property asserts. The log is necessary but insufficient.
 - **Test methods without a description comment** — When a test fails, the first thing the user sees is the method name in the portal. A `///` comment on the method clarifies *what spec clause* the test verifies, not just *what code it exercises*. One line is enough: `/// Verifies that empty Alergias is marshalled to SQL NULL`.

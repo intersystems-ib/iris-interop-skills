@@ -194,7 +194,7 @@ ClassMethod ExportSchemaXML(pCategory As %String, pFile As %String) As %String [
 
 Invoke via MCP: `SELECT Hospital.Bootstrap_ImportSchema() AS r`.
 
-### Verification (paste into a `%UnitTest.TestCase`)
+### Verification part 1 — the schema is REGISTERED (paste into a `%UnitTest.TestCase`)
 
 ```objectscript
 Method TestZALResolves()
@@ -224,12 +224,90 @@ Method TestDocTypeAndZALInStructure()
 }
 ```
 
+### Verification part 2 — the schema is CORRECT (registration is not structure)
+
+**The tests above prove the category loaded. They do not prove a real message parses against it.**
+A schema that compiles, registers, and resolves its Z-segment can still have the wrong segment
+*order*, and the natural unit test does not notice:
+
+```objectscript
+Set obj = ##class(EnsLib.HL7.Message).ImportFromString(msg, .sc)
+Do obj.DocTypeSet("MyApp_2.5:ADT_A01")
+Do $$$AssertEquals(obj.GetValueAt("AL1(2):3.2"), "Frutos secos")   // PASSES
+```
+
+`ImportFromString` + `DocTypeSet` + `GetValueAt` **read fields; they do not enforce the message
+structure**. A message whose `NK1` arrives after the `AL1` repetitions — a real and common
+sending-system variance — passes every assertion above while the schema's `MessageStructure` says
+`NK1` may only appear before `PV1`. The failure then surfaces in production, in the routing engine:
+
+```
+ERROR <EnsEDI>ErrMapSegUnrecog: Unrecognized Segment 8:'NK1' found after segment 7 (AL1(3))
+```
+
+This is the concrete mechanism behind "a schema that compiles is not a correct schema" above.
+
+#### The trap: the router does not validate by default
+
+Routing an HL7 message through `EnsLib.HL7.MsgRouter.RoutingEngine` only checks structure when the
+router's **`Validation`** setting is non-empty — and it is **initialised to an empty string**, which
+means *skip validation and route everything*:
+
+> "If you specify an empty string as the `Validation` property value, the message router skips
+> validation and routes all messages. When you create a new HL7 routing process in the Management
+> Portal, the **Validation** setting is initialized to an empty string."
+> — `EHL72 § Settings for HL7 Routing Processes — Validation`
+
+So "I sent it through the router and nothing complained" proves nothing on a default router. Set the
+flags deliberately on the router item:
+
+| `Validation` | Meaning |
+|---|---|
+| *(empty)* — **the default** | No validation. Every message routes. |
+| `dm` | DocType present + **segment order** validated. The minimum that catches a wrong `MessageStructure`. |
+| `dm-z` (= legacy `1`) | As `dm`, but trailing Z segments not in the schema are tolerated. |
+| `dmf` | As `dm` plus full field validation (order, required, size, datatype, code tables). |
+| `0` | Legacy spelling of empty. |
+
+Documented validation order: **(1)** the message has a `DocType`, **(2)** segment order, **(3)**
+fields — and without the `-x` flag it stops at the first failure. Note the docs' own caveat: *"A
+message can pass validation and not conform exactly to the schema definition depending on the
+Validation flags specified."*
+
+A failed message goes **only** to the `BadMessageHandler`; if none is configured, the error is
+logged and the message is sent nowhere. That is the assertion your test wants.
+
+#### The recipe
+
+TDD a custom schema's *structure* by driving a real message end-to-end through a router whose
+`Validation` is set, and assert on the outcome — not by parsing in isolation:
+
+```xml
+<Item Name="Router.Adt" ClassName="EnsLib.HL7.MsgRouter.RoutingEngine" Category="MyApp">
+  <Setting Target="Host" Name="Validation">dm</Setting>
+  <Setting Target="Host" Name="BadMessageHandler">BO.BadMessages</Setting>
+  <Setting Target="Host" Name="BusinessRuleName">MyApp.RUL.RoutingAdt</Setting>
+</Item>
+```
+
+Then assert **both** directions, which is what makes the test meaningful:
+1. a message in the order the sender really emits **routes to its target** (proves the schema accepts
+   the real-world variance), and
+2. a deliberately malformed one **lands on the `BadMessageHandler`** (proves validation is actually
+   on — without this, case 1 passes on a router that validates nothing).
+
+Keep the registration tests above as well: they localise the failure to "schema didn't load" rather
+than "message didn't route", which are different bugs.
+
 ### Canonical worked-example shape
 
 A complete custom-schema artefact set has three parts, all source-controlled on disk:
 - **Schema source** — e.g. `PharmacySchema.xml`, an `EnsLib.HL7.Schema` export defining the custom category, its `ORM_O01` message structure and the `ZAL` Z-segment.
 - **Import/Export/Remove SqlProcs** — `ImportSchema`, `ExportSchemaXML`, `RemoveSchema` on a bootstrap class, so the schema is reproducible via MCP instead of portal-only.
-- **Verification tests** — a `%UnitTest` class that asserts the category exists and that its stored structure references the custom segment (see the `ZAL` assertion above).
+- **Verification tests** — a `%UnitTest` class that asserts (a) the category exists and its stored
+  structure references the custom segment (the `ZAL` assertions above), and (b) a real message in
+  the sender's actual segment order routes through a router with `Validation="dm"`, while a
+  malformed one reaches the `BadMessageHandler`. (a) alone cannot see a wrong `MessageStructure`.
 
 ## When custom schema is NOT necessary
 
@@ -260,6 +338,13 @@ Helper FunctionSet pattern (`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_h
 - Removing a field from a custom schema while DTLs still reference it → DTL compile fails (good — but at runtime if you slip).
 - Forgetting that schema categories are **per-namespace** — same name in different namespaces are unrelated.
 - **`MessageSchemaCategory="2.5"` without `:MessageType`** — DTLs lose symbolic field-name resolution and fall back to numeric paths (`PID:3.1` instead of `PID:PatientIdentifierList(1).ID`). Always combine: `Version:MessageType` (e.g. `2.5:ADT_A01`).
+- **`--` inside an XML comment breaks the schema import.** `<!-- accepts what the hospital sends -- unpatched -->`
+  fails with `ERROR #6301: SAX XML Parser Error: '--' sequence is illegal in comment`. The schema XML is
+  parsed strictly (it is an XML rule, not an IRIS quirk); use an em-dash or a second comment instead.
+- **Testing a custom schema by parsing alone** → `ImportFromString` + `DocTypeSet` + `GetValueAt`
+  never checks segment order, so a wrong `MessageStructure` ships green. See "Verification part 2".
+- **Assuming the HL7 router validates** → its `Validation` setting defaults to empty, which routes
+  everything unchecked. Set `dm` on the router you rely on for validation.
 - Building HL7 strings by hand without escaping special characters → segment-structure corruption at the receiver.
 
 ## See also
