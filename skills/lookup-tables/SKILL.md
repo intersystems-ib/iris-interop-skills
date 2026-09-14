@@ -5,9 +5,9 @@ description: Lookup tables for code translation in DTL/BPL. Routed from interop.
 
 # Lookup Tables
 
-Lookup tables are per-namespace key/value stores consumed by DTL `Lookup()`, BPL conditions, and routing rules. They are the canonical place for code translation (department → facility, source-system code → standard code, gender flag → display value) and for validation lists that change without a code release.
+Lookup tables are per-namespace key/value stores consumed by DTL `..Lookup()`, BPL conditions, and routing rules. They are the canonical place for code translation (department → facility, source-system code → standard code, gender flag → display value) and for validation lists that change without a code release.
 
-This skill covers when to use a table, the canonical authoring + loading patterns, refresh strategies for tables sourced from an external master data system, and the `Lookup()` default-parameter pitfall.
+This skill covers when to use a table, the canonical authoring + loading patterns, refresh strategies for tables sourced from an external master data system, and the `..Lookup()` default-parameter pitfall.
 
 ## When to use this skill
 
@@ -18,7 +18,10 @@ The user wants to map source codes to target codes — e.g. internal department 
 - Lookup tables are **per-namespace** key/value stores (`Ens.Util.LookupTable`).
 - Created via **Management Portal → Interoperability → Build → Data Lookup Tables**.
 - Loaded from **CSV** (`Filename` column → `Key`, `Description` column → `Value`) or **manually**.
-- Consumed in DTL via `Lookup("TableName", source.field, default)` — third parameter is what to return on miss.
+- Consumed in DTL via `..Lookup("TableName", source.field, default)` — **two leading dots in DTL**,
+  bare `Lookup(...)` in a business rule; the bare form inside a DTL compiles and then throws
+  `<UNDEFINED>` at `Transform()` time (see `transformations` §"Calling a utility function").
+  Third parameter is what to return on miss.
 - Also accessible from ObjectScript via `##class(Ens.Util.LookupTable).GetValue("TableName", key, .value)`.
 - Lookup tables **export with the production** — they're part of the deploy bundle.
 
@@ -250,17 +253,17 @@ When a table's content lives in an authoritative external system (an HR table, a
 | **Scheduled refresh job** | A scheduled BS reads from the external system (SQL adapter, REST, file) and rewrites the table inside one transaction. | Updates are predictable (daily / weekly) and a few hours' lag is fine. |
 | **Trigger-based refresh** | An external event (file drop, webhook, message) triggers a BS that updates the affected entries. | Near-real-time updates required; the external system can send a signal. |
 
-In all three: rewrite **atomically** — `DELETE WHERE TableName='X'` + bulk `INSERT` inside one transaction, never row-by-row in place. Mid-flight DTL `Lookup()` calls then see either fully-old or fully-new content, never a partial state.
+In all three: rewrite **atomically** — `DELETE WHERE TableName='X'` + bulk `INSERT` inside one transaction, never row-by-row in place. Mid-flight DTL `..Lookup()` calls then see either fully-old or fully-new content, never a partial state.
 
 For SQL-sourced refreshes, use `ExecuteQueryParmArray` with explicit SQL types — see `business-operations` for the parameter-array pattern that avoids the long-class-name `<SUBSCRIPT>` failure mode.
 
-## `Lookup()` default parameter — silent miss vs explicit miss
+## `..Lookup()` default parameter — silent miss vs explicit miss
 
-`Lookup("TableName", key)` returns empty string on miss. `Lookup("TableName", key, "DEFAULT")` returns `"DEFAULT"` on miss. Pick deliberately:
+`..Lookup("TableName", key)` returns empty string on miss. `..Lookup("TableName", key, "DEFAULT")` returns `"DEFAULT"` on miss. Pick deliberately:
 
 - **Default = `""`** (empty) is correct only if downstream logic treats empty as "no mapping" and handles it explicitly.
 - **Default = `"<UNKNOWN>"`** (or any sentinel) makes misses visible in downstream messages and easier to grep for.
-- **Default = a fallback business value** (e.g. `Lookup("Department", code, "GENERIC")`) makes the DTL tolerant of new source codes — but hides the issue until someone reports wrong routing.
+- **Default = a fallback business value** (e.g. `..Lookup("Department", code, "GENERIC")`) makes the DTL tolerant of new source codes — but hides the issue until someone reports wrong routing.
 
 Pair the lookup with an explicit miss check when validation matters:
 
@@ -288,13 +291,15 @@ This raises on miss instead of silently propagating an empty value.
 
 ## Pitfalls to surface
 
-- `Lookup()` without the third parameter → silent empty string on miss, hard to debug.
+- `..Lookup()` without the third parameter → silent empty string on miss, hard to debug.
+- Writing it **bare** in a DTL (`Lookup(...)` instead of `..Lookup(...)`) → compiles clean, throws
+  `<UNDEFINED>` on the first `Transform()`. The bare form is the business-rule syntax.
 - One giant lookup table for unrelated mappings → break into purpose-specific tables.
 - Loading lookup tables manually in DEV but forgetting to ship the CSV with the deploy bundle → empty tables in TEST/PROD.
 
 ## See also
 
-- `transformations` — primary consumer via `Lookup()` in DTL
+- `transformations` — primary consumer via `..Lookup()` in DTL; also carries the DTL-vs-rule call-syntax rule
 - `bpl` — also consumes lookups in routing rules and BPL conditions
 - `production-lifecycle` — lookup tables are part of the production export
 - `business-operations` — `ExecuteQueryParmArray` pattern for SQL-sourced refresh jobs
