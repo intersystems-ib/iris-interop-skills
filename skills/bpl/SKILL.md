@@ -48,7 +48,18 @@ A rule for an **HL7** router sets `RuleAssistClass = "EnsLib.HL7.MsgRouter.RuleA
 </rule>
 ```
 
-(The conformance reviewer flags the mixed-router / wrong-engine case as **CR-6**; this section is the build-time guidance so you avoid it in the first place, not just catch it after.)
+**The engine choice is re-opened every time you add an input.** A generic router built for a
+RecordMap or JSON flow is *correct*. Point an `EnsLib.HL7.*` service at that same router later —
+the "one router, two inputs" shape — and it becomes wrong, without anyone editing the router. So:
+**when you add an input to an existing router, re-check the engine against what now flows through
+it, and re-run the conformance pass.** Nothing else will catch it: it compiles, and an end-to-end
+test asserting the message reached its target passes, because the generic engine transports
+`EnsLib.HL7.Message` perfectly well. What you lose is silent — schema validation in the rule
+editor and the `{MSH:9.1}` paths. If the router genuinely must serve both shapes, split it.
+
+(The conformance reviewer flags this as **CR-6**, and the `conformance-prescan` hook now reads the
+production wiring for it; this section is the build-time guidance so you avoid it in the first
+place, not just catch it after.)
 
 ```
 BS.Censo  →  Router.Censo  →  BO.Cocina

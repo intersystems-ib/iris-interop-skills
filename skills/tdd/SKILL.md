@@ -549,6 +549,13 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
   with `<EnsEDI>ErrMapSegUnrecog`. Worse, routing it through an HL7 router proves nothing either
   *unless that router's `Validation` setting is non-empty* — it defaults to empty, meaning "route
   everything unchecked". See `hl7-schemas` §"Verification part 2".
+- **Reading "the message reached the target" as "the routing is correct".** An end-to-end assert
+  that a message arrived proves transport, not conformance. A **generic**
+  `EnsLib.MsgRouter.RoutingEngine` carries `EnsLib.HL7.Message` perfectly well, so a test that drops
+  an HL7 file and asserts it reached the target passes while the router has silently lost HL7 schema
+  validation and the `{MSH:9.1}` paths (CR-6). No test written this way can see it — the check is
+  "is the engine right for what now flows through this router", and it must be re-made whenever an
+  input is added to an existing router. See `bpl`.
 - **`TestingEnabled="true"` left in a deployed production** — treat it like a debug flag. See §"Enabling the Testing Service" (security note).
 - **Asserting only on `$$$LOGINFO` presence in the event log** ("INSERT OK paciente_id=...") instead of on the row's actual contents → the log proves the BO method ran, not that the destination has the right values. Add at least one assert that reads the side-effect back: a `SELECT` via psql/`Adapter` in `OnAfterAllTests`, or a small **verifier BO** callable via `..SendRequest(verifier, query, .resp, 1)` that returns the row for property-by-property asserts. The log is necessary but insufficient.
 - **Test methods without a description comment** — When a test fails, the first thing the user sees is the method name in the portal. A `///` comment on the method clarifies *what spec clause* the test verifies, not just *what code it exercises*. One line is enough: `/// Verifies that empty Alergias is marshalled to SQL NULL`.
