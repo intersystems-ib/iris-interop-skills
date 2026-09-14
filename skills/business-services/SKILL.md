@@ -282,6 +282,74 @@ Invoke with `SELECT Pkg.Bootstrap_GenerateRecordMap('Pkg.RecordMap.X')` — sche
 - The generated `.Record` extends `(%Persistent, %XML.Adaptor, Ens.Request, EnsLib.RecordMap.Base)` with `Parameter INCLUDETOPFIELDS = 1`. It IS the source class for the routing rule and DTL.
 - **Disk is the source of truth**: after generating, `iris_doc get` both the Record Map class (now carrying the method bodies) and the `.Record`, and write them to `src/` — the generated code must be committed, not just live in IRIS. Regenerate whenever you edit the XData.
 
+### Testing the parser — feed `GetObject` bytes in the map's encoding
+
+Instantiating the generated `.Record` and setting properties tests nothing about parsing. To
+exercise the real parser, push a line through `GetObject` **on the RecordMap class**. Two ways, and
+the encoding is the part that bites:
+
+```objectscript
+/// Simplest and most faithful: hand it a filename. GetObject opens the file ITSELF,
+/// with the map's encoding -- exactly what the File service does at runtime.
+Method TestParseFromFile()
+{
+    Set line = "3003,"_$Char(193)_"ngel,"_""""_"Garcia, hijo"_""""   ; Ángel + a quoted comma
+    Set fs = ##class(%Stream.FileCharacter).%New()
+    Set fs.TranslateTable = "UTF8", fs.Filename = "/tmp/censo-test.csv"
+    Do fs.WriteLine(line)
+    Do $$$AssertStatusOK(fs.%Save())
+
+    Do $$$AssertStatusOK(##class(Pkg.RecordMap.Censo).GetObject("/tmp/censo-test.csv", .obj))
+    Do $$$AssertEquals(obj.Nombre, $Char(193)_"ngel", "accent survives")
+    Do $$$AssertEquals(obj.Planta, "Garcia, hijo",    "quoted comma stays one field")
+}
+
+/// In-memory: the stream's encoding must MATCH the map's, because Write() encodes at
+/// write time. %IO.StringStream defaults to "Native", which is the whole trap.
+Method TestParseFromStream()
+{
+    Set st = ##class(%IO.StringStream).%New()
+    Set st.CharEncoding = "UTF-8"          ; <- the one line that matters; map says UTF-8
+    Do st.Write(line_$Char(10))
+    Do st.Rewind()
+    Do $$$AssertStatusOK(##class(Pkg.RecordMap.Censo).GetObject(st, .obj))
+    Do $$$AssertEquals(obj.Nombre, $Char(193)_"ngel")
+}
+```
+
+**Why the accent turns into `?` if you skip that line.** The generated `GetObject` sets the encoding
+from the map itself — it is in the generated source:
+
+```objectscript
+Do pStream.Open(tFilename,,pTimeout,"UTF-8", .tStatus)   ; a FILENAME is opened as UTF-8
+...
+Set pStream.CharEncoding = "UTF-8"                       ; and any stream is forced to the map's encoding
+```
+
+So the parser never needed help. What goes wrong is upstream of it: `%IO.StringStream` defaults to
+`CharEncoding = "Native"`, so `Write()` encodes your wide characters as **Native** bytes, and
+`GetObject` then reads those bytes back as **UTF-8**. Mismatch, and `Á` arrives as `?` (`$c(63)`)
+with no error anywhere — the status is `$$$OK` and only the assert fails. Measured on IRIS for
+Health 2026.1:
+
+| Test input | `obj.Nombre` |
+|---|---|
+| wide chars → default (`Native`) stream | `?gel` — `$c(63)` |
+| wide chars → stream with `CharEncoding="UTF-8"` | `Ángel` ✅ |
+| `$ZCVT(line,"O","UTF8")` → default stream | `Ángel` ✅ |
+| plain wide chars → real UTF-8 **file** → `GetObject(filename)` | `Ángel` ✅ |
+| `$ZCVT(...)` → real UTF-8 **file** | `Ãngel` — `$c(195)`, **double-encoded** |
+
+**Do not reach for `$ZCVT` as the general fix.** It works only for the one case where the stream is
+left `Native` — it is hand-encoding to compensate for a stream you mis-declared — and on a correctly
+encoded file it double-encodes and corrupts, as the last row shows. Declare the encoding once
+instead; it applies to every field and cannot be forgotten halfway down a line.
+
+**Build accented literals with `$Char(...)`** (`Á`=193, `á`=225, `í`=237, `ñ`=241, `ó`=243) rather
+than pasting accented characters into the `.cls` — the class source encoding in transit through
+`iris_doc put` is not something to rely on, and a mangled literal in the *test* looks exactly like a
+parser bug.
+
 ### FTP / FTPS instead of a local file
 
 The spec often calls for the CSV to arrive over **FTPS**, while you develop/test against a **local folder**. The two use **different service classes** — you cannot just change a setting:

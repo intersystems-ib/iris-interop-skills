@@ -200,6 +200,7 @@ component that was never built.
 | **BPL Business Process** | `..SendRequest("BP.MyProcess", req, .resp, 1)` against the running production (with `TestingEnabled="true"`). Inspect side-effects via `..GetEventLog` or `Ens.MessageHeader`. |
 | **End-to-end inside production (BS→BP→BO chain)** | Same: `..SendRequest` to the entry point (BP, BO, or Router), assert on side-effects. |
 | **Custom HL7 schema** | Two tests, not one. **(a)** the category registered — `EnsLib.HL7.Schema.ResolveSegNameToStructure` / `ResolveSchemaTypeToDocType`. **(b)** the structure is right — drive a real message through an `EnsLib.HL7.MsgRouter.RoutingEngine` whose **`Validation="dm"`** and assert it routes, plus a malformed one that must land on the `BadMessageHandler`. Parsing alone (`ImportFromString`+`DocTypeSet`+`GetValueAt`) reads fields and **never checks segment order**, so a wrong `MessageStructure` passes. See `hl7-schemas`. |
+| **RecordMap** | Two levels. **(a)** the `.Record` was generated — assert the class exists (a plain compile does not generate it). **(b)** the parser works — push a line through `GetObject` on the **RecordMap class** (not `.Record`), asserting an accented field and a quoted-comma field. Give the test stream the **same `CharEncoding` as the map**, or pass a filename and let `GetObject` open it; a default `%IO.StringStream` is `Native` and silently corrupts accents with a `$$$OK` status. See `business-services`. |
 | **Business Service (entry point)** | **Not testable from inside IRIS.** Test from *outside*: copy a file into the BS's `FilePath`, send TCP to its port, POST to its REST URL. Use `pytest`, `curl`, or equivalent external clients. The BS adapter is the contract; it must be exercised via its actual transport. |
 | **Custom inbound adapter** | Same as BS — exercise from outside. |
 
@@ -532,6 +533,12 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
   missing `TestingEnabled="true"`, not a config item. The error names `EnsLib.Testing.Service` (and,
   once you add that, `EnsLib.Testing.Process`), which points at the wrong fix. See §"Enabling the
   Testing Service".
+- **A `%UnitTest` that builds a stream in the wrong encoding.** A RecordMap declares its
+  `char_encoding`, and `GetObject` applies it — so a test stream whose `CharEncoding` differs
+  (the `%IO.StringStream` default is `Native`) hands the parser bytes it decodes as something
+  else. Accents come back as `?`, the status is `$$$OK`, and the RecordMap looks broken when the
+  test is. Match the encoding, or pass a filename. Reaching for `$ZCVT` instead papers over it
+  and double-encodes on a real file — see `business-services`.
 - **Forgetting to seed `..BaseLogId`** — `GetEventLog` returns nothing if `BaseLogId` is empty. Seed it in `OnBeforeAllTests` from `MAX(ID) FROM Ens_Util.Log`.
 - **Asserting on internal state** instead of public contract. Assert on what the next consumer (DTL, BO, downstream system) actually sees.
 - **No fixture strategy** — paste-in literals everywhere. Centralize sample inputs in a fixtures class (`MyApp.Tests.Fixtures.Censo`).
