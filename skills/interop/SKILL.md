@@ -139,6 +139,48 @@ A class `Demo.Enc.Encounter` carrying `SqlTableName = "PatEncounter"` projects a
 derivable from the class definition's names alone. Derive nothing; confirm with `iris_table_info`.
 On `SQLCODE -30` (Table not found), the next call is introspection — never another guessed name.
 
+### Headless bootstrap — running the calls `iris_execute` cannot
+
+Some setup APIs do not survive `iris_execute`. The symptom is never an error: the call reports
+success, returns nothing, and the artefact you asked for is absent or half-made. **Wrap the call in a
+`[SqlProc]` class method and invoke it with `SELECT`** — that is the canonical headless path, and it
+is the same pattern whatever the API. Three independent failure modes converge on it:
+
+| Failure mode | What you see | Where it bites |
+|---|---|---|
+| **Class-generating calls are no-ops.** `iris_execute`'s CodeMode does not run an objectgenerator. | Call succeeds, no class generated. A later compile is green, and the method is missing at *runtime*: `<METHOD DOES NOT EXIST>GetObject`. | `EnsLib.RecordMap.Generator.GenerateObject` |
+| **Only device output comes back.** In HTTP CodeMode a `Quit`/`Return` value is not captured — only what you `Write` to the current device. | "Success" with an empty result; the `%Status` you returned is lost, so a failure is indistinguishable from a success. | any call whose answer is a return value |
+| **`&sql` breaks `SQLCODE`.** The MCP rewrites `&sql(...)` into a `%SQL.Statement` and binds status to a generated local, never to bare `SQLCODE`. | `<UNDEFINED>` on `If SQLCODE<0` — *after* the write already succeeded, so it reads like a failed insert and invites you to retry a load that worked. (intersystems-ib/iris-interop-dev#145) | direct SQL against `Ens_Util.LookupTable` etc. |
+
+The `[IIS-SILENT]` guard fires on the second one automatically, but it can only speak *after* the
+call — recognise the shape and start from the SqlProc instead.
+
+The skeleton, identical for every case — take a parameter, return a **string** that says what
+happened, never a bare `%Status`:
+
+```objectscript
+/// Headless bootstrap. Invoke via: SELECT MyApp.Bootstrap_DoTheThing('arg')
+ClassMethod DoTheThing(pArg As %String = "") As %String [ SqlProc ]
+{
+    Set sc = ##class(Some.Generator).DoIt(pArg)      // the call iris_execute would swallow
+    Quit $Select($$$ISOK(sc): "ok", 1: "FAIL: " _ $system.Status.GetErrorText(sc))
+}
+```
+
+**Idempotency is the shared caveat.** These APIs are create-only: re-running one after editing the
+source fails or silently keeps the stale artefact. Delete first, then regenerate — and put the
+delete in its own SqlProc so the pair is repeatable.
+
+| API | What it makes | Re-run behaviour |
+|---|---|---|
+| `EnsLib.RecordMap.Generator.GenerateObject(map)` | the `.Record` class + the `GetObject`/`PutObject` bodies | `#5768 Class already exists` — delete the `.Record` first (`business-services`) |
+| `EnsLib.HL7.SchemaXML.Import(file, .cat)` | a custom HL7 schema category | overwrites, but a renamed/removed segment lingers — remove the category first (`hl7-schemas`) |
+| direct SQL into `Ens_Util.LookupTable` | lookup-table rows | make it idempotent with a `DELETE WHERE TableName=…` inside the same transaction (`lookup-tables`) |
+
+**Whatever the SqlProc generated in the namespace still has to reach disk.** These artefacts are the
+documented exception to write-file-first: generate → `iris_doc(mode=get)` → `Write` to `src/`. A
+`.Record` that exists only in the namespace is a CR-12 finding like any other.
+
 ### Calling a `[SqlProc]` — the name is not the class name
 
 A `[SqlProc]` class method projects as **`<package, dots→underscores>.<Class>_<Method>`**: everything

@@ -180,7 +180,9 @@ Invoke from MCP: `SELECT MyApp.Bootstrap_ImportLookups()` — schema `MyApp`, fu
 Idempotent because of the prior `DELETE`. Place the SqlProc in your project's `Bootstrap` class so it lives next to other workshop-setup helpers and ships in the same `.cls` file as the rest of the setup.
 
 **Why a SqlProc rather than a loose `iris_execute` with `&sql`** — and the reason is not the one
-this skill used to give (#119). The inserts **do** persist; what breaks is the error check. The MCP
+this skill used to give (#119). This is the third of the three failure modes tabulated in `interop` §"Headless bootstrap — running the calls `iris_execute` cannot";
+the other two (class-generating no-ops, uncaptured return values) bite elsewhere but push you to the
+same wrapper. The inserts **do** persist; what breaks is the error check. The MCP
 rewrites `&sql(...)` into a `%SQL.Statement` call and binds its status to a generated local
 (`sqlSQLCODE1`, `sqlSQLCODE2`, …), never to the bare `SQLCODE` the idiom expects. So:
 

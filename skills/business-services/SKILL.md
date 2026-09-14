@@ -259,7 +259,10 @@ reads the lines and assembles the sub-batch itself.
 
 The Record Map's `<Map>.Record` class **and** the `GetObject`/`PutObject`/`GetRecord`/`PutRecord` method bodies are written by the **wizard / generator into the source**, exactly like a generated SOAP client. A normal `iris_compile` (or `iris_doc put` with `compile=true`) of a Record Map class that contains only the XData block compiles green but produces **no working `GetObject`** — at runtime the FileService dies with `<METHOD DOES NOT EXIST>GetObject ... ^EnsLib.RecordMap.Service.Base.1`.
 
-When the Portal wizard is not available (MCP / headless), generate via the official API **wrapped in a `[SqlProc]`** (because `iris_execute`'s objectgenerator mode silently no-ops class-generating calls — verified on IRIS 2026.1):
+When the Portal wizard is not available (MCP / headless), generate via the official API **wrapped in
+a `[SqlProc]`** — `iris_execute`'s objectgenerator mode silently no-ops class-generating calls
+(verified on IRIS 2026.1). This is one instance of the general pattern; the rule, the skeleton and
+the other APIs that need it are in `interop` §"Headless bootstrap — running the calls `iris_execute` cannot":
 
 ```objectscript
 ClassMethod GenerateRecordMap(pRM As %String) As %String [ SqlProc ]

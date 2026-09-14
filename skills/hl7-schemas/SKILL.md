@@ -73,10 +73,15 @@ Use case: receiving ADT_A01 messages that include a custom `ZPI` segment carryin
 
 ## Cookbook — MCP-friendly import via XML + SqlProc
 
-When the Portal UI isn't available (working entirely via MCP, headless CI, scripted environment refresh), the canonical path is:
+When the Portal UI isn't available (working entirely via MCP, headless CI, scripted environment
+refresh), the canonical path is the **headless bootstrap** pattern — `interop` §"Headless bootstrap — running the calls `iris_execute` cannot" carries the rule
+and the generic skeleton; the schema-specific steps are:
 
 1. Author the schema as a **standalone XML file** (root `<Category>`, see format below).
 2. Call `##class(EnsLib.HL7.SchemaXML).Import(file, .pCategoryImported)` from a SqlProc wrapper.
+   Re-importing an edited schema **overwrites but does not clean**: a segment you renamed or removed
+   lingers in the category. Remove the category first — the `RemoveSchema` companion below exists
+   for exactly that, and is the schema equivalent of deleting a `.Record` before regenerating it.
 3. Verify with `EnsLib.HL7.Schema.ResolveSegNameToStructure(...)` / `ResolveSchemaTypeToDocType(...)`.
 
 ### Anti-pattern — do NOT do this
