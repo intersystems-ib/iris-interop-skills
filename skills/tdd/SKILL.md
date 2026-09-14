@@ -286,6 +286,14 @@ Method TestRouterDispatchaACocina()
 
 ### BO method test (integration with real adapter)
 
+> **Prerequisite — `..SendRequest` needs the Testing Service turned on.** Both skeletons below
+> dispatch through `EnsLib.Testing.Service`, which is not available by default. Set
+> `TestingEnabled="true"` on the production (see §"Enabling the Testing Service" below) **before**
+> the first run, or the very first `..SendRequest` fails with
+> `<Ens>ErrBusinessDispatchNameNotRegistered` — an error that names `EnsLib.Testing.Service` and so
+> sends you looking for a missing config item rather than a missing flag.
+
+
 ```objectscript
 Class MyApp.Tests.BO.Menus2Cocina Extends %UnitTest.TestProduction
 {
@@ -380,6 +388,28 @@ Effect:
 - The IRIS Management Portal exposes a "Testing Service" page (under Interoperability) for manual dispatch of test messages to any BP or BO. Requires `%Ens_TestingService:USE` resource.
 - Programmatic: `..SendRequest(...)` and `EnsLib.Testing.Service.SendTestRequest(...)` both work when the production is running with this flag.
 - Internally: a hidden `EnsLib.Testing.Process` is registered and dispatches the wrapped `EnsLib.Testing.Request` to the target via `SendRequestAsync`.
+
+**The flag is sufficient — you do not add `EnsLib.Testing.*` config items.** Measured on IRIS for
+Health 2026.1, sending to an adapterless BO:
+
+| Production configuration | `SendTestRequest(..., getReply=1)` |
+|---|---|
+| `TestingEnabled="true"`, **no** Testing items | **works** — session created, response returned |
+| neither the flag nor any item | `ErrBusinessDispatchNameNotRegistered: 'EnsLib.Testing.Service'` |
+| `EnsLib.Testing.Service` item only, no flag | `ErrBusinessDispatchNameNotRegistered: 'EnsLib.Testing.Process'` |
+| **both** `EnsLib.Testing.Service` *and* `EnsLib.Testing.Process` items, no flag | works |
+
+So there are two routes, and the flag is the one to use — one attribute instead of two config items
+that then ship in your production definition.
+
+**Read the error as "the flag is missing", not "an item is missing".** Both failures above name a
+*class* as an unregistered dispatch name, which reads like a missing config item and invites you to
+add one. Adding `EnsLib.Testing.Service` alone then produces the second error — for **asynchronous**
+sends as well as synchronous ones, since the wrapped request goes through `EnsLib.Testing.Process`
+either way — and two rounds of that look like a config rabbit hole rather than a one-attribute fix.
+
+If you genuinely cannot set the flag (a production you do not own, or one under deploy-to-prod
+automation that strips it), the explicit-items route is the fallback, and you need **both**.
 
 **Important — security**: `TestingEnabled="true"` is a development setting — the **correct default** in dev/workshop productions, and a risk only where deploy-to-prod automation exists. **Never deploy a production to prod with this flag on** — anyone with the Testing resource can fabricate messages into running BPs/BOs. Strip it (or guard via a deployment-time setting) before promoting.
 
@@ -497,6 +527,10 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
 - **Stubbing the adapter in BO tests.** In conventional software you'd unit-test the BO method with a mocked adapter — in IRIS Interop that's an anti-pattern. The adapter boundary is exactly where the defects you care about live (auth, classpath, type marshalling, encoding, timeouts). Stubs make the test green while the real thing breaks. Use a real adapter against a real test endpoint.
 - **Forgetting to override `TestControl()`** — TestProduction will start/stop your production every time you `Run()`. Override to no-op when the production is managed externally.
 - **Quoting `TestControl` as evidence that the rest of the class is sound.** The no-op override has no assertion in it — it passes whenever the class compiled and the runner reached it. That makes it a **liveness** signal and never a **correctness** one. Green `TestControl` beside failures tells you the failures are real verdicts rather than a harness fault, and nothing else: a class whose every substantive method is broken, mis-specified, or asserting on the wrong thing still shows it green. Anything shaped `Quit $$$OK` is in this category whatever it is named. Cite the methods that actually assert something.
+- **`ErrBusinessDispatchNameNotRegistered` on the first `..SendRequest`** → the production is
+  missing `TestingEnabled="true"`, not a config item. The error names `EnsLib.Testing.Service` (and,
+  once you add that, `EnsLib.Testing.Process`), which points at the wrong fix. See §"Enabling the
+  Testing Service".
 - **Forgetting to seed `..BaseLogId`** — `GetEventLog` returns nothing if `BaseLogId` is empty. Seed it in `OnBeforeAllTests` from `MAX(ID) FROM Ens_Util.Log`.
 - **Asserting on internal state** instead of public contract. Assert on what the next consumer (DTL, BO, downstream system) actually sees.
 - **No fixture strategy** — paste-in literals everywhere. Centralize sample inputs in a fixtures class (`MyApp.Tests.Fixtures.Censo`).
