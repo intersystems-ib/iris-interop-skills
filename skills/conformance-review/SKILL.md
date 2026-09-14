@@ -47,6 +47,12 @@ re-plan from scratch and it never rewrites silently.
    `:alerting`, `:hl7-schemas`, `:messages`, `:tdd`).
 3. **Check every criterion below** (CR-1…CR-12) against the actual code. Cite `file:line` and the exact
    best-practice it meets or breaks.
+3b. **Re-check the criteria that depend on WIRING, not just on the classes you changed.** Some
+   violations are created by an edit to a *different* component than the one that ends up wrong —
+   CR-6 above is the worked example: adding an HL7 service to an existing generic router makes the
+   **router** non-conformant without touching it. So when this session added or re-pointed an input,
+   re-evaluate the **targets**, not only the item you edited. Conformance is not a per-component
+   "build it, review it once" gate.
 4. **Re-verify tests for real** (CR-7): run `iris_test` on the test class; record the genuine result.
 4b. **Compare the namespace against the source tree** (CR-12). This is the one check that cannot be
    done by reading code — it needs both sides:
@@ -87,7 +93,7 @@ single file's text; the rest need the agent's cross-file/semantic judgment.
 | **CR-3** | P2 | Alert circuit present structurally but **not fed**: BOs without `AlertOnError`, Router without `AlertOnBadMessage`/`BadMessageHandler`, no `Ens.AlertRequest` on real failures. | `AlertOnError=1` on BOs; `AlertOnBadMessage=1` + `BadMessageHandler` on the RoutingEngine; emit `Ens.AlertRequest` on error paths. | `alerting` |
 | **CR-4** ⚙ | P2 | A DTL (`Ens.DataTransformDTL`) implemented as imperative `<code>` loops (`SetValueAt`/`GetValueAt`) with **no `<assign>`** — loses visual-editor round-trippability. | Express field/segment moves as `<assign property='target.{…}'>`; reserve `<code>` for genuinely procedural steps (Z-segments, lookups). | `transformations` |
 | **CR-5** ⚙ | P2 | An HL7 routing rule matching on raw `MSH:9.1`/`9.2` string equality with **no `docCategory`/`docName`/`source`** constraints. | Constrain by `docCategory`/`docName` (+ `source`) instead of positional `MSH:9.x` matches. | `bpl`, `hl7-schemas` |
-| **CR-6** | P2 | A **generic** `EnsLib.MsgRouter.RoutingEngine` production item hosting an **HL7** rule (rule uses `EnsLib.HL7.MsgRouter.RuleAssist`). | Use the HL7-specific `EnsLib.HL7.MsgRouter.RoutingEngine` engine to match the HL7 rule. | `bpl` |
+| **CR-6** ⚙ | P2 | A **generic** `EnsLib.MsgRouter.RoutingEngine` production item with **HL7 flowing into it** — any `EnsLib.HL7.*` service/process naming it in `TargetConfigNames`, or a rule using `EnsLib.HL7.MsgRouter.RuleAssist`. Key off the **production wiring**, not only the rule: the router is correct when built for a non-HL7 input and becomes a violation the moment an HL7 input is pointed at it, which is a *different* edit to a *different* component. A green end-to-end test cannot see it — the generic engine transports `EnsLib.HL7.Message` fine, it just loses schema validation in the rule editor and the `{MSH:9.1}` paths. | Use the HL7-specific `EnsLib.HL7.MsgRouter.RoutingEngine`. If the router must serve both HL7 and custom messages, split it — one router per message shape. | `bpl` |
 | **CR-7** ⚙ | **P0** | "Tests pass" claimed from a **self-authored `[SqlProc]` runner** read via `iris_query`, not from `%UnitTest`. `iris_test` never returned green (or wasn't run). | **Re-run `iris_test`** against the `%UnitTest.TestProduction` class; require real asserts to pass. Treat a `[SqlProc]`-returned `"PASS"` as unverified. | `tdd`, `unit-tests` |
 | **CR-8** | P2 | HL7/REST message fields typed as non-`%String` (forced by `EnsLib.HL7`/REST string semantics), except genuinely typed synthetic fields. | Type HL7/REST-sourced message properties `As %String`. | `messages` |
 | **CR-9** | P3 | Naming: classes not `<Pkg>.<Tipo>.<Nombre>`, or production **Item Name** not `<Tipo>.<Nombre>`; Category ≠ package root. The Tipo set is `interop`'s table, not a shorter list: `.BS`/`.BP`/`.BO`/`.DT`/`.DTS`/`.MSG`/`.RUL`/`.DAT`/`.ADP`/`.UTL`/`.HL7` — `.UTL` (Utility / FunctionSet) and `.DAT` (internal `%SerialObject` data classes, see CR-11) are conformant, do **not** flag them. Wizard-generated SOAP/XSD code is exempt: it follows `interop`'s separate `WSC`/`WS` sub-package table. | Apply the interop naming convention; Category = package root; fixed `Ens.Alert`. | `interop` |

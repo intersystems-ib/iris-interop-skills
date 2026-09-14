@@ -387,6 +387,67 @@ check("negative control — \"an\" must not match", False,
                       io.open(os.path.join(ROOT, "hooks", "tdd_enforcement.py"),
                               encoding="utf-8").read())))
 
+# --------------------------------------------------------------------------------------
+# #180  CR-6 keys off the production WIRING, not one class's keywords.
+#
+# The violation is created by an edit to a DIFFERENT component than the one that ends up
+# wrong: a generic router is correct until an HL7 service is pointed at it, and nothing
+# re-checks the router at that moment. A green end-to-end test cannot see it either, since
+# the generic engine transports EnsLib.HL7.Message perfectly well.
+#
+# The two NEGATIVE cases carry the weight here. A naive "file mentions EnsLib.HL7 and also
+# mentions EnsLib.MsgRouter.RoutingEngine" grep fires on both of them, and both are correct
+# productions — an HL7 flow and a generic router coexisting without being wired together is
+# the normal shape of a two-input production. A check that flagged those would be turned off
+# within a week, which is the failure mode worth testing for.
+import conformance_prescan as _cp  # noqa: E402
+
+_ITEMS = {
+    "hl7_bs":     '<Item Name="BS.AdtIn" ClassName="EnsLib.HL7.Service.FileService">'
+                  '<Setting Target="Host" Name="TargetConfigNames">{tgt}</Setting></Item>',
+    "recmap_bs":  '<Item Name="BS.Censo" ClassName="EnsLib.RecordMap.Service.FileService">'
+                  '<Setting Target="Host" Name="TargetConfigNames">Router.Main</Setting></Item>',
+    "generic":    '<Item Name="Router.Main" ClassName="EnsLib.MsgRouter.RoutingEngine"/>',
+    "hl7_router": '<Item Name="Router.Main" ClassName="EnsLib.HL7.MsgRouter.RoutingEngine"/>',
+    "hl7_bo":     '<Item Name="BO.AdtOut" ClassName="EnsLib.HL7.Operation.FileOperation"/>',
+}
+
+
+def prod(*chunks):
+    return ("Class Demo.Production Extends Ens.Production\n{\nXData ProductionDefinition\n{\n"
+            '<Production Name="Demo.Production">' + "".join(chunks) + "</Production>\n}\n}")
+
+
+print("\n#180  CR-6 fires on the wiring, and stays quiet when nothing is wired")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+for _label, _src, _want in [
+    # POSITIVE: the exact #180 sequence — a router built for a RecordMap flow, later given
+    # an HL7 input. Both items are individually fine; the pairing is the violation.
+    ("hl7 BS -> generic router", prod(_ITEMS["recmap_bs"], _ITEMS["hl7_bs"].format(tgt="Router.Main"),
+                                      _ITEMS["generic"]), True),
+    # POSITIVE: the router is not the first target listed.
+    ("generic router 2nd in list", prod(_ITEMS["hl7_bs"].format(tgt="BO.AdtOut,Router.Main"),
+                                        _ITEMS["hl7_bo"], _ITEMS["generic"]), True),
+    # NEGATIVE: same wiring, correct engine. Proves the check reads ClassName, not "is there HL7".
+    ("hl7 BS -> HL7 router", prod(_ITEMS["hl7_bs"].format(tgt="Router.Main"),
+                                  _ITEMS["hl7_router"]), False),
+    # NEGATIVE: both present, NOT wired together. The naive grep's false positive.
+    ("hl7 flow + generic router, unwired", prod(_ITEMS["hl7_bs"].format(tgt="BO.AdtOut"),
+                                                _ITEMS["hl7_bo"], _ITEMS["recmap_bs"],
+                                                _ITEMS["generic"]), False),
+    # NEGATIVE: no generic router anywhere.
+    ("no generic router", prod(_ITEMS["hl7_bs"].format(tgt="Router.Main"), _ITEMS["hl7_router"]), False),
+    # NEGATIVE: an ordinary class is not a production.
+    ("plain class", "Class Demo.MSG.X Extends (%Persistent, Ens.Request)\n{\n}", False),
+]:
+    check(_label, _want, _cp.cr6_generic_router_hosting_hl7(_src))
+
+# A parser bug must never break a Write. main() swallows exceptions from a structural check;
+# assert the contract the swallow depends on -- the function returns a bool, never raises.
+check("malformed XML does not raise", True,
+      isinstance(_cp.cr6_generic_router_hosting_hl7('<Item Name="a" ClassName='), bool))
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)
