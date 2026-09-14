@@ -125,6 +125,36 @@ src/
 
 When you must drive IRIS from MCP (`iris_doc put`), **immediately** `iris_doc get` the result and `Write` to disk in the Atelier layout. Don't let in-IRIS-only classes accumulate — that's silent debt the workshop alumno can't recover.
 
+
+## `iris_doc(put)` and `iris_production_item` change the NAMESPACE only
+
+Two of the most-used MCP calls write to IRIS and to nothing else:
+
+| Call | Changes | Does **not** change |
+|---|---|---|
+| `iris_doc(mode=put, content=…)` | the class in the namespace | the `.cls` on disk |
+| `iris_production_item(add/remove/enable/disable/set_settings)` | the production in the namespace | `Production.cls` on disk |
+
+Neither is wrong — they are the right tools. What is wrong is stopping there, and **the feedback
+loop will not tell you**, because the tests run against the namespace. The suite stays green while
+the repo quietly stops reproducing what is running, and the divergence surfaces much later as a
+CR-12 finding (#181 reported it twice in one session: the disk DTL was two assigns behind, and disk
+`Production.cls` was still the single-router version).
+
+So pair every one of them:
+
+- **Authoring a class** → `Write` the file first, then `iris_doc(put)` the *same* content. The
+  `src-before-iris` PreToolUse gate enforces that a file exists; the `src-drift-guard` PostToolUse
+  guard warns when the content you put differs from it.
+- **Changing the production** → after the item change, `iris_doc(mode=get)` the production class
+  and `Write` it back to `src/`. Same for anything edited in the Portal.
+- **Generated artefacts** (RecordMap `.Record`, SOAP `WSC.*`) → generate, then `iris_doc(mode=get)`
+  → `Write`. This is the documented exception to file-first, not an exemption from disk.
+
+Disk is the deliverable: the namespace is not version-controlled, not reviewable, and does not
+survive the instance.
+
+
 ## Hot-swap vs. restart — when code changes don't take effect
 
 `Ens.Director.UpdateProduction(timeout)` is for **production XML changes** — adding/removing items, modifying settings. It does **NOT** recompile class code and does **NOT** restart the OS jobs running BO/BP/BS instances.
