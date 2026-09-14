@@ -104,9 +104,9 @@ self-contained binary.
    /plugin install iris-interop-skills@iris-interop-skills
    ```
 
-   This installs everything that ships with the plugin: the **20 skills**, the eight **hooks**
+   This installs everything that ships with the plugin: the **20 skills**, the ten **hooks**
    (a SessionStart conventions bootstrap, two PreToolUse gates that can block non-conformant calls,
-   and five PostToolUse guards — auto-enabled; see *Hooks* below), and
+   six PostToolUse guards, and a blocking Stop gate — auto-enabled; see *Hooks* below), and
    the four **agents** (`interop-builder`, `deploy-smoke-test`, `introspect-dont-guess`,
    `conformance-reviewer` — auto-registered; see *Agents* below).
 
@@ -255,11 +255,11 @@ Raise the budget in your **own** settings — `~/.claude/settings.json` (user) o
 
 ## Hooks
 
-Eight hooks ship in `hooks/` and auto-enable when the plugin is installed (wired via
+Ten hooks ship in `hooks/` and auto-enable when the plugin is installed (wired via
 `hooks/hooks.json`, referenced from `plugin.json`). They need a Python interpreter on PATH —
 resolved as **`python3` → `python` → `py`** (so Windows, where the interpreter is `python`/`py`
 rather than `python3`, works too); if none is found they degrade to a no-op. The two `PreToolUse`
-gates can **block** a non-conformant call; the SessionStart bootstrap and the five `PostToolUse`
+gates and the `Stop` gate can **block**; the SessionStart bootstrap and the six `PostToolUse`
 guards are advisory.
 
 | Hook | Event | Fires on | What it does |
@@ -272,6 +272,8 @@ guards are advisory.
 | `conformance-prescan` | `PostToolUse` | `Write`/`Edit`/`iris_doc(put)` of an interop `.cls` | Cheap, deterministic pre-screen of that one file against the `conformance-review` criteria. |
 | `docker-detect` | `PostToolUse` | An interop tool returns `DOCKER_REQUIRED` | Reminds that the instance is native/remote — the tools work over HTTP; retry without `IRIS_CONTAINER`. |
 | `tdd-first-green` | `PostToolUse` | `iris_test` | Detects test-after-code: a test class whose **first ever** run is green never went red, so it proves nothing — asks for one currently-failing case. |
+| `src-drift-guard` | `PostToolUse` | `iris_doc(mode=put)` whose inline content differs from the file on disk; any mutating `iris_production_item` | Presence is not agreement: `src-before-iris` checks the file *exists*, this one notices the namespace has moved *ahead* of it. Tests run against the namespace, so nothing else signals the drift. |
+| `conformance-stop-gate` | `Stop` (**blocking**) | the moment the model would finish, in a session that wrote classes into IRIS | Refuses once on CR-12 (a class in IRIS with no file on disk) or on "the conformance pass never ran". Fires at most once per session. |
 
 Not installing as a plugin? Add the equivalent `hooks` block to your `settings.json`, pointing at
 the `hooks/*.sh` wrappers.

@@ -376,7 +376,8 @@ for _label, _pat, _fn in [
         ("adapter-extended-directly", r"must Extend Ens\.BusinessService",            "interop_conformance_gate.py"),
         ("load-via-iris_execute",     r"Loading/compiling classes through iris_execute", "interop_conformance_gate.py"),
         ("tdd-without-test",          r"TDD: you just wrote the interop component",   "tdd_enforcement.py"),
-        ("source-of-truth",           r"Source-of-truth:",                            "src_before_iris.py")]:
+        ("source-of-truth",           r"Source-of-truth:",                            "src_before_iris.py"),
+        ("source-drift",              r"Source drift:",                               "src_drift_guard.py")]:
     _src = io.open(os.path.join(ROOT, "hooks", _fn), encoding="utf-8").read()
     check(_label, True, bool(_re.search(_pat, _src)))
 # Negative control: their shipped pattern for the TDD rule said "an interop component" and
@@ -447,6 +448,101 @@ for _label, _src, _want in [
 # assert the contract the swallow depends on -- the function returns a bool, never raises.
 check("malformed XML does not raise", True,
       isinstance(_cp.cr6_generic_router_hosting_hl7('<Item Name="a" ClassName='), bool))
+# #181  The drift guard: presence is not agreement.
+#
+# src_before_iris asks "does a file exist for this class". A put whose inline content
+# DIFFERS from that file passes it, and the namespace quietly moves ahead of the tree.
+# Tests run against the namespace, so the loop stays green and nothing signals the drift
+# until a much later conformance byte-compare.
+#
+# The controls that matter are the silent ones. This guard speaks on every iris_doc(put)
+# and every mutating iris_production_item, which is a high-traffic path -- a guard that
+# also fired on matching content, on a get, or on a put that the SIBLING GATE had just
+# denied would be noise, and noise gets hooks disabled. The blocked-put case is the
+# sharpest: warning there would punish the session for respecting src_before_iris, which
+# is the same inversion #157 fixed in the stop gate.
+DRIFT = os.path.join(ROOT, "hooks", "src_drift_guard.py")
+
+_CLS = "Demo.MSG.PatientReq"
+_SRC_V1 = "Class Demo.MSG.PatientReq Extends (%Persistent, Ens.Request)\n{\nProperty Id As %String;\n}"
+_SRC_V2 = _SRC_V1.replace("Property Id As %String;",
+                          "Property Id As %String;\nProperty Nombre As %String;")
+_OK_RESULT = {"open_uri": "isfs://x/Demo/MSG/PatientReq.cls", "storage_stripped": False}
+_DENY_TEXT = ("[IIS-SRC-DISK] Source-of-truth: `Demo.MSG.PatientReq` would exist only in the "
+              "IRIS namespace.")
+
+
+def drift_out(payload, cwd):
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=cwd)
+    p = subprocess.run([sys.executable, DRIFT], input=json.dumps(payload),
+                       capture_output=True, text=True, env=env)
+    if p.returncode != 0 or p.stderr.strip():
+        return "CRASH: " + (p.stderr.strip().splitlines()[-1][:120] if p.stderr.strip() else "rc")
+    return "WARN" if p.stdout.strip() else "SILENT"
+
+
+def doc_post(mode, content, result, name=_CLS + ".cls"):
+    ti = {"mode": mode, "name": name}
+    if content is not None:
+        ti["content"] = content
+    return {"tool_name": "mcp__iris__iris_doc", "tool_input": ti, "tool_response": result}
+
+
+print("\n#181  drift guard warns on divergence, and ONLY on divergence")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+_tmp = tempfile.mkdtemp(prefix="iis181-")
+_f = os.path.join(_tmp, "src", "Demo", "MSG", "PatientReq.cls")
+os.makedirs(os.path.dirname(_f))
+io.open(_f, "w", encoding="utf-8").write(_SRC_V1)
+
+for _label, _payload, _want in [
+    # POSITIVE: the #181 case -- authored inline, disk still holds the older version.
+    ("put differs from disk",        doc_post("put", _SRC_V2, _OK_RESULT),            "WARN"),
+    # NEGATIVE: Write-then-put was followed. The whole point is that this stays quiet.
+    ("put matches disk",             doc_post("put", _SRC_V1, _OK_RESULT),            "SILENT"),
+    # NEGATIVE: whitespace is not drift -- CRLF and a missing final newline are editor noise.
+    ("put differs only by CRLF/EOF", doc_post("put", _SRC_V1.replace("\n", "\r\n") + "\n\n",
+                                              _OK_RESULT),                            "SILENT"),
+    # NEGATIVE: the sibling gate denied this put. Nothing reached IRIS, so nothing drifted --
+    # warning here would punish correct behaviour (#157's inversion).
+    ("put blocked by src_before_iris", doc_post("put", _SRC_V2,
+                                                {"is_error": True, "content": _DENY_TEXT}), "SILENT"),
+    # NEGATIVE: a failed compile still STORES the document, so that one is real drift (#157 case C).
+    ("put stored but compile failed", doc_post("put", _SRC_V2,
+                                               {"is_error": True,
+                                                "content": json.dumps({"compile_errors": ["#5373"]})}),
+                                                                                       "WARN"),
+    # NEGATIVE: get is the FIX direction, not the problem.
+    ("mode=get",                     doc_post("get", None, _OK_RESULT),               "SILENT"),
+    # NEGATIVE: no file on disk at all is src_before_iris's job, not this one.
+    ("class not on disk",            doc_post("put", _SRC_V2, _OK_RESULT,
+                                              name="Demo.MSG.Absent.cls"),            "SILENT"),
+    # NEGATIVE: generated artefacts are exported after generation, so disk legitimately lags.
+    ("generated .Record",            doc_post("put", _SRC_V2, _OK_RESULT,
+                                              name="Demo.RecordMap.X.Record.cls"),    "SILENT"),
+]:
+    check(_label, _want, drift_out(_payload, _tmp))
+
+# iris_production_item never writes a .cls, so NO gate sees it -- the second half of #181.
+for _label, _action, _want in [
+    ("production_item add",          "add",          "WARN"),
+    ("production_item set_settings", "set_settings", "WARN"),
+    ("production_item get_settings", "get_settings", "SILENT"),
+]:
+    check(_label, _want, drift_out(
+        {"tool_name": "mcp__iris__iris_production_item",
+         "tool_input": {"action": _action, "item": "BS.In", "production": "Demo.Production"},
+         "tool_response": {"ok": True}}, _tmp))
+
+# The marker must reach the emitted text, not merely exist in the source (the lesson the
+# #162 section below records): a guard whose marker never ships is undetectable downstream.
+_emitted_drift = subprocess.run(
+    [sys.executable, DRIFT], input=json.dumps(doc_post("put", _SRC_V2, _OK_RESULT)),
+    capture_output=True, text=True, env=dict(os.environ, CLAUDE_PROJECT_DIR=_tmp))
+check("marker reaches the output", True,
+      json.loads(_emitted_drift.stdout)["hookSpecificOutput"]["additionalContext"]
+      .startswith("[IIS-DRIFT] "))
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:

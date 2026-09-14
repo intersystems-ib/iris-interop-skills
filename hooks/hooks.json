@@ -70,6 +70,15 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/tdd-first-green.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*__iris_doc|iris_doc|mcp__.*__iris_production_item|iris_production_item",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/src-drift-guard.sh"
+          }
+        ]
       }
     ],
     "Stop": [
