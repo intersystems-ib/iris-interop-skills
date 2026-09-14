@@ -30,6 +30,10 @@ Also: the user is troubleshooting (a message didn't arrive, a transform produced
 
 Heuristic: start at the Production Status page (red items?). Follow up in Event Log for component-level errors. Use Visual Trace once you've narrowed to a specific message.
 
+Headless, the same four map onto `iris_interop_query` (`what=messages` / `trace` / `logs` / `queues`)
+plus `iris_message_body` for the payload — see §"Worked example — triage a failed message" for the
+order to call them in.
+
 ## Runtime queries from Claude — use the typed MCP tool, never guess SQL
 
 When inspecting a running production through the IRIS MCP, reach for `iris_interop_query` / `iris_production` / `iris_production_item`. Do **not** hand-write SQL against `Ens_Util.Log` / `Ens.MessageHeader`, and never guess `%SYS.*` / `Config.*` / `Ens_Config.*` catalog tables — those guesses fail ~⅔ of the time. One typed call replaces the multi-query reconstruction (and the `SELECT MAX(ID)` watermark dance).
@@ -98,6 +102,81 @@ not join to the message body. For these, a plain `iris_query` is correct — not
 Everything else — listing a session's messages, tailing the Event Log, following one message end to
 end, queue depths — has a typed call, and the typed call is one round trip against a table name you
 would otherwise guess. Use the table above; drop to SQL only for the three cases here.
+
+## Worked example — triage a failed message (session → trace → body)
+
+The reusable shape for *"find the message that errored yesterday; I need the session, the patient
+and their allergies"*. Four calls, all through the MCP, no Portal and no hand-written SQL.
+
+**1. Find the failing header.** Filter rather than listing everything — `target` / `source` /
+`message_class` / `session_id` / `since_id` all narrow it:
+
+```
+iris_interop_query(what="messages", target="BO.Cocina", limit=10, namespace="APP")
+```
+
+```
+ID 16  Verify.MSG.PingReq  session 15  Status=8   <- error
+ID 11  Verify.MSG.PingReq  session 10  Status=9   <- completed
+```
+
+`Status` is the quickest discriminator on the way past: **9 = Completed, 8 = Error**. The per-message
+`IsError` flag marks the *error reply* headers within a session.
+
+**2. Read the whole session — this is the step that stops you getting lost.**
+
+```
+iris_interop_query(what="trace", session_id=15, namespace="APP")
+```
+
+One call returns **both** halves of the story: the header chain (who sent what to whom, with each
+`Status`/`IsError`) *and* that session's Event Log entries, in order. For the case above it lands
+directly on the cause:
+
+```
+BO.Echo                  Rechazado: valor no valido en Texto = BAD-...
+BO.Echo                  ERROR #5001: Datatype validation failed for Texto: BAD-...
+EnsLib.Testing.Process   ERROR <Ens>ErrBPTerminated: Terminating BP ... due to error: #5001
+```
+
+`session_id` is **required** for `what=trace`; that is the whole point of starting at step 1.
+
+**3. `what=logs` only when the trace is not enough.** The trace already carries the session's events,
+so this step is usually redundant — reach for it when you want a **severity filter**
+(`log_type="error,warning"`, the default), a **component-wide** view across sessions
+(`component="BO.Cocina"`), or to **tail** with `since_id`:
+
+```
+iris_interop_query(what="logs", session_id=15, namespace="APP")
+```
+
+**4. Read the body — and know the PHI gate is on by default.** `iris_message_body` takes the
+**header** ID from step 1 or 2:
+
+```
+iris_message_body(message_id="16", namespace="APP")
+→ PHI_POLICY_BLOCKED: "blocked while dataPolicy=block — message bodies may contain PHI"
+```
+
+That refusal is the designed default, not a misconfiguration. Choose deliberately:
+
+| `data_policy` | Effect |
+|---|---|
+| `block` *(default)* | refuses to read the body at all |
+| `redact` | returns it with known HL7 v2 PHI fields blanked — PID-3/5/7/8/11/18 and MSH-3 |
+| `allow` | returns it as-is; **additionally requires `acknowledge_phi=true`** |
+
+Use `redact` unless you actually need the identifying values — for "why did this fail" you usually
+do not. For "which patient and what allergies", `allow` + `acknowledge_phi=true`, then read `PID-5`
+and the `AL1` segments.
+
+It is not HL7-only: a custom `%Persistent` message body comes back as JSON
+(`{"Texto":"BAD-datatype-value"}`, `content_type: "JSON"`). `max_bytes` caps the read (default
+65536, hard cap 1048576) and the response reports `actual_size` and `truncated`.
+
+**Why this order.** Step 1 narrows to one session; step 2 explains it in a single call; the body is
+read last because it is the only step that touches PHI, and by then you often no longer need it.
+Going body-first means opening patient data to answer a question the trace would have answered.
 
 ## Searching by message content — the two joins
 
