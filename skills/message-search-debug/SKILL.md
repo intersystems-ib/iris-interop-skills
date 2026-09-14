@@ -276,8 +276,9 @@ until you have re-run the impossible-value probe above on your own MCP version a
 nothing. Until then, use the `PropId` join below — it is longer, and it is the one that answers the
 question you asked.
 
-Tracked upstream as intersystems-ib/iris-interop-dev (the parameter is parsed with a `.ok()` that
-discards a deserialisation failure instead of erroring, so a rejected filter degrades to no filter).
+Tracked upstream as **intersystems-ib/iris-interop-dev#202** — the parameter is parsed with a
+`.ok()` that discards a deserialisation failure instead of erroring, so a rejected filter degrades
+into no filter. When that closes, re-run the probe and delete this section.
 
 ### Authoring a Search Table
 
