@@ -87,8 +87,8 @@ If the destination is a SOAP web service, **stop and use `soap-bo`** instead. It
 | `PoolSize` | Concurrent BO instances. **Default `1` is correct** — only raise with evidence of a bottleneck (queue depth, latency). >1 means messages out of order; only acceptable if the destination tolerates it. |
 | `Credentials` | Reference to a credential record (don't put passwords in settings directly). |
 | `ReplyCodeActions` | For HL7 ACK handling — what to do on AE/AR/CE/CR. |
-| `DSN` (SQL) | JDBC URL (`jdbc:postgresql://...`) **or** named SQL Gateway connection. |
-| `JGService` (SQL/JDBC) | Name of the Java Gateway item the adapter routes through. Should reference an **External Language Server** (`%JDBC Server` or your custom ELS), not the deprecated `EnsLib.JavaGateway.Service` class. |
+| `DSN` (SQL) | JDBC URL (`jdbc:postgresql://...`) **or** the name of a SQL Gateway connection — see §"JDBC outbound" for how each is wired. |
+| `JGService` (SQL/JDBC) | Name of the `EnsLib.JavaGateway.Service` item the adapter routes through, whose `%gatewayName` names an **External Language Server** (`%JDBC Server` or a custom one). **Required for any `jdbc:` DSN** — the BO terminates at startup without it. |
 | `LogTraceEvents` | Per-item toggle for `$$$TRACE` calls. Default off in prod, on in dev. `$$$LOGINFO`/`$$$LOGWARNING` are not gated by this. |
 | Stay-alive / reconnect | TCP/SOAP — controls whether the BO holds the connection open. |
 
@@ -203,9 +203,46 @@ The two most-guessed-wrong families:
 
 A JDBC-backed BO needs more than just a `DSN` setting; the full path from class to database touches the JVM, the External Language Server, and four BO settings that must align. Missing one piece produces opaque errors ("Java gateway not started", "no driver found", "no suitable driver"). Validate the checklist before debugging code.
 
-### Use a direct `jdbc:` URL — NOT a pre-created ODBC DSN
+### `DSN` takes EITHER a direct `jdbc:` URL OR a named SQL Gateway connection
 
-The adapter's `DSN` setting takes a **direct JDBC URL** (`jdbc:postgresql://host:5432/db`, `jdbc:IRIS://localhost:1972/USER`). Do **not** route an external-DB BO through an ODBC System DSN — that path produces an un-winnable spiral:
+Both work. Pick one deliberately, because the failure mode of mixing them is a connection error
+that names your connection and then shows an empty URL:
+
+| `DSN` value | What it means | Verified |
+|---|---|---|
+| `jdbc:postgresql://host:5432/db` | a **direct JDBC URL**. Nothing to pre-create; pair it with `JDBCDriver` + `JDBCClasspath` on the BO. | ✅ works |
+| `MyConnection` | the **name of a SQL Gateway connection** (`%Library.SQLConnection`, Portal → System Administration → Configuration → Connectivity → SQL Gateway Connections), which carries the URL, driver and classpath centrally. | ✅ works |
+
+**If you use a named connection, the `jdbc:` URL goes in its `URL` property — NOT in its `DSN`
+property.** A JDBC gateway connection is shaped:
+
+```
+isJDBC    = 1
+URL       = "jdbc:postgresql://host:5432/db"    <- the URL lives HERE
+DSN       = ""                                   <- empty for JDBC
+driver    = "org.postgresql.Driver"
+classpath = "/opt/jdbc/postgresql-42.x.jar"
+Usr / pwd = credentials
+```
+
+Put the URL in the connection's `DSN` and leave `URL` empty and the BO fails with the URL missing
+from its own error message — the giveaway is the empty `jdbc://`:
+
+```
+ERROR <Ens>ErrOutConnectFailed: JDBC Connect failed for 'MyConnection' (jdbc://) / 'MyCreds'
+  with error ERROR #5023: Remote Gateway Error: JDBC Gateway connection failed for jdbc://
+```
+
+Read `(jdbc://)` as "the connection I found has no URL", not as "the URL is wrong".
+
+The direct-URL form is the better default for a production under source control: the whole
+connection is in the production XML, with nothing to configure per-environment by hand. Reach for a
+named connection when several BOs share one database, or when the credentials/classpath are managed
+centrally by an administrator.
+
+### NOT a pre-created ODBC DSN
+
+Do **not** route an external-DB BO through an ODBC System DSN — that path produces an un-winnable spiral:
 
 ```
 ERROR #6022: Gateway failed: SQLConnect ... SQLState (IM002)
@@ -220,15 +257,15 @@ ERROR #6022: Gateway failed: SQLConnect ... SQLState (IM002)
 |---|---|
 | **JDK installed** | JDK 8 / 11 / 17 / 21 (matching the IRIS-supported list for your version). `java -version` on the host. |
 | **`JAVA_HOME` or `Config.Gateways.FilePath`** | Either `$env:JAVA_HOME` set, or the `%JDBC Server` ELS configured with `FilePath` pointing at the JDK install (Management Portal → System Administration → Configuration → Connectivity → External Language Servers). |
-| **ELS port reachable** | `%JDBC Server` ELS arrancado (default port `53772`). Smoke test on Windows: `netstat -ano \| findstr :53772` after starting the ELS. |
+| **ELS running** | `%JDBC Server` (default port `53772`). **A `EnsLib.JavaGateway.Service` item in the production starts it for you** — verified: `IsGatewayRunning("%JDBC Server")` goes 0 → 1 on production start, and the BO then connects without anyone calling `StartGateway`. You only start it by hand (`##class(%Net.Remote.Service).StartGateway("%JDBC Server",.pid)`) when there is no such item. Check with `##class(%Net.Remote.Service).IsGatewayRunning("%JDBC Server")`; smoke test on Windows: `netstat -ano \| findstr :53772`. |
 | **JDBC driver JAR** | Driver JAR copied to a stable filesystem path the IRIS service account can read (e.g. `C:\jdbc\postgresql-42.x.jar`). |
 
 ### BO settings — the quartet
 
 | Setting (`Target="Adapter"`) | Value | Notes |
 |---|---|---|
-| `DSN` | `jdbc:postgresql://host:5432/dbname` | Direct JDBC URL — **no pre-created SQL Gateway connection needed**. |
-| `JGService` | Name of the ELS-backed gateway item in the production (e.g. `Util.JDBCGateway` whose `%gatewayName="%JDBC Server"`) | Adapter routes through this gateway. |
+| `DSN` | `jdbc:postgresql://host:5432/dbname`, **or** the name of a SQL Gateway connection | Direct JDBC URL needs no pre-created connection. For the named form, see the section above — the URL goes in the connection's `URL`, not its `DSN`. |
+| `JGService` | Name of a **`EnsLib.JavaGateway.Service` item in the same production** (e.g. `Util.JDBCGateway`, whose `%gatewayName="%JDBC Server"`) | **Mandatory, not optional.** Without it the BO does not merely fail to connect — it *terminates at startup*: `ERROR <Ens>ErrGeneral: The JGService setting must be configured in order for this Adapter to work with a JDBC DSN : jdbc:…`. The item also starts the ELS. |
 | `JDBCDriver` | `org.postgresql.Driver` (or vendor equivalent) | Fully-qualified Java class name. |
 | `JDBCClasspath` | `C:\jdbc\postgresql-42.x.jar` | The exact JAR file path. Multiple JARs: separate with `;` (Windows) or `:` (Unix). |
 | `Credentials` | Name of an `Ens.Config.Credentials` record | Reference, not inline. Credential record points at a `BusinessPartner` for documentation. |
