@@ -349,14 +349,33 @@ Where is the segment in the schema tree?
 │   }
 │
 └── Once you have the segment object → seg.GetValueAt("3.1") works (NUMERIC paths).
-    Symbolic names on a BARE segment object (seg.GetValueAt("Relationship.Identifier"))
-    do NOT resolve. The cause is a MISSING DocType, not the group: a segment handed to
-    you by GetSegmentAt carries no schema, so there is nothing to resolve the name
-    against. Give it one and symbolic names work — declare sourceDocType on a
-    subtransform whose sourceClass is EnsLib.HL7.Segment (see §"Subtransforms over
-    EnsLib.HL7.Segment — declare sourceDocType" below). Inside a <code> block holding a
-    bare segment, numeric paths are the only option.
+    Whether SYMBOLIC names also work is decided by ONE thing, and it is not the group:
+    does the segment have a DocType? A segment obtained from a message INHERITS the
+    message's DocType — set msg.DocType and seg.DocType comes back "2.5:OBX" on its own.
 ```
+
+**Verified on IRIS for Health 2026.1**, same message, same grouped `OBX`, only the message's
+DocType changed:
+
+| segment obtained from | `seg.DocType` | `seg.GetValueAt("3.2")` | `seg.GetValueAt("observationidentifier.text")` |
+|---|---|---|---|
+| a message with **no** DocType | *(empty)* | `Glucose` | `""` |
+| a message with `DocType="2.5:ORU_R01"` | **`2.5:OBX`**, inherited | `Glucose` | `Glucose` |
+
+So: **numeric paths always work on a segment; symbolic names work exactly when the segment has a
+DocType, which it gets for free from the message.** Being inside a group does not affect this —
+the grouped `OBX` above resolves symbolic names fine. What the group *does* break is the
+**message-level** path, which is the trap the tree above is really about: on the same message,
+`msg.GetValueAt("OBX(1):3.2")` returns `""` and `msg.GetSegmentAt("OBX(1)")` returns no object at
+all, while the index-iteration route reaches the very same segment.
+
+Two consequences:
+
+- In a `<code>` block, if your symbolic paths come back empty, check `msg.DocType` **before**
+  suspecting the schema or the group. No DocType on the message means no DocType on the segment.
+- A segment you construct yourself (`##class(EnsLib.HL7.Segment).%New()` + `ImportFromString`) has
+  no message to inherit from, and in testing did not resolve either path — build fixtures from a
+  whole message instead (see `tdd` §"HL7 test fixtures").
 
 ### Iterating repeating segments — never bound the loop with `AL1Count`
 
@@ -461,11 +480,13 @@ to prefer — the numeric version is what you fall back to, not what you reach f
 </transform>
 ```
 
-This works for a segment passed in from a group as well — the restriction in the decision tree is
-about a segment with **no** DocType, not about where the segment came from. Component names inside
-a composite field (`.text`, `.identifier`, `.nameofcodingsystem` on a CE) resolve through the same
-path syntax once `sourceDocType` is set. Get the field names from
-`GetFieldNameFromNumber` (above) rather than guessing them.
+`sourceDocType` is the DTL-side way of supplying what a segment would otherwise inherit from its
+message (see the table above): the transform receives a bare `EnsLib.HL7.Segment` as `source` and
+cannot know its provenance, so declare it. This works for a segment passed in from a group as well
+— the discriminator is the DocType, never where the segment sat in the schema. Component names
+inside a composite field (`.text`, `.identifier`, `.nameofcodingsystem` on a CE) resolve through
+the same path syntax once it is set. Get the field names from `GetFieldNameFromNumber` (above)
+rather than guessing them.
 
 ### `<foreach>` over top-level repeating segments
 
