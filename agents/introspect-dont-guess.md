@@ -20,9 +20,13 @@ class, column, or config item. You drive whatever IRIS MCP server is configured 
   (a whole session: header chain + events by `session_id`), `what=queues`. `iris_production`
   (`action=status|restart|update`), `iris_production_item` (`get_settings`/`set_settings`),
   `iris_credential_list`.
-- **No SQL table for these — stop guessing:** SQL-Gateway connections (`%*SQLConnection`, `Config.Gateways`,
-  `%Net_Remote.ObjectGateway`) → there is no catalog table; resolve via `iris_table_info` / the connection's
-  `check_config`. Namespaces (`%SYS.Namespace*`, `Config.Namespaces`) → `check_config`, not SQL. Production
+- **SQL-Gateway connections:** the definitions ARE a table — but only in `%SYS` and not under the class
+  name: `%Library.sys_SQLConnection` (BSQG §2). `%Library.SQLConnection`, `Config.Gateways`,
+  `Config.SQLGatewayConnections` and `%Net_Remote.ObjectGateway` are NOT the name of that table
+  (`Config.SQLGatewayConnections` is not a class either). Existence: `%SQLConnection.ConnExists()`.
+  Liveness: `$SYSTEM.SQLGateway.TestConnection(name)`. `check_config` reports the MCP's OWN connection,
+  never a gateway definition — do not send this question there.
+- **No SQL table for these — stop guessing:** Namespaces (`%SYS.Namespace*`, `Config.Namespaces`) → `check_config`, not SQL. Production
   items/settings/status (`Ens_Config.Item*`/`Setting*`/`Production`) → `iris_production`/`iris_production_item`.
 - **SQL not ObjectScript:** `iris_query` runs SQL SELECTs only; `set`/`write`/`do`/`##class`/`&sql`/
   `^globals` are ObjectScript — that's `iris_execute`. On a failure, branch on `error_code`; if a

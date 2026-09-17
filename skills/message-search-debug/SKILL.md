@@ -84,7 +84,7 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 | Restart **one** component | `iris_production(action=restart, item="<Item>")` |
 | Apply pending config to the whole production | `iris_production(action=update)` |
 | Business partners | `iris_interop_query(what=partners)` |
-| SQL-Gateway connections | `introspect-dont-guess` plugin agent (an agent, not a skill; no agent tool → `interop` §"Resolving real names") / `iris_table_info` (no SQL catalog table) |
+| SQL-Gateway connections | `iris_query(namespace="%SYS", query="SELECT * FROM %Library.sys_SQLConnection")` — a real table, in `%SYS`, not named after the class (BSQG §2). Test one with `$SYSTEM.SQLGateway.TestConnection(name)`. Full recipe: `business-operations` §"Diagnose a named SQL Gateway connection without the Portal". |
 | Namespaces | `check_config` (not a SQL table) |
 
 If you do fall back to raw `iris_query` and hit a table-not-found failure, **branch on the `error_code`** — it and `error` are the only fields guaranteed on a failure envelope. A `hint` naming the typed tool is *usually* there and worth reading when it is, but its wording is not stable across server releases and one of the two supported MCP servers may not send one at all. If there is no hint, go to the typed-tool table above rather than waiting for the server to name it.

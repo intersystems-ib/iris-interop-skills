@@ -172,6 +172,57 @@ Switch to UPSERT (`INSERT ... ON CONFLICT (paciente_id) DO NOTHING` / `DO UPDATE
 4. Use `message-search-debug` Visual Trace — confirm the BO received, attempted, and got an ACK/response from the destination.
 5. Negative test: stop the destination. Confirm the BO retries per its configured retry policy and surfaces a clear error.
 
+### Headless verification — no Portal, no Test link
+
+Step 3 above needs the Portal, which an agent does not have. Drive the **adapter** instead: the BO
+itself does not instantiate (`%New()` on a BO subclass returns `""` — see `tdd`), but
+`##class(EnsLib.SQL.OutboundAdapter).%New()` is the supported way to exercise the same settings
+headlessly.
+
+**Precondition for a `jdbc:` DSN, and it is the one that bites:** the production must be **running**
+and must contain an `EnsLib.JavaGateway.Service` item whose name matches `JGService` character for
+character. `JGService` is required for all JDBC data sources, and the adapter *reuses that item's
+settings* to reach the JVM (ESQL §3.1). Without it:
+
+```
+<INVALID OREF> 192 initAdapterJG+2^EnsLib.JavaGateway.Common.1
+```
+
+That frame names neither your BO nor the adapter, so it reads as "the gateway is broken" and sends
+you rebuilding the gateway. Read it as **"I cannot find the JGService item"**. Filling `..BusinessHost`
+by hand does not help: `##class(EnsLib.Testing.Service).%New()` is a Business Service and returns `""`.
+
+Wrap the probe in a `[SqlProc]` and invoke it with `iris_query` (for the SQL function name see
+`interop` §"Calling a `[SqlProc]` — the name is not the class name"):
+
+```objectscript
+/// Headless probe of the SAME adapter settings BO.WriteCensus uses.
+/// Requires the production RUNNING with an EnsLib.JavaGateway.Service item named
+/// exactly as JGService below (ESQL §3.1).
+ClassMethod ProbeMenus() As %String [ SqlProc ]
+{
+    Set ada = ##class(EnsLib.SQL.OutboundAdapter).%New()
+    Set ada.DSN           = "jdbc:postgresql://localhost:5432/Cocina"
+    Set ada.JDBCDriver    = "org.postgresql.Driver"
+    Set ada.JDBCClasspath = "C:\jdbc\postgresql-42.7.4.jar"
+    Set ada.Credentials   = "CocinaAppCredentials"      // Ens.Config.Credentials record
+    Set ada.JGService     = "Util.JDBCGateway"          // the production ITEM name, not "%JDBC Server"
+    Set tSC = ada.OnInit()
+    Quit:$$$ISERR(tSC) "OnInit: "_$SYSTEM.Status.GetErrorText(tSC)
+    Set tSC = ada.ExecuteQuery(.rs, "SELECT COUNT(*) AS n FROM public.menus")
+    If $$$ISERR(tSC) {
+        Do ada.Disconnect()
+        Quit "ExecuteQuery: "_$SYSTEM.Status.GetErrorText(tSC)
+    }
+    Set n = $Select(rs.Next(.tSC): rs.Get("n"), 1: "?")   // EnsLib.SQL.GatewayResultSet, ESQL §9.3-9.4
+    Do ada.Disconnect()
+    Quit "rows="_n
+}
+```
+
+Same shape with `ExecuteUpdate(.rows, "DELETE FROM …")` for fixture cleanup between test runs.
+`Disconnect()` is the documented adapter method for closing the connection — call it on both paths.
+
 ## Resolve real table names BEFORE the first query — introspect, don't guess
 
 Any SQL a BO (or its verification step) touches goes through this gate: **before the first
@@ -193,9 +244,13 @@ The two most-guessed-wrong families:
   `COCINA_MSG.MenuRecibido_Alergias`. Guessing `COCINA.MenuRecibido_Alergias` (wrong schema) cost
   one cohort 12 straight failures. The scheme is predictable — which is exactly why
   `iris_table_info` answers it in one call. See `messages` (Collections) for the projection rule.
-- **Invented system catalogs.** `%Library.SQLConnection`, `Config.config`, `Ens_Config.Setting` —
-  these do not exist as SQL tables. The typed tools (`check_config`, `iris_production_item`,
-  `iris_interop_query`) are the path; `message-search-debug` has the full table.
+- **Names that are not the table you want.** `%Library.SQLConnection`, `Config.config`,
+  `Ens_Config.Setting` — querying these fails. Two different reasons, and the difference matters:
+  `Config.config` and `Ens_Config.Setting` are not tables at all (typed tools instead —
+  `check_config`, `iris_production_item`, `iris_interop_query`; `message-search-debug` has the full
+  table). `%Library.SQLConnection` **is a real class**, and its definitions **are** a real table —
+  just not under the class name and not in this namespace: `%Library.sys_SQLConnection`, in `%SYS`.
+  See §"Diagnose a named SQL Gateway connection without the Portal" below.
 
 **On `-30 Table not found`, the NEXT call is introspection — never another guessed name.**
 
@@ -205,8 +260,13 @@ A JDBC-backed BO needs more than just a `DSN` setting; the full path from class 
 
 ### `DSN` takes EITHER a direct `jdbc:` URL OR a named SQL Gateway connection
 
-Both work. Pick one deliberately, because the failure mode of mixing them is a connection error
-that names your connection and then shows an empty URL:
+**Default to the direct `jdbc:` URL in `DSN`.** The whole connection then lives in the production
+XML, under source control, with nothing to configure per-environment by hand and nothing to
+pre-create. Reach for a **named connection** only when several BOs share one database, or when the
+credentials/classpath are managed centrally by an administrator.
+
+Both work, so pick one deliberately — the failure mode of mixing them is a connection error that
+names your connection and then shows an empty URL:
 
 | `DSN` value | What it means | Verified |
 |---|---|---|
@@ -235,10 +295,52 @@ ERROR <Ens>ErrOutConnectFailed: JDBC Connect failed for 'MyConnection' (jdbc://)
 
 Read `(jdbc://)` as "the connection I found has no URL", not as "the URL is wrong".
 
-The direct-URL form is the better default for a production under source control: the whole
-connection is in the production XML, with nothing to configure per-environment by hand. Reach for a
-named connection when several BOs share one database, or when the credentials/classpath are managed
-centrally by an administrator.
+### Diagnose a named SQL Gateway connection without the Portal
+
+**Hard rule first: when a call dies with `<CLASS DOES NOT EXIST>` / `<METHOD DOES NOT EXIST>` /
+`<PROPERTY DOES NOT EXIST>`, the NEXT call is
+`docs_introspect(class_name="<Class>", namespace="%SYS")` — never another guessed name.**
+Everything below is documented (BSQG §2 and §2.1; Technical Reference, "%SQLConnection class");
+anything about SQL Gateway connections that is *not* below is a guess. This section exists because
+the vacuum where it used to be produced 101 blind probe calls across 11 of 14 people in one day —
+`%Library.SQLGatewayConnection`, `%SYSTEM.SQL.Gateway.CreateConnection`, `SYS.SQLGateway`,
+`Config.SQLGatewayConnections`, `Config.Gateways.Classpath`, and finally `$query` over `^%SYS`.
+
+The definitions ARE a table — but not under the class name, and only in `%SYS`:
+
+```
+iris_query(namespace="%SYS", query="SELECT * FROM %Library.sys_SQLConnection")
+```
+
+`%SQLConnection` (full name `%Library.SQLConnection`) is the CLASS; `%Library.sys_SQLConnection` is
+the TABLE — BSQG §2: *"These connections are stored in the table `%Library.sys_SQLConnection`."*
+`SELECT … FROM %Library.SQLConnection` is the query that returns `SQLCODE -30`. The column list is
+not published: read it off the first row, or
+`iris_table_info(table="%Library.sys_SQLConnection", namespace="%SYS")`.
+
+From ObjectScript (`iris_execute`, `namespace="%SYS"`):
+
+```objectscript
+// Does a connection with this logical name exist?  (%SQLConnection — Technical Reference)
+Write ##class(%SQLConnection).ConnExists("<ConnName>"), !
+
+// Test it. Writes the driver's own diagnostics to the current device. (BSQG §2.1)
+Do $SYSTEM.SQLGateway.TestConnection("<ConnName>")
+
+// Drop a stale open connection before re-testing. (BSQG §2.1)
+Do $SYSTEM.SQLGateway.DropConnection("<ConnName>")
+```
+
+Connection names are **case-sensitive** (BSQG §2.1). `%SQLConnection` also publishes the class
+queries `ByName()` and `ByConnection()`; their call spelling and arguments are not published, so
+resolve them with `docs_introspect(class_name="%SQLConnection", namespace="%SYS")` against the
+running version before calling them.
+
+**Creating one from code is deliberately not published here.** The documented creation path is the
+Portal (BSQG §2, §5.1 "Defining a Logical Connection in the Management Portal"). The
+`isJDBC`/`URL`/`driver`/`classpath` block above describes the object; it is **not** a verified
+`%New()`/`%Save()` contract, and hand-rolling one is how the spiral starts. With no Portal, use the
+direct `jdbc:` URL form — it needs nothing pre-created.
 
 ### NOT a pre-created ODBC DSN
 
@@ -257,7 +359,7 @@ ERROR #6022: Gateway failed: SQLConnect ... SQLState (IM002)
 |---|---|
 | **JDK installed** | JDK 8 / 11 / 17 / 21 (matching the IRIS-supported list for your version). `java -version` on the host. |
 | **`JAVA_HOME` or `Config.Gateways.FilePath`** | Either `$env:JAVA_HOME` set, or the `%JDBC Server` ELS configured with `FilePath` pointing at the JDK install (Management Portal → System Administration → Configuration → Connectivity → External Language Servers). |
-| **ELS running** | `%JDBC Server` (default port `53772`). **A `EnsLib.JavaGateway.Service` item in the production starts it for you** — verified: `IsGatewayRunning("%JDBC Server")` goes 0 → 1 on production start, and the BO then connects without anyone calling `StartGateway`. You only start it by hand (`##class(%Net.Remote.Service).StartGateway("%JDBC Server",.pid)`) when there is no such item. Check with `##class(%Net.Remote.Service).IsGatewayRunning("%JDBC Server")`; smoke test on Windows: `netstat -ano \| findstr :53772`. |
+| **ELS running** | `%JDBC Server` (default port `53772`). **A `EnsLib.JavaGateway.Service` item in the production starts it for you** — verified: `IsGatewayRunning("%JDBC Server")` goes 0 → 1 on production start, and the BO then connects without anyone calling `StartGateway`. That is **necessary, not sufficient**: the adapter still has to resolve that item by the exact `JGService` name, in a **running** production (ESQL §3.1) — see §"Headless verification" below for what it looks like when it cannot. You only start it by hand (`##class(%Net.Remote.Service).StartGateway("%JDBC Server",.pid)`) when there is no such item. Check with `##class(%Net.Remote.Service).IsGatewayRunning("%JDBC Server")`; smoke test on Windows: `netstat -ano \| findstr :53772`. |
 | **JDBC driver JAR** | Driver JAR copied to a stable filesystem path the IRIS service account can read (e.g. `C:\jdbc\postgresql-42.x.jar`). |
 
 ### BO settings — the quartet
