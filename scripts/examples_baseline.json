@@ -17,6 +17,7 @@
     "Demo.Vendor.WSC.PrescriptionWS",
     "Example.Adapters.BO.JavaGateway",
     "Example.Adapters.BO.SOAPClient",
+    "Example.Adapters.BO.SqlTypedParmArray",
     "Example.BP.OrderProcess",
     "Example.BS.MyService",
     "Example.CDA.ClinicalDocument",

@@ -416,27 +416,72 @@ When binding parameters to `EnsLib.SQL.OutboundAdapter.ExecuteUpdate()` (or any 
 |---|---|---|
 | `%Date` integer (e.g. `52798`) | `DATE` (PostgreSQL/Oracle) | `StringIndexOutOfBoundsException: begin 0, end 10, length 5` — the driver tries to parse the integer as `YYYY-MM-DD`. **Fix**: convert in the BO with `Set bound = $ZDATE(req.FechaNacim, 3)` before passing to `ExecuteUpdate`. |
 | `%TimeStamp` `"2026-05-13 07:13:59"` | `TIMESTAMP` | Usually works; JDBC accepts space separator. Use `T` separator (`$TRANSLATE(...,"  ","T")`) if the column is `xs:dateTime` schema-bound. |
-| Empty string `""` | nullable column | Driver inserts empty string, not NULL. **Fix** if you want NULL: pass `$S(val="":"", 1:val)` is **wrong** — that still passes `""`. Use the adapter's `ExecuteUpdateNull` variant or explicit `NULL` in the SQL with conditional binding. |
+| Empty string `""` | nullable column | Driver inserts an empty string, not NULL — and `$S(val="":"", 1:val)` does **not** help, it still passes `""`. **Fix: bind with an explicit SQL type** via `ExecuteUpdateParmArray`, so the driver is told the column is a `DATE`/`NUMERIC` and an empty value lands as a typed NULL instead of a VARCHAR it must coerce. See §"Typed SQL parameters" below. (There is **no** `ExecuteUpdateNull` method — verified against `%Dictionary.CompiledMethod` on 2026.1, the adapter declares exactly six `Execute*` methods: `ExecuteQuery`, `ExecuteUpdate`, `ExecuteProcedure` and their three `ParmArray` counterparts. An earlier revision of this skill named `ExecuteUpdateNull`; it does not exist.) |
 | Boolean `1` / `0` | `BOOLEAN` (PostgreSQL) | Usually OK; if not, cast to `'t'`/`'f'` strings. |
 | ObjectScript collection | array column | Not directly supported by JDBC adapter — iterate and INSERT child rows, or serialize to a string. |
 
-## SQL Inbound / Outbound — typed parameters
+## Typed SQL parameters — `ExecuteUpdateParmArray` / `ExecuteQueryParmArray`
 
-When the adapter is a SQL one, two cosmetic gotchas show up with long-running customer projects:
+**This is the idiomatic way to write an outbound SQL BO, and it is a data-correctness rule, not a
+style one.** `ExecuteUpdate(sql, p1, p2, …)` carries no type information, so the adapter asks the
+driver via ODBC `SQLDescribeParam`. Several JDBC drivers cannot answer, and IRIS then falls back
+to **SQL type 12, VARCHAR** (ESQL §8.2.2.1, scenario 3). Everything becomes a string: an empty
+value binds as an empty VARCHAR instead of a typed NULL, and a `%Date` binds as its internal day
+count. The workaround people reach for — concatenating values into the statement text with `NULL`
+spliced in by hand — is an injection surface and is exactly what these methods remove.
 
-- **`<SUBSCRIPT>` error at `^CacheTemp.EnsRuntimeAppData(...,"%QParms")`** — switch from `..Adapter.ExecuteQuery(...)` to `..Adapter.ExecuteQueryParmArray(...)` and pass parameters with **explicit SQL types**:
+```objectscript
+Include EnsSQLTypes       // REQUIRED — the $$$Sql* macros are not automatic in a BO
 
-  ```objectscript
-  Set parametros(1) = pId
-  Set parametros(1, "SqlType") = $$$SqlVarchar
-  Set parametros(2) = pCount
-  Set parametros(2, "SqlType") = $$$SqlInteger
-  Set tSC = ..Adapter.ExecuteQueryParmArray(.rs, sql, .parametros)
-  ```
+    Kill parms                                             // ALWAYS, before every call
+    Set parms(1) = pId,     parms(1, "SqlType") = $$$SqlInteger
+    Set parms(2) = pName,   parms(2, "SqlType") = $$$SqlVarchar
+    Set parms(3) = pBirth,  parms(3, "SqlType") = $$$SqlDate       // "" -> typed NULL
+    Set parms = 3                                          // TOP LEVEL = PARAMETER COUNT
+    Set tSC = ..Adapter.ExecuteUpdateParmArray(.tRows, sql, .parms)
+```
 
-- **`<SUBSCRIPT>` error at `...,"%QCols"`** — caused by a BO class name too long for the runtime global subscript. Shorten the BO class name (long-package long-name combinations like `MyApp.LongDomain.Outbound.SQL.WriteSomethingComplicated` hit the limit).
+Three rules, each of which silently does nothing when broken:
 
-Verify against current IRIS — these were Caché 2016.2 / 2017 issues and are likely improved, but the `ExecuteQueryParmArray` pattern is the robust choice regardless.
+- **Type parameter 1, or type nothing.** The adapter decides whether to honour your descriptors by
+  testing `$D(pParms(1,"SqlType"))||$D(pParms(1,"CType"))` — either subscript counts, **parameter 1 only**
+  (`EnsLib.SQL.OutboundAdapter::privPrepare`, and ESQL §8.2.2 says the same). Leave parameter 1
+  untyped and every other descriptor is ignored; the statement silently reverts to
+  `SQLDescribeParam`. Partial typing is worse than none, because it looks done.
+- **The top level of the array is the parameter COUNT**, not a value: `Set parms = 3`.
+- **`Kill` the array before every call.** ESQL §8.2.2: *"If you execute multiple queries that use
+  the parameter array, kill and recreate the parameter array before each query."* A subscript left
+  over from the previous message is bound without complaint.
+
+**The macros need an `Include`, and there are TWO spellings — both real.** Neither is available
+to an `Ens.BusinessOperation` by default: without the `Include` you get `MPP5610 Referenced macro
+not defined`, which reads like a typo in the macro name and sends you renaming it. Verified by
+compiling both against IRIS for Health 2026.1:
+
+| `Include` | spelling | values |
+|---|---|---|
+| **`EnsSQLTypes`** ← use this in interop code | `$$$SqlVarchar` 12, `$$$SqlInteger` 4, `$$$SqlDate` 9, `$$$SqlDateTime` 9, `$$$SqlNumeric` 2, `$$$SqlDecimal` 3, `$$$SqlDouble` 8, `$$$SqlChar` 1, `$$$SqlTypeDate` 91, `$$$SqlTypeTime` 92, `$$$SqlTypeTimestamp` 93 | |
+| `%occODBC` | the same values under UPPERCASE names — `$$$SQLVARCHAR`, `$$$SQLINTEGER`, … | |
+
+Prefer `EnsSQLTypes`: it is the Ensemble include, and the mixed-case spelling is what existing
+field code uses. Watch `$$$SqlDate` — it is **9** (ODBC 2.x DATETIME), not 91; 91 is
+`$$$SqlTypeDate`.
+
+**`"SqlType"` and `"CType"` are both honoured.** `EnsLib.SQL.OutboundAdapter::privPrepare` carries,
+verbatim: `Set:""=tSqlType tSqlType=tCType, tCType="" ; for back compatibility we support CType
+used as SqlType`. `"SqlType"` is the primary name and the one ESQL documents, but a great deal of
+production code uses `"CType"` — **do not "fix" it, it works.**
+
+Worked example, compiled against live IRIS as part of the example-bank gate:
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/sql-bo-typed-parmarray.cls`
+
+Two historical `<SUBSCRIPT>` gotchas from the same family, kept for recognition only — both Caché
+2016.2 / 2017 era and not reproduced on 2026.1:
+
+- `<SUBSCRIPT>` at `^CacheTemp.EnsRuntimeAppData(...,"%QParms")` — moving to the ParmArray form
+  also fixed this.
+- `<SUBSCRIPT>` at `...,"%QCols"` — a BO class name too long for the runtime global subscript;
+  shorten it.
 
 ## DIME protocol (legacy — do NOT use for new integrations)
 

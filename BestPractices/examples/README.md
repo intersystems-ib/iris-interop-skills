@@ -77,6 +77,7 @@ its siblings.
 | §6.1.5 | Downgrade strongly-typed dates/times to `%String` | `ch06_adapters/soap-typed-dates-to-string.cls` |
 | §6.1.6 | Override `RESPONSENAMESPACE` to match what the vendor actually returns | `ch06_adapters/soap-response-namespace-override.cls` |
 | §6.2 / §12.4 | Per-BO `Alt.SOAP.WebClient` for SOAP tracing | `ch06_adapters/alt-soap-webclient-tracing.cls` |
+| §6.4 | Typed SQL parameters via `ExecuteUpdateParmArray` / `ExecuteQueryParmArray` (NULLs, dates, decimals) | `ch06_adapters/sql-bo-typed-parmarray.cls` |
 | §6.6 | Java integration via JavaGateway | `ch06_adapters/javagateway-bo.cls` |
 | §7.1 | Canonical Ens.Alert routing circuit — class export carrying the production **and** its alert rule | `ch07_alerting/alert-circuit-production.xml` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |

@@ -646,15 +646,31 @@ When you can't (or don't want to) put authentication at the gateway and the inbo
 
 - **Severity.** Low.
 
-### 6.4 SQL Inbound Adapter: use `ExecuteQueryParmArray` for typed parameters
+### 6.4 SQL adapter: use the ParmArray forms for typed parameters
 
-Two cosmetic SQL-execution gotchas:
+**Bind parameters with an explicit SQL type — `ExecuteUpdateParmArray()` / `ExecuteQueryParmArray()` — rather than letting the driver guess.**
 
-- `<SUBSCRIPT>` error at `^CacheTemp.EnsRuntimeAppData(...,"%QParms")` → switch from `..Adapter.ExecuteQuery(...)` to `..Adapter.ExecuteQueryParmArray(...)` and pass parameters with explicit SQL types (e.g. `set parametros(1,"SqlType")=$$$SqlVarchar`).
-- `<SUBSCRIPT>` at `...,"%QCols"` → shorten the BO class name. Long BO names overflow the global subscript.
+`ExecuteUpdate(sql, p1, p2, …)` carries no type information, so the adapter asks the driver via ODBC `SQLDescribeParam`. Several JDBC drivers cannot answer, and IRIS then falls back to **SQL type 12, VARCHAR** (ESQL §8.2.2.1, scenario 3). Everything becomes a string: an empty value binds as an empty VARCHAR instead of a typed NULL, so a nullable `DATE` or `NUMERIC` column either rejects the row or silently stores a zero; a `%Date` binds as its internal day count. The usual workaround — concatenating values into the statement text, with `NULL` spliced in by hand — is both an injection surface and exactly what these methods exist to remove.
 
-- **Validity.** Verify against current IRIS — these were Cache 2016.2 / 2017 issues; likely improved.
-- **Severity.** Medium.
+Three rules, all verifiable:
+
+- **Type parameter 1 or type nothing.** The adapter decides whether to honour your descriptors by testing `$D(pParms(1,"SqlType"))||$D(pParms(1,"CType"))` — parameter **1 only** (`EnsLib.SQL.OutboundAdapter::privPrepare`; stated in ESQL §8.2.2). Leave parameter 1 untyped and every other descriptor is ignored, silently.
+- **The top level of the array is the parameter COUNT**, not a value: `set parms = 4`.
+- **`Kill` the array before every call.** ESQL §8.2.2: *"If you execute multiple queries that use the parameter array, kill and recreate the parameter array before each query."* A stale subscript is bound without complaint.
+
+**The macros need an `Include`, and there are two spellings — both real.** Neither is automatic in an `Ens.BusinessOperation`: without it you get `MPP5610 Referenced macro not defined`, which reads like a typo. `Include EnsSQLTypes` gives the mixed-case set — `$$$SqlVarchar` 12, `$$$SqlInteger` 4, `$$$SqlDate` **9** (not 91; 91 is `$$$SqlTypeDate`), `$$$SqlNumeric` 2, `$$$SqlDecimal` 3, `$$$SqlDouble` 8, `$$$SqlChar` 1, `$$$SqlTypeTimestamp` 93 — and `Include %occODBC` gives the same values under UPPERCASE names. **Prefer `EnsSQLTypes` in interop code**; it is the Ensemble include and the mixed-case spelling is what existing field code uses. Both verified by compiling against IRIS for Health 2026.1.
+
+`"SqlType"` and `"CType"` are **both** honoured — `privPrepare` contains `Set:""=tSqlType tSqlType=tCType, tCType="" ; for back compatibility we support CType used as SqlType`. `"SqlType"` is the primary name; a lot of production code uses `"CType"`, and it works — don't "fix" it.
+
+Two historical `<SUBSCRIPT>` gotchas from the same family, kept for recognition only — both Caché 2016.2 / 2017 era, not reproduced on 2026.1:
+
+- `<SUBSCRIPT>` at `^CacheTemp.EnsRuntimeAppData(...,"%QParms")` → moving to the ParmArray form also fixed this.
+- `<SUBSCRIPT>` at `...,"%QCols"` → shorten the BO class name; long names overflowed the global subscript.
+
+- **Source.** Emporsis 2017 §7.8 for the `<SUBSCRIPT>` pair; the typing rules verified against IRIS for Health 2026.1.
+- **Validity.** Still valid, and the reason is stronger than the original note suggested — this is a data-correctness rule, not a cosmetic one.
+- **Severity.** High (silent data corruption via VARCHAR coercion).
+- **Example.** `examples/ch06_adapters/sql-bo-typed-parmarray.cls`
 
 ### 6.5 DIME protocol legacy support (rare)
 
