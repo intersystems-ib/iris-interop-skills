@@ -247,6 +247,44 @@ Method TestFechaInvalidaSeAisla()
 
 Run: `do ##class(MyApp.Tests.DT.Censo2Menus).Run()`.
 
+### HL7 test fixtures — the classmethod, never the instance method
+
+`EnsLib.HL7.Message` has two import paths and they do **not** do the same thing:
+
+| Form | Behaviour |
+|---|---|
+| `msg.ImportFromString(raw)` — **instance** method | Parses the **first segment only**. Every other segment is dropped. No error, no warning. |
+| `##class(EnsLib.HL7.Message).ImportFromString(raw, .sc)` — **classmethod** | Parses the full multi-segment message and returns the populated object. |
+
+The instance form is the dangerous one precisely because it does not fail: the fixture ends up
+holding only MSH, every assertion on PID/PV1/AL1/ZDI reads `""`, `<if>` defaults interpret the
+empty string as "use the default", and the test goes **green while testing nothing**. This is the
+`AL1Count` failure mode in a different costume — see `transformations`.
+
+```objectscript
+/// Segments are separated by $Char(13) — CR, the HL7 segment terminator. Not $Char(10), not CRLF.
+Set raw = "MSH|^~\&|HIS|HOSP||HOSP|20260513||ADT^A01|001|P|2.5" _ $Char(13) _
+          "EVN|A01|20260513" _ $Char(13) _
+          "PID|1||HL7-1001^^^HOSP^MR||Perez^Juan^^^^^L||19620315|M" _ $Char(13) _
+          "PV1|1|I|3^301A^E1" _ $Char(13) _
+          "AL1|1|FA|LCT^Lactosa^L" _ $Char(13) _
+          "ZDI|1|Basal|Sin observaciones"
+
+// CLASSMETHOD form — returns the populated message, and `sc` is the only thing that tells you
+Set msg = ##class(EnsLib.HL7.Message).ImportFromString(raw, .sc)
+Do $$$AssertStatusOK(sc)
+
+// DocType goes on AFTER the import. ImportFromString resets the parse state, so assigning it
+// first has no effect at all.
+Set msg.DocType = "MySchema:ADT_A01"
+```
+
+Assert on a segment beyond MSH in every HL7 fixture — `$$$AssertEquals(msg.GetValueAt("PID:3.1"), …)`
+— so that a fixture that silently collapsed to one segment fails the test instead of passing it.
+
+Remember that parsing a message is **not** a test of a custom schema's structure: see the Custom
+HL7 schema row in the decision table above.
+
 ### Routing rule test (integration style — preferred)
 
 ```objectscript
