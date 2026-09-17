@@ -583,14 +583,28 @@ failure you have:
 | `IN/` after the wait | What it means | Next move |
 |---|---|---|
 | file gone, new message rows | it worked | `iris_interop_query(what=trace, session_id=<n>)` to follow it downstream |
-| file gone, **no** new rows | the adapter consumed it and the BS failed | `iris_interop_query(what=logs, since_id=<watermark>)` — the error is there. Re-copying just feeds it another file. Start with `OnInit()`: a missing `##super()` is the classic cause, and it produces exactly this signature |
-| file still sitting there | nothing is polling it | `iris_production(action=status)`, then check `FilePath` / `FileSpec` on the item: BS disabled, production not running, or watching a different directory |
+| file gone or moved, **no** new rows | the adapter processed it and the BS produced nothing | `iris_interop_query(what=logs, since_id=<watermark>)`. **The adapter renames or deletes only if the method did NOT return an error** (EFIL) — so a file that moved while emitting nothing means the BS returned *success* having done nothing, which is the `OnInit()`-without-`##super()` signature exactly. Re-copying just feeds it another file |
+| file still sitting there | **check which case before concluding** | Not necessarily "nothing is polling it": with no `ArchivePath`/`WorkPath`, a successfully processed file is left in the input directory unless *Delete From Server* is true (EFIL, scenario 2). So look at the watermark first — new rows mean it worked and simply did not move. No new rows → `iris_production(action=status)`, then `FilePath` / `FileSpec` on the item: BS disabled, production not running, or watching a different directory |
 
-**Why "file gone but no message" is the common one:** unless **Archive Path** is set, the adapter
-*deletes* the input file once its call to `ProcessInput()` returns — whatever the BS did with it
-(EFIL, *Archive Path*). A crash in `OnProcessInput` still costs you the sample. While developing, set
-**Archive Path** (InterSystems recommends the same directory as **Work Path**) so a failed run is
-re-runnable:
+**Where the file ends up is a SETTING, not a constant — do not reason from "it disappeared".**
+EFIL publishes a six-scenario table; the three that matter while developing:
+
+| `ArchivePath` / `WorkPath` | After a successful call |
+|---|---|
+| neither set | left in the input directory — **unless** *Delete From Server* is true, then gone |
+| `ArchivePath` set, different from `FilePath`, `WorkPath` unset | moved to `ArchivePath` + filename |
+| both set and different | processed via `WorkPath`, ends at `ArchivePath` + filename |
+
+Two consequences worth holding on to, both from EFIL:
+
+- **The adapter renames or deletes the file only if the method did NOT return an error.** So a file
+  that moved is evidence the BS returned success — which is what makes "moved, but zero messages"
+  point straight at an `OnInit()` that skipped `##super()` rather than at a crash.
+- A file **still sitting in the input directory is not proof nothing ran.** With neither path set
+  that is the documented resting place of a *successfully* processed file. Read the watermark, not
+  the directory.
+
+Set **Archive Path** while developing so a run is re-runnable and the outcome is unambiguous:
 
 ```
 iris_production_item(namespace="<NS>", action="set_settings", item="<BS item>",

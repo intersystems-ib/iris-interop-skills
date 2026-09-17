@@ -64,6 +64,25 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   **This licenses not-adding, not shortening**: the probe measured *adding* 60 words, and whether
   removing words is symmetric is untested. Existing descriptions stay as they are until an arm
   measures the removal direction, and any description edit still needs a before/after (#126, #127).
+- **Hooks are a Claude Code mechanism, and they are INERT on two of the three CLIs the campaign
+  measures** (#115). Structurally re-derived over 1292 corpus runs: the SessionStart bootstrap
+  appears in 318 of 318 `claude` runs, **0 of 676 `codex`** and **0 of 289 `opencode`** — the single
+  `opencode` hit was a run that read a config file quoting the text. `hooks.json` is a plugin
+  mechanism; the other two CLIs load the skills and never execute a hook. So every gate in
+  `hooks/` — the two PreToolUse denies, the six PostToolUse guards, the Stop gate — is a **no-op for
+  958 of 1292 runs**. Two consequences that change how work here is planned: a hook change can only
+  be *measured* on the `claude` arm, and pooling the arms dilutes any real effect toward zero; and
+  anything that MUST hold on every CLI has to live in a **skill**, not a hook. Where a rule exists
+  in both places, say which is the enforcement and which is the fallback.
+- **Description geometry is not the lever — do not plan a plugin-wide prose edit** (#127, #128).
+  Two independent analyses agree that *how* a description is shaped predicts neither recall nor
+  fatal misses: Spearman(prose, recall) = +0.088 and Spearman(triggers, recall) = +0.066, both ~0,
+  with matched falsifying pairs (`tdd` 62 prose / 29 trig → 38% recall, against `report-issue`
+  65 / 25 → 94%). Every cheap intervention available to us is a geometry intervention — shorten
+  this prose, add triggers there, restructure that cell — so the affordable hypothesis is not
+  merely unproven, it is measurably **not** the lever. What remains is content-against-prompt: what
+  a description *says* relative to the prompts it must match, which is per-skill work with a
+  measurement each time, never a rule applied across skills.
 - **A grep gate guards a spelling, not the rule it is named after — say so at the gate** (#151).
   Verifying a home-grown check in both directions (S5 was) proves that one known-bad input reaches
   its failure path. It does not prove the check recognises every violation of the constraint. Where
