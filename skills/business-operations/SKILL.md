@@ -406,7 +406,7 @@ The BP is the documentation anchor; `Credentials` is just the secret holder. Aud
 </Item>
 ```
 
-`EnsLib.JavaGateway.Service` is **deprecated in IRIS 2026.1** — the item can be kept as a thin wrapper pointing at `%JDBC Server`, but the long-term direction is to reference the ELS directly from the BO. See `production-lifecycle` §"Default scaffolds".
+That item is **required, not a legacy wrapper.** ESQL §2.1 *"Adding the Java Gateway Service (for JDBC)"* prescribes adding it to the production, and ESQL §3.1 marks `JGService` **IMPORTANT** — *"required for all JDBC data sources, even if you are using a working SQL gateway connection with JDBC. For JDBC connections to work, a business service of type `EnsLib.JavaGateway.Service` must be present."* Its `%gatewayName` is what points it at the ELS; the BO reaches the ELS **through** the item, not instead of it.
 
 ## JDBC type marshalling — gotchas
 
@@ -455,7 +455,7 @@ When a third-party library is only available as Java (legacy SAML modules, custo
 3. Write a BO that extends `EnsLib.JavaGateway.AbstractOperation` and calls the proxy via `obj.<javaMethod>(...)`.
 4. Add the JAR to the JavaGateway classpath via the production component's "Additional parameters" setting.
 
-In 2025+, prefer **External Language Server** references over `EnsLib.JavaGateway.Service` (deprecated in IRIS 2026.1 — deprecation policy in `production-lifecycle` §"Default scaffolds"). Use sparingly: most legacy use cases now have native ObjectScript alternatives (e.g. SAML via `intersystems-ib/SAML-COS`).
+The `EnsLib.JavaGateway.Service` item is how a production reaches an **External Language Server**: its `%gatewayName` names the ELS (`%JDBC Server` is the IRIS-shipped default). The two are not alternatives and the item is not deprecated — see §"JDBC outbound — wiring checklist". Use a custom Java gateway BO sparingly all the same: most legacy use cases now have native ObjectScript alternatives (e.g. SAML via `intersystems-ib/SAML-COS`).
 
 Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/javagateway-bo.cls`.
 
