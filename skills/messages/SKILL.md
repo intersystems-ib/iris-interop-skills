@@ -66,10 +66,22 @@ other body class in the namespace.
 The `%Persistent`-first form is still a fully-fledged message: `%Extends("Ens.Request")` and
 `%Extends("Ens.MessageBody")` both remain true, and it saves, reopens and routes normally.
 
-Do **not** write a `Storage` block. IRIS generates the storage definition on first compile — from
-the primary superclass, which is the whole point above. Hand-writing one makes `iris_doc` refuse the
-write until `allow_storage_regeneration: true` is passed; the guard is protecting generated storage,
-so the fix is to leave the block out, not to pass the flag.
+Do **not hand-author** a `Storage` block. IRIS generates the storage definition on first compile
+— from the primary superclass, which is the whole point above. Writing one yourself makes
+`iris_doc(mode=put)` refuse with `STORAGE_STRIP_BLOCKED` until `allow_storage_regeneration: true`
+is passed; the guard is protecting generated storage, so the fix is to leave the block out, not to
+pass the flag.
+
+**The GENERATED `Storage Default` block is a different thing and is not a defect.** In a disk-first
+flow, a VS Code / Atelier export writes it back into the `.cls` after the first successful compile,
+and it re-materialises on every subsequent export. `iris_doc` accepts it silently
+(`storage_stripped: false`) precisely because it is byte-identical to what IRIS generates. Do not
+delete it: removing it only sends you round the loop — rewrite clean, export, the block returns.
+
+The test is **what the block names**, not whether it is present: globals that are the class's own
+extent (`^Pkg.MSG.NameD` / `^Pkg.MSG.NameI` for `Pkg.MSG.Name`) are the generated default and are
+fine. A **custom global map** — globals that are not this class's own extent — is the thing the rule
+is about, and the thing the guard refuses.
 
 Pair Request with a Response class extending `(%Persistent, Ens.Response)` — same leftmost rule. If the operation is fire-and-forget, return `Ens.Response` directly — no custom Response class needed.
 

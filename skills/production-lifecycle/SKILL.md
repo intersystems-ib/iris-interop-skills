@@ -359,6 +359,25 @@ the error:
 | `<Ens>ErrInvalidProduction` | The production class is missing, not compiled, or the name doesn't resolve | Verify the class exists in that namespace and compiles clean (`iris_compile`), and that the name is the exact FQCN. Then start. |
 | `<Ens>ErrProductionSuspendedMismatch` | A **different** production was left suspended in this namespace; nothing else can start until it is cleared | **The error names the OLD production, not yours** — do not "fix" the name you typed. Stop/clear the suspended one (it is the namespace's registered production, so `Ens.Director.StopProduction(30, 1)` targets it), then start yours. |
 | `<Ens>ErrProductionNotShutdownCleanly` | The previous run died without a clean shutdown | Run the recovery path — `##class(Ens.Director).RecoverProduction()` — then start. A plain retry hits the same refusal forever. |
+| `<Ens>ErrProductionSuspendedMismatch` **and the named class does not exist** | The namespace holds an orphan RUNTIME registration, not a production — a leftover from a stale image or a deleted exercise. `recover` is a **no-op** here (the production is Suspended, not Troubled — EGDV §12.3), and `stop force=true` leaves it `Stopped` without clearing the registration, so the next `start` under any other name refuses again. | 1. `iris_production(action=status, namespace="<NS>")` — note the production name it returns. 2. `iris_doc(mode=head, name="<that name>.cls", namespace="<NS>")`. 3. `exists:false` → `iris_execute(namespace="<NS>", code="Do ##class(Ens.Director).CleanProduction()")`, then start yours. 4. `exists:true` → a real suspended production: `iris_production(action=stop, force=true)` on **that** name, then start yours. |
+
+**Step 2 is the one that must not be skipped** — it is what separates a real suspended production
+from a registration with nothing behind it. `iris_doc(mode=head)` answers
+`{"success":true,"name":…,"exists":…}`; **any other envelope means the call could not look** (wrong
+namespace, wrong web prefix) and is **not** evidence of a ghost.
+
+`iris_production` has **no `clean` action** — its enum is `status, start, stop, restart, update,
+check, recover, get_autostart, set_autostart` — so this remedy necessarily goes through
+`iris_execute`. Write it in the documented form, `Do ##class(Ens.Director).CleanProduction()`: the
+docs publish no return value, so do not wrap it in `Set sc=`.
+
+> **CAUTION** — Never use this procedure on a live, deployed production. The `CleanProduction()`
+> method removes all messages from queues and removes all current information about the production.
+> Use this procedure only on a production that is still under development.
+>
+> — *Developing Productions* §13.1.3, "Resetting Productions in a Namespace"
+
+If there are messages still needed, export or resend them **before** running it.
 
 `ErrProductionSuspendedMismatch` is the nastiest: because the message names the *old* production
 (`Production 'Cocina.Production' was suspended, a new production of a different name can not be
@@ -523,6 +542,7 @@ If the installer must run identically on Linux and Windows, prefer driving it fr
 - **Stop/Start when Update would do** → unnecessary downtime.
 - **Restart-then-act without waiting for Running** → poll `Ens.Director.IsProductionRunning()` after every restart — see §"Hot-swap vs. restart" above.
 - **Re-issuing an identical `start` after a refusal** → the refusal never clears on retry; the state must change first. See §"When the production will NOT start — the recovery ladder".
+- **Answering `ErrProductionSuspendedMismatch` with `recover`** → `recover` is for `ErrProductionNotShutdownCleanly`. On a **suspended** production it reports success and changes nothing — EGDV §12.3: *"If the production is not Troubled, the method simply returns."* Watch for the giveaway: `action=recover` answering `{"state":"Running","success":true}` on a production that `action=status` reports `Suspended` seconds later. That is the documented no-op, not a fixed production.
 - **Probing credentials with `IDKeyExists()`** → the method does not exist; use `%OpenId()` + `$IsObject()` — see §"Probing for an existing credential" above.
 - **Ignoring the rollback file** after a botched import → manual recovery is much harder.
 - **Items disabled in DEV that get re-enabled by import** because the export captured them as `Enabled=true`.

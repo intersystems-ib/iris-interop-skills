@@ -89,6 +89,12 @@ Measured over a workshop cohort: **8 of 18 students** hit `#5478`, mostly by car
 RecordMap shape onto a REST or HTTP service. When unsure, `docs_introspect` the base class's
 `OnProcessInput` before writing the override.
 
+> **The path goes in the Setting, not in the `.cls`.** `FilePath`, `Filename` and `JDBCClasspath`
+> are adapter settings of the **production item** (ESQL §3.1), so a literal `C:\…` or `/tmp/…`
+> inside a BS/BO/BP/DTL class is a CR-10 finding. Bootstrap/`UTL` helpers and `%UnitTest` fixtures
+> are exempt — they have no production item, hence no Setting, and a fixture must name a real file
+> on the server.
+
 ## Production naming — `Tipo.Nombre`
 
 Every BS/BO/Router/Util item has a name in the production XML. Use the convention `<Type>.<Name>` consistently across the production:

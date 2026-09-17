@@ -372,6 +372,12 @@ ERROR #6022: Gateway failed: SQLConnect ... SQLState (IM002)
 | `JDBCClasspath` | `C:\jdbc\postgresql-42.x.jar` | The exact JAR file path. Multiple JARs: separate with `;` (Windows) or `:` (Unix). |
 | `Credentials` | Name of an `Ens.Config.Credentials` record | Reference, not inline. Credential record points at a `BusinessPartner` for documentation. |
 
+> **The path goes in the Setting, not in the `.cls`.** `FilePath`, `Filename` and `JDBCClasspath`
+> are adapter settings of the **production item** (ESQL §3.1), so a literal `C:\…` or `/tmp/…`
+> inside a BS/BO/BP/DTL class is a CR-10 finding. Bootstrap/`UTL` helpers and `%UnitTest` fixtures
+> are exempt — they have no production item, hence no Setting, and a fixture must name a real file
+> on the server.
+
 ### `Credentials` + `BusinessPartner` linkage
 
 Don't create a `Credentials` record in isolation. The expected order is:
