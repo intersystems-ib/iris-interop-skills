@@ -33,13 +33,27 @@
 /// THE MACROS NEED AN INCLUDE, AND THERE ARE TWO SPELLINGS. Both are real; neither is
 /// available to an Ens.BusinessOperation by default -- without the Include line you get
 /// MPP5610 "Referenced macro not defined", which reads like a typo in the macro name.
-///   Include EnsSQLTypes  -> $$$SqlVarchar 12  $$$SqlInteger 4  $$$SqlDate 9  $$$SqlDateTime 9
-///                           $$$SqlNumeric 2   $$$SqlDecimal 3  $$$SqlDouble 8  $$$SqlChar 1
-///                           $$$SqlTypeDate 91 $$$SqlTypeTime 92 $$$SqlTypeTimestamp 93
+///   Include EnsSQLTypes  -> $$$SqlVarchar 12  $$$SqlInteger 4  $$$SqlNumeric 2
+///                           $$$SqlDecimal 3   $$$SqlDouble 8   $$$SqlChar 1
 ///   Include %occODBC     -> the same values under UPPERCASE names: $$$SQLVARCHAR, $$$SQLINTEGER
 /// Use EnsSQLTypes in interop code: it is the Ensemble include and the mixed-case spelling is
-/// what existing field code uses. Note $$$SqlDate is 9 (ODBC 2.x DATETIME), NOT 91 -- 91 is
-/// $$$SqlTypeDate. All values verified on IRIS for Health 2026.1.
+/// what existing field code uses.
+///
+/// DATE/TIME HAS FOUR FAMILIES, and picking the wrong one is silent. Values below obtained by
+/// COMPILING the macros and printing their expansions on IRIS for Health 2026.1:
+///   legacy (SQLEXT.H)  $$$SqlDate 9       $$$SqlTime 10      $$$SqlTimestamp 11
+///   ODBC 3.x           $$$SqlTypeDate 91  $$$SqlTypeTime 92  $$$SqlTypeTimestamp 93
+///   JDBC aliases       $$$SqlJDate 91     $$$SqlJTime 92     $$$SqlJTimeStamp 93
+///   C-type aliases     $$$SqlCDate 9      $$$SqlCTimeStamp 11
+/// EnsLib.SQL.OutboundAdapter runs JDBC whenever JDBCDriver is set, so the SqlJ* family is the
+/// semantically correct one here -- it says "JDBC date" instead of leaving the reader to work
+/// out which numbering applies. This is a legibility preference, NOT a bug report: $$$SqlDate
+/// (9) is field-proven, having bound Oracle DATE columns over the Oracle JDBC driver across
+/// dozens of production BOs for years. Do not go rewriting working code.
+///
+/// Two collisions that make a wrong constant look plausible, both verified:
+///   $$$SqlDate = $$$SqlDateTime = 9        $$$SqlTime = $$$SqlInterval = 10
+/// A misremembered name in either pair still compiles and still binds.
 ///
 /// "SqlType" and "CType" are BOTH honoured. EnsLib.SQL.OutboundAdapter::privPrepare contains,
 /// verbatim: Set:""=tSqlType tSqlType=tCType, tCType="" ; for back compatibility we support
@@ -94,7 +108,7 @@ Method InsertCensusRow(pRequest As Ens.StringContainer, Output pResponse As Ens.
         // ObjectScript value arrives as a typed NULL rather than as an empty VARCHAR that the
         // database must coerce into a DATE. This is the whole reason to prefer the ParmArray
         // form over concatenating "NULL" into the statement text.
-        Set parms(3) = tBirth,  parms(3, "SqlType") = $$$SqlDate
+        Set parms(3) = tBirth,  parms(3, "SqlType") = $$$SqlJDate   // JDBC family; see header
         Set parms(4) = tWeight, parms(4, "SqlType") = $$$SqlDouble
 
         // TOP LEVEL = PARAMETER COUNT. Omit this and the call binds nothing.

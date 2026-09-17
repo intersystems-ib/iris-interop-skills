@@ -460,12 +460,34 @@ compiling both against IRIS for Health 2026.1:
 
 | `Include` | spelling | values |
 |---|---|---|
-| **`EnsSQLTypes`** ← use this in interop code | `$$$SqlVarchar` 12, `$$$SqlInteger` 4, `$$$SqlDate` 9, `$$$SqlDateTime` 9, `$$$SqlNumeric` 2, `$$$SqlDecimal` 3, `$$$SqlDouble` 8, `$$$SqlChar` 1, `$$$SqlTypeDate` 91, `$$$SqlTypeTime` 92, `$$$SqlTypeTimestamp` 93 | |
+| **`EnsSQLTypes`** ← use this in interop code | `$$$SqlVarchar` 12, `$$$SqlInteger` 4, `$$$SqlNumeric` 2, `$$$SqlDecimal` 3, `$$$SqlDouble` 8, `$$$SqlChar` 1 — date/time in the table below | |
 | `%occODBC` | the same values under UPPERCASE names — `$$$SQLVARCHAR`, `$$$SQLINTEGER`, … | |
 
 Prefer `EnsSQLTypes`: it is the Ensemble include, and the mixed-case spelling is what existing
-field code uses. Watch `$$$SqlDate` — it is **9** (ODBC 2.x DATETIME), not 91; 91 is
-`$$$SqlTypeDate`.
+field code uses.
+
+**Date/time has FOUR families in `EnsSQLTypes.inc`, and picking the wrong one is silent.** All
+values below were obtained by compiling them and printing the expansions on IRIS for Health 2026.1,
+not by reading the file:
+
+| family | macros | values |
+|---|---|---|
+| legacy (SQLEXT.H) | `$$$SqlDate` `$$$SqlTime` `$$$SqlTimestamp` | **9 / 10 / 11** |
+| ODBC 3.x | `$$$SqlTypeDate` `$$$SqlTypeTime` `$$$SqlTypeTimestamp` | **91 / 92 / 93** |
+| **JDBC aliases** | `$$$SqlJDate` `$$$SqlJTime` `$$$SqlJTimeStamp` | **91 / 92 / 93** (aliases of the ODBC 3.x set) |
+| C-type aliases | `$$$SqlCDate` `$$$SqlCTimeStamp` | aliases of the legacy set (9 / 11) |
+
+`EnsLib.SQL.OutboundAdapter` runs **JDBC** whenever `JDBCDriver` is set, so **`$$$SqlJDate` /
+`$$$SqlJTimeStamp` are the semantically correct choice there** — they say "JDBC date" rather than
+leaving the reader to work out which numbering is in play.
+
+**That is a preference, not a bug report.** `$$$SqlDate` (9) is field-proven: it has bound Oracle
+`DATE` columns over the Oracle JDBC driver in production, across dozens of SQL BO items, for years.
+Do not go rewriting working code — prefer the `SqlJ*` spelling in new code for legibility.
+
+**Two collisions that make a wrong constant look plausible**, both verified:
+`$$$SqlDate` = `$$$SqlDateTime` = 9, and `$$$SqlTime` = `$$$SqlInterval` = 10. A misremembered name
+in either pair still compiles and still binds — it just may not mean what you think.
 
 **`"SqlType"` and `"CType"` are both honoured.** `EnsLib.SQL.OutboundAdapter::privPrepare` carries,
 verbatim: `Set:""=tSqlType tSqlType=tCType, tCType="" ; for back compatibility we support CType
