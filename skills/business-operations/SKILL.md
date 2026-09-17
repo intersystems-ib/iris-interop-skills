@@ -227,7 +227,7 @@ Same shape with `ExecuteUpdate(.rows, "DELETE FROM …")` for fixture cleanup be
 
 Any SQL a BO (or its verification step) touches goes through this gate: **before the first
 `iris_query` / SQL statement against a table you did not create in this session, resolve the real
-name** — `iris_table_info` on the schema, or spawn the `introspect-dont-guess` plugin agent (an
+name** — `iris_table_info(table=…)`, or spawn `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` (an
 agent, not a skill; with no agent tool, this section plus `interop` §"Resolving real names" is the
 recipe). Never write the query from an assumed name.
 

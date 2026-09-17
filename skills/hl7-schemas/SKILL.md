@@ -121,6 +121,12 @@ Notes:
 - `required` = `'R'` (required) or `'O'` (optional). `ifrepeating` = `'0'` or `'1'`.
 - A `<MessageType>` linking the message-type name to its structure is required for DTLs that reference `PharmacySchema:ORM_O01` to resolve.
 
+> **`ADT_A01` is legal as DATA and illegal as an IDENTIFIER.** It is fine in
+> `MessageSchemaCategory`, a DocType, this XData and a `Lookup()` key; it is not fine in a class
+> or member name, where `_` is the concatenation operator and produces the misleading
+> `#5559 … non-matching {} or ()`. `Pkg.DT.ADT_A01ToMenuReq` → `Pkg.DT.AdtA01ToMenuReq`. See
+> `interop` §"Invariants when writing ANY ObjectScript class".
+
 ### Extending an inherited MessageStructure — prefix every base segment `N.N:`
 
 `base="2.5"` makes the category inherit, but the moment you **override** a MessageStructure you are

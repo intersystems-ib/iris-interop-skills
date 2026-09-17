@@ -211,6 +211,11 @@ component that was never built.
 | **Business Service (entry point)** | **Not testable from inside IRIS.** Test from *outside*: copy a file into the BS's `FilePath`, send TCP to its port, POST to its REST URL. Use `pytest`, `curl`, or equivalent external clients. The BS adapter is the contract; it must be exercised via its actual transport. |
 | **Custom inbound adapter** | Same as BS — exercise from outside. |
 
+> **Before you name a test class or a Test\* method:** identifiers are letters and digits only —
+> `_` is the concatenation operator, and `Method TestADT_A01ContainsZdi()` aborts the parser with
+> `#5559 … non-matching {} or () characters`. HL7 work is where this bites, because the message
+> type is `ADT_A01`. See `interop` §"Invariants when writing ANY ObjectScript class".
+
 ## Where to store the tests
 
 `MyApp.Tests.*` package, compiled in the namespace alongside `MyApp.*`. Source-controlled in Git (VS Code ObjectScript export or `$system.OBJ.Export`). With `%UnitTest.TestProduction.Run()` you don't need `/noload` gymnastics — invoke directly by class name. You **do** still need `^UnitTestRoot` → an existing server-side directory (silent zero-test run otherwise — see the `Run()` bullet above and `unit-tests`).

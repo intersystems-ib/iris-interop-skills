@@ -303,7 +303,7 @@ table), and the property name is appended to the *table*: class `COCINA.MSG.Menu
 `Property Alergias As list Of %String` projects to `COCINA_MSG.MenuRecibido_Alergias` — not
 `COCINA.MenuRecibido_Alergias` (a guess that cost one workshop cohort 12 straight
 `SQLCODE -30 Table not found` round-trips). Before querying a projected table you did not just
-create, confirm the name with `iris_table_info` (or the `introspect-dont-guess` plugin agent — an
+create, confirm the name with `iris_table_info` (or `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` — an
 agent, not a skill; with no agent tool, follow `interop` §"Resolving real names") — one call
 answers it.
 

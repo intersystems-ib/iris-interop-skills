@@ -40,7 +40,7 @@ ClassMethod DriftReport(pPkg As %String, pSrcDir As %String) As %String [ SqlPro
     Set onlyIris = "", onlyDisk = ""
     // Namespace side: %Dictionary SQL, never ^oddCOM/^oddDEF. The dictionary globals are
     // undocumented internals whose layout is not a contract, and the conformance gate denies
-    // reading them — see `introspect-dont-guess`.
+    // reading them — `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` (an agent, not a skill).
     Set sql = "SELECT Name FROM %Dictionary.ClassDefinition WHERE Name %STARTSWITH ?"
     Set rs = ##class(%SQL.Statement).%ExecDirect(, sql, pPkg _ ".")
     While rs.%Next() {
