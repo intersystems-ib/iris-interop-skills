@@ -71,6 +71,7 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 | You want… | Call this (one round-trip) |
 |---|---|
 | Event Log of a component | `iris_interop_query(what=logs, component="<Item>")` |
+| Wait for an inbound file to be picked up | watermark with `limit=1`, copy the file ONCE, then poll `since_id=<that ID>` — never a blind `sleep`; see `business-services` §"Waiting for a file BS to pick the file up" |
 | Only new log entries since last check | `iris_interop_query(what=logs, since_id=<lastID>)` — no `SELECT MAX(ID)` first |
 | Events of one session | `iris_interop_query(what=logs, session_id=<n>)` |
 | Messages of one session | `iris_interop_query(what=messages, session_id=<n>)` |
