@@ -316,7 +316,20 @@ Beyond BS/Router/BO, every production should ship with:
 - **`Ens.Alert` router** (`EnsLib.MsgRouter.RoutingEngine`) wired as the alert target. Without it, exceptions land in the Event Log but don't fan out.
 - **Alert sink BO** — at minimum a file logger (`EnsLib.File.PassthroughOperation` writing to a dedicated alerts directory). Optional email BO (`EnsLib.EMail.OutboundAdapter`) for prod.
 - **`Ens.Util.Tasks.Purge` task** scheduled daily. Persistent messages accumulate forever otherwise; the message-class table grows unbounded. Set `NumDaysToKeep` per retention policy (typically 30–90).
-- **External Language Server reference** when JDBC is in use — the BO's `JGService` setting points to an item whose `%gatewayName` is the ELS name (`%JDBC Server` is the IRIS-shipped default). `EnsLib.JavaGateway.Service` works but is **deprecated in IRIS 2026.1** — the gateway class is being phased out in favour of ELS-direct references.
+- **External Language Server reference** when JDBC is in use — the BO's `JGService` setting points to an `EnsLib.JavaGateway.Service` **item in the same production**, whose `%gatewayName` is the ELS name (`%JDBC Server` is the IRIS-shipped default). That item is **required, not optional and not deprecated**: ESQL §2.1 *"Adding the Java Gateway Service (for JDBC)"* prescribes it, and ESQL §3.1 marks `JGService` **IMPORTANT** — *"required for all JDBC data sources, even if you are using a working SQL gateway connection with JDBC. For JDBC connections to work, a business service of type `EnsLib.JavaGateway.Service` must be present."* The scaffold above ships exactly that item; keep it.
+
+  > **A JDBC BO needs `JGService` pointing at a Java Gateway item in the same production.** Without
+  > it the BO terminates at startup, and the error is an `<INVALID OREF>` inside
+  > `EnsLib.JavaGateway.Common` that never mentions the gateway, the item, or `JGService` — so it
+  > reads as a broken gateway and sends you rebuilding one that was never broken. 22 gateway
+  > failures across 9 of 14 students in one day, 19 of them in sessions where the plugin was
+  > loaded and working. See `business-operations` §"Headless verification".
+
+  *(An earlier release of this skill called the item "deprecated in IRIS 2026.1". That claim was
+  unsourced, contradicted `business-operations`, and contradicted the scaffold in this same file.
+  Checked against the IRIS for Health documentation corpus: "deprecat*" appears 249 times across
+  47 files and **none** of it attaches to the Java Gateway, while ESQL still flags the item
+  IMPORTANT and required. Removed — #225.)*
 
 When auditing an existing production, **flag missing alert router or purge task as gaps**; flag missing items only if the production's purpose requires them.
 
@@ -549,7 +562,7 @@ If the installer must run identically on Linux and Windows, prefer driving it fr
 - **Auditing `PoolSize=1` as a defect** → it's the correct default everywhere. Raise only with measured evidence.
 - **Production XML edited by two people simultaneously** → merge conflicts in XML; coordinate via source control.
 - **Forgetting custom utility classes** in the export bundle → import succeeds, runtime breaks.
-- **Using `EnsLib.JavaGateway.Service` as a production item for JDBC** → deprecated in IRIS 2026.1; reference the ELS from the BO's `JGService` setting — see §"Default scaffolds" above.
+- **OMITTING the `EnsLib.JavaGateway.Service` item when a BO uses a `jdbc:` DSN** → the BO does not merely fail to connect, it terminates at startup with an `<INVALID OREF>` inside `EnsLib.JavaGateway.Common` that names neither the gateway nor `JGService`. The item is required (ESQL §2.1, §3.1) and `JGService` must match its name character for character — see §"Default scaffolds" above.
 - **Item name that breaks `Tipo.Nombre`** (`Java.Gateway`, `Censo`, `myBS`) → rename to fit the pattern (`Util.JavaGateway`, `BS.Censo`). Cosmetic but it affects portal grouping and search.
 - **Missing `Ens.Alert` router** → exceptions die in the Event Log with no fan-out — scaffold rule in §"Default scaffolds" above.
 - **No purge task scheduled** → message tables grow forever; add `Ens.Util.Tasks.Purge` at creation time — see §"Default scaffolds" above.
