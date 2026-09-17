@@ -12,7 +12,7 @@
     {
       "name": "iris-interop-skills",
       "source": "./",
-      "description": "20 skills for building IRIS For Health Interoperability productions with Claude — including a task→component map and a post-build conformance review. Start at the iris-interop router. Requires an IRIS MCP server (iris-agentic-dev or iris-interop-dev). Ships 10 hooks (SessionStart conventions bootstrap + 2 PreToolUse gates that block non-conformant writes, class loads/compiles smuggled through iris_execute, and namespace-only classes missing from src/ + 6 PostToolUse guards, one of which warns when a put or a production edit leaves src/ stale + 1 blocking Stop gate that refuses to finish until the conformance pass has run) + 4 agents (interop-builder, deploy-smoke-test, introspect-dont-guess, conformance-reviewer).",
+      "description": "20 skills for building IRIS For Health Interoperability productions with Claude — including a task→component map and a post-build conformance review. Start at the iris-interop router. Requires an IRIS MCP server (iris-agentic-dev or iris-interop-dev). Ships 11 hooks (SessionStart conventions bootstrap + a UserPromptSubmit topic router that names the skills the turn actually needs + 2 PreToolUse gates that block non-conformant writes, illegal identifiers, class loads/compiles smuggled through iris_execute, and namespace-only classes missing from src/ + 6 PostToolUse guards, one of which warns when a put or a production edit leaves src/ stale + 1 blocking Stop gate that refuses to finish until the conformance pass has run) + 4 agents (interop-builder, deploy-smoke-test, introspect-dont-guess, conformance-reviewer).",
       "version": "1.8.19",
       "category": "healthcare",
       "keywords": [

@@ -23,11 +23,16 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   name or path — a bare `Skill("messages")` errors with "Unknown skill".
 - `agents/*.md` — four bundled subagents (`interop-builder`, `deploy-smoke-test`,
   `introspect-dont-guess`, `conformance-reviewer`) that auto-register on install. MCP-server-agnostic (no server pinned).
-- `hooks/` — ten hooks auto-registered via `hooks/hooks.json`: a SessionStart conventions
-  bootstrap, two blocking PreToolUse gates (conformance gate, src-before-iris), six PostToolUse
-  guards (silent-execute guard, TDD enforcement, conformance pre-scan, docker-detect,
-  tdd-first-green, src-drift guard), and one blocking **Stop** gate (conformance-stop-gate) that enforces
-  "before declaring done" — see #96 for why an advisory nudge was worth 0 invocations in 206 runs.
+- `hooks/` — eleven hooks auto-registered via `hooks/hooks.json`: a SessionStart conventions
+  bootstrap, a **UserPromptSubmit** topic router (`interop-route`) that names the two or three
+  skills the turn actually needs — SessionStart names three FIXED skills before the task is known,
+  and its context never reaches a subagent (#218) — two blocking PreToolUse gates (conformance
+  gate, src-before-iris), six PostToolUse guards (silent-execute guard, TDD enforcement,
+  conformance pre-scan, docker-detect, tdd-first-green, src-drift guard), and one blocking
+  **Stop** gate (conformance-stop-gate) that enforces "before declaring done" — see #96 for why an
+  advisory nudge was worth 0 invocations in 206 runs.
+  The conformance gate also sits on `Write|Edit`, scoped to `.cls` paths only, so an illegal
+  identifier is caught before the VS Code sync carries the class into IRIS (#219).
 - **Required user setting:** raise the skill-listing budget (`skillListingBudgetFraction: 0.03`,
   `skillListingMaxDescChars: 2048`) in `~/.claude/settings.json` so `interop`/`tdd` don't get evicted.
 - `BestPractices/` — the worked-example bank the skills cite:
