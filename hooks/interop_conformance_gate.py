@@ -3,7 +3,11 @@
 
 Unlike the PostToolUse advisories (which a weak model ignores), this BLOCKS the write/compile
 when a class violates a hard, unambiguous iris-interop convention, forcing a fix before the
-class lands. It denies only high-confidence violations (no false positives on ordinary code):
+class lands. It denies only high-confidence violations (no false positives on ordinary code).
+
+SCOPE, stated so the next reader does not have to infer it from the code: the naming and content
+rules cover classes the model AUTHORS, in packages that are not InterSystems'. Reads are the
+documented introspection path and are never gated (#221); system packages are not ours to rename.
 
   1. Non-standard package "type" segment in the class name — the convention is
      <Package>.<Tipo>.<Name> with Tipo in BS/BP/BO/DT/RUL/MSG. A class named `.Operation.`,
@@ -67,6 +71,100 @@ CLASS_WRITE_BYPASS = [
 # `^oddDEF(cls,"p",param)` is %Dictionary.CompiledProperty / ParameterDefinition, or the
 # Summary query.
 DICT_GLOBAL = re.compile(r"(?i)\^odd(DEF|COM)")
+
+# ──────────────────────────────────────────────────────────────── [IIS-CG-NAME] scope (#221)
+# Packages that are InterSystems' own or reserved. Their names are not ours to rename, and
+# reading them is the documented introspection path — the plugin's own skills send the model to
+# EnsLib.RecordMap.Service.FileService BY NAME (business-services), and 14 distinct such class
+# names appear across skills/. Denying a READ of those is a pure false positive: 4 of 4 in one
+# measured cohort, on iris_doc(mode=get) of EnsLib.HL7.Service.FileService.
+#
+# Note the old rule discriminated by POSITION in the name, not by ownership: EnsLib.JavaGateway.Service
+# passed only because `Service` is the LAST segment there and falls outside segs[1:-1].
+#
+# Same calibration as CLASS_WRITE_BYPASS above: gate what the model AUTHORS, never what it reads.
+SYSTEM_ROOTS = {
+    "Ens", "EnsLib", "EnsPortal", "HS", "CSP", "SYS", "Config", "Security",
+    "SQLUser", "INFORMATION_SCHEMA", "SchemaMap", "Backup",
+}
+
+
+def is_system_class(base):
+    """True for %Library.*, %Dictionary.*, Ens.*, EnsLib.*, HS.* and friends."""
+    return base.startswith("%") or base.split(".", 1)[0] in SYSTEM_ROOTS
+
+
+# ───────────────────────────────────────────────────────── [IIS-CG-UNDERSCORE] (#219)
+# Class and member names are letters and digits only (RCOS Appendix A, §§A.7/A.9); `_` is the
+# concatenation operator. The compiler reports it as #5559 "non-matching {} or () characters",
+# which sends the model brace-hunting while the braces are balanced — 14 failed puts in one day,
+# an instructor bisect correlating 14/14 failures and 4/4 successes. Delimited member names
+# (Property "My Property") ARE legal (GOBJ §2.6.3) and are exempt.
+MEMBER_KW = (r"Class|Property|Relationship|Method|ClassMethod|Parameter"
+             r"|Query|Index|Trigger|ForeignKey|Projection|XData")
+UNDERSCORE_MEMBER = re.compile(
+    r"(?im)^[ \t]*(?:" + MEMBER_KW + r")[ \t]+"
+    r"(?P<q>\"?)(?P<name>[A-Za-z%][A-Za-z0-9.]*_[A-Za-z0-9._]*)"
+)
+
+
+def mask_xdata(src):
+    """Blank out XData bodies, keeping the line count.
+
+    An HL7 schema or a <Setting Name="Foo_Bar"> legitimately carries underscores — that is DATA,
+    not an identifier. Line numbering is preserved so the content rules below are unaffected.
+    """
+    lines = src.splitlines()
+    out, i, n = [], 0, len(lines)
+    while i < n:
+        line = lines[i]
+        out.append(line)
+        i += 1
+        if not re.match(r"(?i)^[ \t]*XData[ \t]+", line):
+            continue
+        depth, opened = line.count("{") - line.count("}"), "{" in line
+        while i < n and (not opened or depth > 0):
+            depth += lines[i].count("{") - lines[i].count("}")
+            opened = opened or "{" in lines[i]
+            out.append("")
+            i += 1
+    return "\n".join(out)
+
+
+# ─────────────────────────────────────────── [IIS-CG-INTROSPECT] (ADVISORY — never deny) (#212)
+# Measured over one cohort day: 248 iris_execute calls, 64 failures, dominated by ObjectScript
+# that asks what a typed tool answers in one round trip — with an invented signature, so the
+# answer is <METHOD DOES NOT EXIST> and the recovery is another invented signature.
+#
+# This must NOT deny. The same class names carry the legitimate lifecycle API: a deny on
+# Ens.Director would block ##class(Ens.Director).CleanProduction(), the documented remedy for a
+# stuck production (production-lifecycle). "Deny mutations only" does not discriminate either —
+# the guessed call is itself written `Set tSC=##class(Ens.Director).GetProductionStatus(.n,.s)`.
+#
+# Scope is deliberately narrow: only what the MCP server does NOT already hint on. Its
+# execute_redirect_hint covers $SYSTEM.OBJ.Load/Import, anything containing %Dictionary., the
+# Ens_Config catalog guesses and a bare SELECT. Two advisories for one call is worse than one,
+# and %Dictionary SQL is what this file's own DICTR deny recommends.
+INTROSPECT_REDIRECT = [
+    (re.compile(r"(?i)Ens\.Director\)?\.GetProductionStatus"),
+     'iris_production(action="status", namespace="<NS>")'),
+    (re.compile(r"(?i)Ens\.Director\)?\.GetHostInstance"),
+     'iris_production_item(action="get_settings", item="<Item>", namespace="<NS>")'),
+    (re.compile(r"(?i)Ens\.Director:EnumerateProductionItems"),
+     'iris_production(action="status", namespace="<NS>") for the item list, then '
+     'iris_production_item(action="get_settings", item="<Item>", namespace="<NS>")'),
+    (re.compile(r"(?i)EnsPortal\.[A-Za-z0-9_]+\)?\."),
+     'iris_production(action="status", namespace="<NS>") — EnsPortal.* is the Portal CSP UI, '
+     'not a supported API'),
+    (re.compile(r"(?i)(?:^|[\s:])(?:z?write|zw)\s+\^Ens\.(?:JobStatus|Runtime|ActivityD)"),
+     'iris_production(action="status", namespace="<NS>") / '
+     'iris_interop_query(what="queues", namespace="<NS>")'),
+]
+
+# Never nudge these: they are the documented lifecycle calls, and CleanProduction in particular is
+# the remedy `production-lifecycle` prescribes for a registered production whose class is gone.
+LIFECYCLE_OK = re.compile(
+    r"(?i)Ens\.Director\)?\.(Clean|Recover|Start|Stop|Update)Production")
 
 # Tools whose `namespace` is documented as OPTIONAL but is effectively REQUIRED: they resolve
 # Ens.Director / Ens_Config.* in whatever namespace the connection defaults to, and if that one
@@ -132,8 +230,27 @@ def main():
     except Exception:
         return  # allow on parse failure — never block legitimate work on a hook bug
     ti = data.get("tool_input", {}) or {}
+    tool_raw = str(data.get("tool_name") or "")
     names = collect_names(ti)
     content = ti.get("content") if isinstance(ti.get("content"), str) else ""
+
+    # The gate also sits on Write|Edit, so a class written to disk is checked BEFORE the VS Code
+    # sync carries it into IRIS (#219) — that route reaches iris_compile, which has no `content`
+    # and so can only ever catch a bad CLASS name, never a bad member name.
+    #
+    # Edit supplies only `new_string`: best-effort, a fragment rather than the whole class.
+    #
+    # HARD CONSTRAINT: on Write/Edit the content rules apply ONLY to a .cls path. Without this the
+    # gate denies edits to its own documentation — every build skill in this plugin carries
+    # `Class … Extends EnsLib.…Adapter` and `ADT_A01` inside fenced examples, and a Write of a
+    # SKILL.md would match them.
+    if tool_raw in ("Write", "Edit", "MultiEdit"):
+        fpath = ti.get("file_path")
+        if not (isinstance(fpath, str) and fpath.lower().endswith(".cls")):
+            return  # not a class file — nothing here applies
+        if not content:
+            ns = ti.get("new_string")
+            content = ns if isinstance(ns, str) else ""
 
     # (4) interop tool called without `namespace` — 95% of these fail, and the error that comes
     # back names Ens.Director or a missing ENS_* table instead of the namespace. Cheaper to stop
@@ -195,23 +312,51 @@ def main():
                 "`%s` is the undocumented internal class dictionary. Reading it is guessing at "
                 "IRIS internals, and its layout is not a contract — the supported APIs are.\n\n"
                 "Use, in order of preference:\n"
-                "  1. The MCP's typed tools — iris_symbols(pattern=...) to find classes, "
-                "docs_introspect(class=...) for methods/properties, iris_table_info(schema=...) "
-                "for projected tables. One call, no catalog guessing.\n"
+                "  1. The MCP's typed tools — REAL parameter names, verified against the server:\n"
+                "       iris_symbols(query='<Pkg>.*')               — find a class\n"
+                "       docs_introspect(class_name='<Class>')       — members of one class\n"
+                "       iris_table_info(table='<Schema>.<Table>')   — a projected table\n"
+                "     One call, no catalog guessing.\n"
                 "  2. %%Dictionary SQL — 58 queryable classes, e.g.\n"
                 "       SELECT Name FROM %%Dictionary.ClassDefinition WHERE Name %%STARTSWITH 'Pkg.'\n"
                 "       SELECT parent, Name, Type FROM %%Dictionary.CompiledProperty WHERE parent = ?\n"
                 "  3. The predefined queries — %%Dictionary.ClassDefinition:Summary / :SubclassOf / "
                 ":MemberSummary, %%Dictionary.PackageDefinition:SubPackage, and 125 more.\n\n"
-                "Load Skill(iris-interop-skills:introspect-dont-guess) — resolving real names "
-                "instead of guessing is exactly what it is for."
+                "If you want the helper, it is an AGENT, not a skill — Skill() on it errors:\n"
+                "  Agent(subagent_type=\"iris-interop-skills:introspect-dont-guess\")"
                 % m.group(0)
             )
+
+        # (3d) hand-rolled introspection that a typed tool answers. ADVISORY — never a deny.
+        if not LIFECYCLE_OK.search(code):
+            for pattern, tool_call in INTROSPECT_REDIRECT:
+                m = pattern.search(code)
+                if m:
+                    print(json.dumps({"hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "additionalContext":
+                            "[IIS-CG-INTROSPECT] `" + m.group(0) + "` is hand-rolled "
+                            "introspection through iris_execute. Signatures in this family are "
+                            "routinely guessed and come back <METHOD DOES NOT EXIST>, and the "
+                            "recovery is another guess. One typed call answers it: " + tool_call +
+                            ". Full question->tool table: "
+                            "Skill(iris-interop-skills:message-search-debug). Advisory — the call "
+                            "was NOT blocked."}}))
+                    sys.exit(0)   # one message per call; deny() exits the same way
+
+    # `mode` is present on iris_doc and ABSENT on iris_compile. Do NOT write this as
+    # `mode == "put"`: that would exempt iris_compile, which sits in the same matcher and carries
+    # no mode — the one other path a badly named class can land on (#221).
+    mode = ti.get("mode")
+    authoring = not (isinstance(mode, str) and mode and mode != "put")
 
     for nm in names:
         base = nm[:-4] if nm.lower().endswith(".cls") else nm
         # only class docs (skip .mac/.inc/.hl7/etc. and non-dotted names)
         if "." not in base or nm.lower().rsplit(".", 1)[-1] in ("mac", "inc", "int", "hl7", "txt"):
+            continue
+        # not ours to rename, and a read is introspection rather than authoring (#221)
+        if is_system_class(base) or not authoring:
             continue
         segs = base.split(".")
         type_segs = segs[1:-1] if len(segs) > 2 else []
@@ -219,13 +364,41 @@ def main():
             if seg in NONSTD:
                 deny(
                     "NAME",
-                    "Naming convention: '%s' uses the non-standard package segment '.%s.'. "
-                    "iris-interop uses <Package>.<Tipo>.<Name> with Tipo in BS/BP/BO/DT/RUL/MSG — "
-                    "rename '.%s.' to '.%s.' and retry. Load Skill(iris-interop-skills:component-map) "
-                    "for the task->component->type map." % (nm, seg, seg, NONSTD[seg])
+                    "Naming convention: '%s' uses the non-standard package segment '.%s.' for a "
+                    "class you are AUTHORING. iris-interop uses <Package>.<Tipo>.<Name> with Tipo "
+                    "in BS/BP/BO/DT/RUL/MSG — rename '.%s.' to '.%s.' and retry.\n\n"
+                    "If this class is NOT yours — an InterSystems class such as "
+                    "EnsLib.HL7.Service.FileService, or generated code you must reference by its "
+                    "shipped name — do not rename it: reference it as-is, and read it with "
+                    "docs_introspect(class_name=...) or iris_doc(mode=get). This rule only covers "
+                    "classes you write. If it fired on one of those, report it.\n\n"
+                    "Load Skill(iris-interop-skills:component-map) for the "
+                    "task->component->type map." % (nm, seg, seg, NONSTD[seg])
                 )
 
-    if content:
+    if content and authoring:
+        # (5) `_` in an identifier. The compiler blames the braces; the name is the problem (#219).
+        for m in UNDERSCORE_MEMBER.finditer(mask_xdata(content)):
+            if m.group("q") == '"':
+                continue              # delimited member name — legal (GOBJ §2.6.3 / RCOS §A.9)
+            bad = m.group("name")
+            good = "".join(part[:1].upper() + part[1:] for part in bad.split("_") if part)
+            deny(
+                "UNDERSCORE",
+                "'%s' is not a legal IRIS identifier: class, package and member names are letters "
+                "and digits only — `_` is the concatenation operator (RCOS Appendix A, "
+                "\u00a7\u00a7A.7/A.9).\n\n"
+                "The compiler does NOT say this. It reports\n"
+                "  ERROR #5559: ... possibly due to non-matching {} or () characters\n"
+                "(or #16006 'name is invalid' for the class name), and the braces are fine. "
+                "Do not count braces; fix the name.\n\n"
+                "Rename to '%s' and retry. HL7 type names are the usual source: the message type "
+                "is ADT_A01, so ADT_A01ToMenuReq becomes AdtA01ToMenuReq. The string 'ADT_A01' "
+                "stays as-is wherever it is DATA (MessageSchemaCategory, DocType, an XData schema, "
+                "a Lookup() key) — only identifiers are affected."
+                % (bad, good)
+            )
+
         # Anchored to a real class-definition line: skips /// comments and prose, and accepts both
         # `Extends Super` and the parenthesized list `Extends (A, B)` the plugin's own examples use.
         cm = re.search(r"(?im)^\s*Class\s+([A-Za-z0-9_.%]+)\s+Extends\s+(\(?[^{\n]+)", content)

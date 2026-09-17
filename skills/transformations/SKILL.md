@@ -297,6 +297,39 @@ Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Ru
 
 When the BS that produced the HL7.Message assigned `MessageSchemaCategory="<Version>:<MessageType>"` (e.g. `2.5:ADT_A01`) — and you set `sourceDocType='2.5:ADT_A01'` on the DTL `<transform>` element — IRIS resolves **symbolic field names** at message level. Without that pairing the DTL has no schema to resolve names against and only numeric paths work. See `business-services` for the BS-side setup; for Ad-hoc messages (Z-segments, custom structures) see `hl7-schemas`.
 
+### Discovering symbolic field names — never guess them
+
+A guessed HL7 field name returns `""` with `$$$OK`. There is no error, the DTL compiles, the
+assertion passes on the empty string, and no real data flows — the same silent-miss shape as
+`..Lookup()` without a default. IRIS stores its own internal names and they do **not** match the
+HL7 specification's chapter headings, so `AllergenCodeMnemonicDescription` looks right and is not.
+
+Read the real names off the schema before writing the DTL:
+
+```objectscript
+For f = 1:1:6 {
+    Write "AL1:"_f_" -> "_##class(EnsLib.HL7.Schema).GetFieldNameFromNumber("2.5","AL1",f), !
+}
+// AL1:1 -> setidal1
+// AL1:2 -> allergentypecode
+// AL1:3 -> allergencodemnemonicdescript      (type CE — has .text, .identifier, .nameofcodingsystem)
+// AL1:4 -> allergyseveritycode
+// AL1:6 -> identificationdate
+```
+
+Then verify the full path against a real message before you rely on it:
+
+```objectscript
+Write msg.GetValueAt("AL1(1):allergencodemnemonicdescript.text")        // "Lactosa"
+Write msg.GetValueAt("AL1(1):allergencodemnemonicdescript.identifier")  // "LCT"
+
+// The guesses — no error, no warning, just "":
+Write msg.GetValueAt("AL1(1):AllergenCodeMnemonicDescription")          // ""
+Write msg.GetValueAt("AL1(1):AllergySeverityCode")                      // ""
+```
+
+**`""` with an `$$$OK` status means the PATH did not resolve — check the name, not the data.**
+
 ### Path resolution decision tree (validated empirically on IRIS 2026.1)
 
 ```
@@ -316,9 +349,13 @@ Where is the segment in the schema tree?
 │   }
 │
 └── Once you have the segment object → seg.GetValueAt("3.1") works (NUMERIC paths).
-    Symbolic names at segment level (seg.GetValueAt("Relationship.Identifier")) do
-    NOT resolve reliably when the segment is in a group — stick to numeric paths
-    on the segment.
+    Symbolic names on a BARE segment object (seg.GetValueAt("Relationship.Identifier"))
+    do NOT resolve. The cause is a MISSING DocType, not the group: a segment handed to
+    you by GetSegmentAt carries no schema, so there is nothing to resolve the name
+    against. Give it one and symbolic names work — declare sourceDocType on a
+    subtransform whose sourceClass is EnsLib.HL7.Segment (see §"Subtransforms over
+    EnsLib.HL7.Segment — declare sourceDocType" below). Inside a <code> block holding a
+    bare segment, numeric paths are the only option.
 ```
 
 ### Iterating repeating segments — never bound the loop with `AL1Count`
@@ -404,6 +441,71 @@ For i = 1:1:source.SegCount {
   }
 }
 ```
+
+### Subtransforms over `EnsLib.HL7.Segment` — declare `sourceDocType`
+
+The subtransform above reads the segment with numeric paths because nothing told it what the
+segment *is*. Declaring `sourceDocType` on the `<transform>` element fixes that, and is the form
+to prefer — the numeric version is what you fall back to, not what you reach for first:
+
+```xml
+<!-- positional: brittle, and nothing in the file says what 3.2 is -->
+<transform sourceClass='EnsLib.HL7.Segment' targetClass='Ens.StringContainer' create='new'>
+  <assign value='source.{3.2}' property='target.StringValue'/>
+</transform>
+
+<!-- symbolic: the DocType gives the segment its schema back -->
+<transform sourceClass='EnsLib.HL7.Segment' sourceDocType='2.5:AL1'
+           targetClass='Ens.StringContainer' create='new'>
+  <assign value='source.{allergencodemnemonicdescript.text}' property='target.StringValue'/>
+</transform>
+```
+
+This works for a segment passed in from a group as well — the restriction in the decision tree is
+about a segment with **no** DocType, not about where the segment came from. Component names inside
+a composite field (`.text`, `.identifier`, `.nameofcodingsystem` on a CE) resolve through the same
+path syntax once `sourceDocType` is set. Get the field names from
+`GetFieldNameFromNumber` (above) rather than guessing them.
+
+### `<foreach>` over top-level repeating segments
+
+When the schema puts the repeating segment **directly** in the MessageStructure — `[~{~2.5:AL1~}~]`
+in the definition, not nested in a named group — you do not need a `<code>` block at all. Iterate
+declaratively with an empty-parenthesis path:
+
+```xml
+<foreach property='k1' key='k2' in='source.{AL1()}'>
+  <!-- k1 is the 1-based occurrence index; k2 is unused for a flat segment -->
+  <assign value='source.{AL1(k1):3.2}' property='target.SomeField'/>
+</foreach>
+```
+
+`in='source.{AL1()}'` iterates every occurrence. That is a different shape from
+`in='source.{PIDgrpgrp(k1)}'`, which iterates a named **group**.
+
+Inside the loop, `source.{AL1(k1)}` resolves to the individual `EnsLib.HL7.Segment` object, so it
+can be handed straight to a subtransform:
+
+```xml
+<foreach property='k1' key='k2' in='source.{AL1()}'>
+  <subtransform class='MyApp.DT.AL1ToText'
+                targetObj='tmp'
+                sourceObj='source.{AL1(k1)}'/>
+  <if condition='tmp.StringValue &apos;= ""'>
+    <true>
+      <assign value='$S(target.Alergias="":"",1:target.Alergias_"|")_tmp.StringValue'
+              property='target.Alergias'/>
+    </true>
+  </if>
+</foreach>
+```
+
+**This form only works when the segment is top-level.** If `AL1` sits inside a named group
+(`ALgrpgrp`), `source.{AL1(k1)}` does not resolve — use `source.{ALgrpgrp(k1).AL1}`, or fall back
+to the `SegCount` + `seg.Name` iteration above, which needs neither a count nor a resolvable path.
+
+Prefer `<foreach>` when the rest of the transform needs no `<code>` block; reach for the
+ObjectScript loop when it already has one.
 
 ## Date / numeric type marshalling pitfalls
 

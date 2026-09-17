@@ -36,15 +36,26 @@ needs a bare adapter instead extends `Ens.BusinessService` and declares e.g.
 ```objectscript
 Class MyApp.BS.PatientCensusFromCSV Extends EnsLib.RecordMap.Service.FileService
 {
-Parameter SETTINGS = "TargetConfigNames:Basic,RequiredField:Basic";
+Parameter SETTINGS = "RequiredField:Basic";
 
-Property TargetConfigNames As %String(MAXLEN=1000);
+/// TargetConfigNames is already declared by EnsLib.RecordMap.Service.Base — do NOT redeclare it.
 Property RequiredField As %String;
 
+/// Hand control to the base class FIRST, then validate.
+/// On a PREBUILT EnsLib service the base OnInit is the only place the host's parser state is
+/// set up — ..recordMapFull for RecordMap services, ..%Parser for EnsLib.HL7.Service.Standard.
+/// Return $$$OK from here without calling ##super() and that state stays "" for the entire life
+/// of the running service: GetObject() ends up calling $classmethod("", …), OnProcessInput's
+/// stream-position guard swallows the error, and the service consumes and DELETES every input
+/// file while producing zero messages and zero Event Log entries — green in the Portal.
 Method OnInit() As %Status
 {
+    Set tSC = ##super()
+    Quit:$$$ISERR(tSC) tSC
+
     // Validate required settings — fail loud at startup, not at first message
-    If $$$ISERR(..ValidateSettings()) Quit $$$ERROR($$$EnsErrGeneral, "missing settings")
+    If ..TargetConfigNames = "" Quit $$$ERROR($$$EnsErrGeneral, "TargetConfigNames is required")
+    If ..RequiredField = "" Quit $$$ERROR($$$EnsErrGeneral, "RequiredField is required")
     Quit $$$OK
 }
 
@@ -78,6 +89,12 @@ Measured over a workshop cohort: **8 of 18 students** hit `#5478`, mostly by car
 RecordMap shape onto a REST or HTTP service. When unsure, `docs_introspect` the base class's
 `OnProcessInput` before writing the override.
 
+> **The path goes in the Setting, not in the `.cls`.** `FilePath`, `Filename` and `JDBCClasspath`
+> are adapter settings of the **production item** (ESQL §3.1), so a literal `C:\…` or `/tmp/…`
+> inside a BS/BO/BP/DTL class is a CR-10 finding. Bootstrap/`UTL` helpers and `%UnitTest` fixtures
+> are exempt — they have no production item, hence no Setting, and a fixture must name a real file
+> on the server.
+
 ## Production naming — `Tipo.Nombre`
 
 Every BS/BO/Router/Util item has a name in the production XML. Use the convention `<Type>.<Name>` consistently across the production:
@@ -108,11 +125,15 @@ Prefer Async unless there is a specific reason to wait. Sync ties up a BS pool s
 
 ## OnInit settings validation
 
-`OnInit()` runs once when the production starts the BS. Use it to fail loud on misconfiguration:
+`OnInit()` runs once when the production starts the BS. Use it to fail loud on misconfiguration —
+but hand control to the base class first:
 
 ```objectscript
 Method OnInit() As %Status
 {
+    Set tSC = ##super()                 // MANDATORY on a prebuilt EnsLib.* service
+    Quit:$$$ISERR(tSC) tSC
+
     If ..TargetConfigNames="" Quit $$$ERROR($$$EnsErrGeneral,"TargetConfigNames is required")
     If ..RequiredField="" Quit $$$ERROR($$$EnsErrGeneral,"RequiredField is required")
     Quit $$$OK
@@ -121,6 +142,21 @@ Method OnInit() As %Status
 
 The user-stated principle: a BS that needs a setting should refuse to start if the setting is missing, not silently swallow nulls and fail at first message.
 
+> **`OnInit()` without `##super()` on a prebuilt service — silent, and it destroys the input.**
+> Symptom: the BS picks the file up and deletes it, **0 messages, 0 Event Log entries, component
+> green in the Portal**. There is no error text anywhere; that is the whole difficulty. The base
+> `OnInit` is the only place the parser state is initialised — verified on IRIS for Health 2026.1,
+> `EnsLib.RecordMap.Service.Base` declares both `OnInit` and `recordMapFull`, and
+> `EnsLib.HL7.Service.Standard` declares both `OnInit` and `%Parser`.
+>
+> Applies to subclasses of **prebuilt** `EnsLib.*.Service.*` and `EnsLib.*.Operation.*`. A direct
+> subclass of `Ens.BusinessService` that declares `Parameter ADAPTER` has **no** such obligation —
+> its inherited `OnInit()` does nothing by default (ESQL, §"Initializing the Adapter"), so
+> `##super()` there adds nothing.
+>
+> Put `##super()` FIRST rather than `Quit ##super()` last: the validation then runs against a fully
+> initialised host, and the base `%Status` is propagated instead of discarded.
+
 ## Common pitfalls
 
 - **`##class(Pkg.BS.X).%New()` to test the service directly** → a BS does not instantiate. `Ens.BusinessService` declares no `%New`; a subclass returns `""`, and the error surfaces a line later as `<INVALID OREF>`. See `tdd` §"Pitfalls specific to Interop TDD".
@@ -128,6 +164,7 @@ The user-stated principle: a BS that needs a setting should refuse to start if t
 - **Hand-rolled CSV parser** → use Record Mapper. Hand-rolled parsing fails on quoted fields, embedded delimiters, encoding edge cases.
 - **Sending Sync when Async would do** → blocks pool slots, kills throughput.
 - **Skipping `OnInit` validation** → bugs surface at first message instead of at production start.
+- **An `OnInit()` override on a prebuilt `EnsLib.*` service that never calls `##super()`** → the base class never initialises the parser (`..recordMapFull`, `..%Parser`), so the service starts green, eats and deletes its input, and emits nothing at all — no message, no Event Log entry, no error. See §"OnInit settings validation". Not applicable to a plain `Ens.BusinessService` + `Parameter ADAPTER` subclass.
 - **Multiple targets in one chain** → if you fan out to multiple operations, route through a Message Router; don't list them in `TargetConfigNames` for orchestration.
 - **Pool size of 1 for high-volume sources** → set Pool Size to expected concurrency. (Default `PoolSize=1` is correct for everything until you measure a bottleneck — don't raise it preemptively.)
 - **Diagnosing an FTPS `Unexpected SSL EOF` as a TLS problem** → it is often a failed `LIST *.csv` against a server that doesn't glob. Set `MLSD=1` — and then rewrite `FileSpec` as a regex (see the FTPS section below).
@@ -142,6 +179,23 @@ When using `EnsLib.RecordMap.Service.FileService` with a generated Record Map cl
 - **Charset**: set the adapter's `Charset` setting to `UTF-8` explicitly when headers/values contain non-ASCII characters (`ñ`, tildes). Platform-default charset may differ and produces header names that don't match field names ("Acompañante" header read as "AcompaÃ±ante" → mapping fails).
 - **Quoted fields with embedded delimiters**: configure the Record Map's `Quote Character` (typically `"`) so the parser respects RFC-4180 quoting. `"García, hijo"` is one field with a literal comma; a `$PIECE`-by-comma hand-rolled parser corrupts it.
 - **Use the pre-built `FileService` class directly** — declare `ClassName="EnsLib.RecordMap.Service.FileService"` on the production item and set the `RecordMap`, `FilePath`, `Charset`, and `HeaderCount` settings (the last three on target `Adapter`; `RecordMap`, `HeaderCount`, `TargetConfigNames` on target `Host`). Don't subclass unless you genuinely need to override behaviour. See the canonical pattern above for the subclass case (custom BS that wraps Record Mapper output into a project-specific message).
+
+**The BS and BO are already written — the only class you author is the RecordMap itself.** Writing
+an `Ens.BusinessService` subclass for a RecordMap flow is always wrong: the file adapter, the poll
+loop and the per-record dispatch are all in the prebuilt service.
+
+| Role | Prebuilt IRIS class | Configure |
+|---|---|---|
+| BS, file inbound | `EnsLib.RecordMap.Service.FileService` | `RecordMap`, `TargetConfigNames`, `HeaderCount` (Host); `FilePath`, `Charset` (Adapter) |
+| BS, FTP inbound | `EnsLib.RecordMap.Service.FTPService` | same, plus the FTP adapter settings |
+| BS, batch file | `EnsLib.RecordMap.Service.BatchFileService` | same |
+| BO, batch file out | `EnsLib.RecordMap.Operation.BatchFileOperation` | `RecordMap`, plus the file adapter settings |
+
+The one class you create is the `EnsLib.RecordMap.RecordMap` subclass — authored as the XData block
+below, or built programmatically, then put through `GenerateObject` (both covered further down).
+Subclass the prebuilt service only to wrap the mapped record into a project-specific message, which
+is what the canonical pattern at the top of this skill shows — and then `##super()` in `OnInit()` is
+mandatory.
 
 ### Authoring the `XData RecordMap` block — the exact schema the validator accepts
 
@@ -255,6 +309,33 @@ Before reaching for `EnsLib.RecordMap.Service.ComplexBatchFileService`, know tha
 need a message per invoice/episode/block, no native ARM service does that: write a custom BS that
 reads the lines and assembles the sub-batch itself.
 
+### Building the RecordMap programmatically — `recordTerminator` must be hex-escaped
+
+The XData block above is one way to author the map. The other is to build an
+`EnsLib.RecordMap.Model.Record` in code and call `SaveToClass()`. That route has one trap that is
+silent, produces `$$$OK`, and corrupts data:
+
+```objectscript
+Set rec.recordTerminator = "\x0a"      // LF-terminated files
+Set rec.recordTerminator = "\x0d\x0a"  // CRLF-terminated files
+```
+
+**Always the `\xHH` hex-escape form — never a literal byte, never empty.**
+`EnsLib.RecordMap.Generator.getLogicalChars()` turns the stored value into the ObjectScript
+expression `chunkRecord` uses as the record boundary, and the literal forms do not survive the
+`SaveToClass` → XML round-trip:
+
+| What you set | What is stored | What `chunkRecord` splits on |
+|---|---|---|
+| left empty | `$char(32)` — the portal's default | **every space** |
+| literal `\r\n` in the XML | the XML parser normalises CRLF → LF | `$char(10)` only |
+| `$Char(13,10)` assigned directly | lost in the round-trip | not what you meant |
+| `"\x0d\x0a"` | `"\x0d\x0a"` | CR+LF, as intended |
+
+The empty case is the one that costs a morning: the boundary becomes a space, so
+`Alergias = "Frutos secos|Marisco"` is silently truncated at `Frutos`. Status is `$$$OK`, there is
+no error, and the row count still looks plausible.
+
 ### Generating the Record Map (the `.Record` class + GetObject) — **a plain compile does NOT do this**
 
 The Record Map's `<Map>.Record` class **and** the `GetObject`/`PutObject`/`GetRecord`/`PutRecord` method bodies are written by the **wizard / generator into the source**, exactly like a generated SOAP client. A normal `iris_compile` (or `iris_doc put` with `compile=true`) of a Record Map class that contains only the XData block compiles green but produces **no working `GetObject`** — at runtime the FileService dies with `<METHOD DOES NOT EXIST>GetObject ... ^EnsLib.RecordMap.Service.Base.1`.
@@ -273,7 +354,33 @@ ClassMethod GenerateRecordMap(pRM As %String) As %String [ SqlProc ]
 ```
 
 Invoke with `SELECT Pkg.Bootstrap_GenerateRecordMap('Pkg.RecordMap.X')` — schema `Pkg`, function
-`Bootstrap_GenerateRecordMap`. Notes:
+`Bootstrap_GenerateRecordMap`. (Careful with that name: the WHOLE package goes to underscores —
+`Pkg.UTL.Bootstrap` is schema `Pkg_UTL`, never `Pkg.UTL`. See `interop` §"Calling a `[SqlProc]`".)
+
+**When you build the map in code, put `SaveToClass` and `GenerateObject` in the SAME `[SqlProc]`.**
+Splitting them so that only `GenerateObject` is wrapped defeats the purpose: `iris_execute` reports
+`"GenerateObject OK target=…"`, the class compiles, and `GetObject` is still never written —
+`<METHOD DOES NOT EXIST>GetObject` at the first record.
+
+```objectscript
+ClassMethod BuildCensoMap() As %String [ SqlProc ]
+{
+    Do $System.OBJ.Delete("MyApp.RM.CensoCsv", "-d")
+    Do $System.OBJ.Delete("MyApp.RM.CensoCsvMap", "-d")
+    Set rec = ##class(EnsLib.RecordMap.Model.Record).%New()
+    // ... name, targetClassname, type, fieldSeparator, Fields ...
+    Set rec.recordTerminator = "\x0a"                      // hex-escape, never a literal byte
+    Set sc = rec.SaveToClass()
+    Quit:$$$ISERR(sc) "SaveToClass: "_$system.Status.GetErrorText(sc)
+    Set sc = ##class(EnsLib.RecordMap.Generator).GenerateObject("MyApp.RM.CensoCsvMap", .tTarget)
+    Quit:$$$ISERR(sc) "GenerateObject: "_$system.Status.GetErrorText(sc)
+    Quit "OK target="_tTarget
+}
+```
+
+`GenerateObject`'s later arguments (flags, qualifiers, the generated-class list) are version
+dependent — resolve them with `docs_introspect(class_name="EnsLib.RecordMap.Generator")` against the
+running instance rather than copying a signature. Notes:
 - `GenerateObject` errors `#5768 Class already exists` if the `.Record` already exists — delete it first, then regenerate.
 - **`GetObject` lives on the RecordMap class, not on `.Record`.** Verifying with
   `##class(Pkg.RecordMap.X.Record).GetObject(...)` raises the same `<METHOD DOES NOT EXIST>` as
@@ -430,6 +537,66 @@ Five non-obvious rules (each cost a debug cycle):
 4. Use `message-search-debug` to follow the Visual Trace from the BS through downstream components.
 5. Negative test: omit a required setting. The BS should refuse to start (red status, error in Event Log).
 
+### Waiting for a file BS to pick the file up — never a blind `sleep`
+
+Step 3 above says "drop a sample input". The file inbound adapter is a **poller**, so *how long*
+that takes is a setting, not a guess: it checks the directory every `CallInterval` seconds —
+**default 5, minimum 0.1** (EFIL, *Call Interval*). Nothing here is event-driven.
+
+`cp … && sleep 6` is a guess. An escalating `sleep 6, 7, 8, 12, 15, 20` is the same guess repeated,
+and it is invisible to every quality signal you have: **`sleep` always exits 0**. Worse, the `cp` you
+repeat because nothing showed up double-counts rows you then have to reconcile, and the loop cannot
+tell "hasn't polled yet" from "will never arrive".
+
+**1. Read the interval instead of guessing it.**
+
+```
+iris_production_item(namespace="<NS>", action="get_settings", item="<BS item>")
+```
+
+Look for `CallInterval` on target `Adapter`. Absent means it was never set and the default applies:
+5 s. Budget `2 × CallInterval` before concluding anything.
+
+**2. Take a watermark before copying, then poll the watermark.** `iris_interop_query` orders by
+`ID DESC`, so `limit=1` gives you the current high-water mark, and `since_id` then tails only what
+is new — no `SELECT MAX(ID)` first, and no risk of counting a previous run's rows.
+
+```
+# a. watermark: highest IDs right now
+iris_interop_query(namespace="<NS>", what="messages", limit=1)     -> ID = 4711
+iris_interop_query(namespace="<NS>", what="logs",     limit=1)     -> ID = 9088
+
+# b. copy the file into the watched directory ONCE
+cp ./samples/<input file>  <FilePath>/
+
+# c. poll, a second or two apart, for at most 2 x CallInterval
+iris_interop_query(namespace="<NS>", what="messages", since_id=4711)
+iris_interop_query(namespace="<NS>", what="logs",     since_id=9088)
+```
+
+Poll **both**: `what=messages` catches the success path, `what=logs` catches the case where the
+adapter did pick the file up and the BS then threw. The first call that returns a row ends the wait.
+
+**3. After `2 × CallInterval` with nothing, stop. Do not re-copy.** The directory tells you which
+failure you have:
+
+| `IN/` after the wait | What it means | Next move |
+|---|---|---|
+| file gone, new message rows | it worked | `iris_interop_query(what=trace, session_id=<n>)` to follow it downstream |
+| file gone, **no** new rows | the adapter consumed it and the BS failed | `iris_interop_query(what=logs, since_id=<watermark>)` — the error is there. Re-copying just feeds it another file. Start with `OnInit()`: a missing `##super()` is the classic cause, and it produces exactly this signature |
+| file still sitting there | nothing is polling it | `iris_production(action=status)`, then check `FilePath` / `FileSpec` on the item: BS disabled, production not running, or watching a different directory |
+
+**Why "file gone but no message" is the common one:** unless **Archive Path** is set, the adapter
+*deletes* the input file once its call to `ProcessInput()` returns — whatever the BS did with it
+(EFIL, *Archive Path*). A crash in `OnProcessInput` still costs you the sample. While developing, set
+**Archive Path** (InterSystems recommends the same directory as **Work Path**) so a failed run is
+re-runnable:
+
+```
+iris_production_item(namespace="<NS>", action="set_settings", item="<BS item>",
+                     settings={"Adapter.ArchivePath": "<archive dir>/"})
+```
+
 ## HL7 Business Service: schema assignment is **non-negotiable**
 
 For any HL7 BS (`EnsLib.HL7.Service.FileService`, `TCPService`, `SOAPService`, etc.) **always assign Version + MessageType** — not just version. The standard format combines both as a colon-separated `MessageSchemaCategory`:
@@ -555,7 +722,7 @@ these IRIS-SQL specifics in mind:
 - **ObjectScript is not SQL.** `iris_query` runs SQL SELECTs only. `set`/`write`/`do`/`##class(...)`,
   `&sql(...)`, and `^global` references are ObjectScript — run them with `iris_execute`, not `iris_query`.
 - **Discover, don't guess.** Before querying, use `iris_table_info` (or `docs_introspect`, or the
-  `introspect-dont-guess` plugin agent — an agent, not a skill; with no agent tool, follow `interop`
+  `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` — an agent, not a skill; with no agent tool, follow `interop`
   §"Resolving real names") to get the real table/column names rather than guessing
   system-catalog tables — and on `SQLCODE -30 Table not found`, the next call is introspection,
   never a differently-guessed name. Collection properties project to a child table **in the

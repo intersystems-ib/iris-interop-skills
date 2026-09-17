@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stop gate: "before declaring done" needs a point at which done is declared.
 
-The plugin specifies a final compliance pass, defines twelve criteria for it, and tells the
+The plugin specifies a final compliance pass, defines fourteen criteria for it, and tells the
 model to run it before declaring the work finished. Measured over 206 runs that produced
 authored `.cls`, the `conformance-reviewer` agent was spawned **0 times** — while
 `interop-builder`, whose instruction lives in the SessionStart hook, was spawned 79 times.
@@ -250,25 +250,44 @@ def _latch_path(transcript):
     return os.path.join(d, key + ".json")
 
 
-def latch_seen(transcript, signature):
-    """True if this exact body of unreviewed work has already been raised once."""
+REVIEW_SENTINEL = "review-pending"
+
+
+def _latch_state(transcript):
     p = _latch_path(transcript)
     if not p:
-        return False
+        return {}
     try:
         with open(p, encoding="utf-8") as fh:
-            return json.load(fh).get("signature") == signature
+            s = json.load(fh)
+            return s if isinstance(s, dict) else {}
     except Exception:
-        return False
+        return {}
 
 
-def latch_record(transcript, signature):
+def latch_seen(transcript, key, value):
+    """True if this exact UNRESOLVED CONDITION has already been raised under `key`.
+
+    #122 keyed this on put_signature(put) -- the sha1 of the WHOLE body of work the session
+    had written into IRIS. Write one more class and the signature changes, the latch misses,
+    and the gate blocks again for the SAME unresolved problem. In an exercise designed to
+    build one component per step that is one interruption per step: measured, 32 firings
+    across 10 of 14 students, eight of them to one person for one unchanged condition. The
+    mechanism was right and the KEY was wrong (#210).
+    """
+    return _latch_state(transcript).get(key) == value
+
+
+def latch_record(transcript, key, value):
     p = _latch_path(transcript)
     if not p:
         return
+    state = _latch_state(transcript)
+    state[key] = value
+    state["at"] = int(time.time())
     try:
         with open(p, "w", encoding="utf-8") as fh:
-            json.dump({"signature": signature, "at": int(time.time())}, fh)
+            json.dump(state, fh)
     except OSError:
         pass  # a latch we cannot write costs a repeat, never a crash
 
@@ -338,8 +357,26 @@ def put_reached_iris(block):
     return True
 
 
-def put_signature(put):
-    return hashlib.sha1("\n".join(sorted(put)).encode("utf-8")).hexdigest()
+def get_says_absent(block):
+    """True only for the exact NOT_FOUND envelope iris_doc returns for a missing document.
+
+    The MCP's failure envelope is {"success": false, "error_code": ..., "error": ...}.
+    NAMESPACE_NOT_FOUND and ATELIER_NOT_FOUND mean the call could not LOOK -- they are not
+    evidence the class is absent and must never discard a put. Match error_code EXACTLY, never
+    by suffix: a suffix match would drop real puts on a mistyped namespace and turn a false
+    positive into the false negative CR-12 exists to prevent.
+
+    Without this, removing the file with `rm` instead of iris_doc(mode=delete) left the put on
+    the books and the gate demanded, five times over to one student, that a class be recovered
+    from a namespace that does not have it (#210).
+    """
+    if not isinstance(block, dict) or not block.get("is_error"):
+        return False
+    try:
+        payload = json.loads(_result_text(block).strip())
+    except Exception:
+        return False
+    return isinstance(payload, dict) and payload.get("error_code") == "NOT_FOUND"
 
 
 def scan_transcript(path, cutoff=0.0):
@@ -408,6 +445,14 @@ def scan_transcript(path, cutoff=0.0):
                             continue
                         events.append(("put", block.get("id"), strip_cls(name)))
 
+                    elif mode == "get":
+                        # A get answering NOT_FOUND is positive proof the class is not in the
+                        # namespace -- and it is exactly the evidence the CR-12 message asks the
+                        # model to produce. Today producing it changes nothing.
+                        n = inp.get("name")
+                        if isinstance(n, str) and n.strip():
+                            events.append(("get", block.get("id"), strip_cls(n.strip())))
+
                     elif mode == "delete":
                         # Staging scratch classes and deleting them afterwards is a legitimate
                         # workflow — it is how the example bank is compile-checked. Without
@@ -422,6 +467,9 @@ def scan_transcript(path, cutoff=0.0):
     for kind, tid, cname in events:
         if kind == "del":
             put.discard(cname)
+        elif kind == "get":
+            if get_says_absent(results.get(tid)):
+                put.discard(cname)
         elif put_reached_iris(results.get(tid)):
             put.add(cname)
         else:
@@ -483,14 +531,11 @@ def main():
                lines=_count_lines(transcript), reviewed=reviewed, cutoff=cutoff)
         return  # this session authored no interop classes; nothing to gate
 
-    # #122: one body of unreviewed work earns one interruption, across BOTH branches.
-    # Clearing the orphan condition used to hand the turn straight to the no-review
-    # branch, which reads to the user as a gate that will not stop.
-    signature = put_signature(put)
-    if latch_seen(transcript, signature):
-        _trace("latched", puts=len(put), signature=signature[:12])
-        return
-
+    # #210: the latch is keyed on the UNRESOLVED CONDITION, per branch -- the orphan SET for
+    # CR-12, a fixed sentinel for REVIEW -- not on the body of work. Keying it on the body of
+    # work (#122) meant writing one more class changed the key and the gate re-blocked for the
+    # same problem, so the more faithfully a student followed a one-component-per-step workbook,
+    # the more often the hook stopped them.
     root = project_root(data)
     orphans = find_orphans(root, put)
 
@@ -522,14 +567,19 @@ def main():
     # says "iris_doc(mode=get) the namespace-only classes and write them to src/". The
     # fix never propagated to the enforcement message. Same defect, one layer down.
     if orphans:
-        _trace("blocking_orphans", put=len(put), orphans=len(orphans))
+        claimed = set(_latch_state(transcript).get("CR12_claimed") or [])
+        fresh = [c for c in orphans if c not in claimed]
+        if not fresh:
+            _trace("latched_cr12", orphans=len(orphans))
+            return  # every one of these was already asked for; stay silent
+        _trace("blocking_orphans", put=len(put), orphans=len(fresh))
         listed = "\n".join(
             "  - {}   ->  iris_doc(mode=get, name=\"{}.cls\")  ->  src/{}.cls".format(
                 c, c, c.replace(".", "/"))
-            for c in orphans[:15]
+            for c in fresh[:15]
         )
-        more = "\n  ... and {} more".format(len(orphans) - 15) if len(orphans) > 15 else ""
-        latch_record(transcript, signature)
+        more = "\n  ... and {} more".format(len(fresh) - 15) if len(fresh) > 15 else ""
+        latch_record(transcript, "CR12_claimed", sorted(claimed | set(orphans)))
         block(
             "CR12",
             "CR-12 \u2014 {} of the {} class(es) this session wrote into IRIS exist ONLY in the "
@@ -544,25 +594,31 @@ def main():
             "If mode=get answers that the class is not in the namespace, then it never reached "
             "IRIS, there is nothing to save, and this demand was spurious. Report that tool "
             "result and stop \u2014 do NOT create the file.\n\n"
+            "These classes will not be asked for again. If you write NEW classes into IRIS "
+            "without a file on disk, those will be.\n\n"
             "(Measured: 16 runs finished with no .cls on disk at all and 12 of them scored as "
             "passes, one at 96.45 \u2014 ground truth is read from the namespace, so saving "
-            "nothing still grades green.)".format(len(orphans), len(put), listed, more)
+            "nothing still grades green.)".format(len(fresh), len(put), listed, more)
         )
 
     if not reviewed:
+        if latch_seen(transcript, "REVIEW", REVIEW_SENTINEL):
+            _trace("latched_review", puts=len(put))
+            return  # said once, and the escape hatch was used
         _trace("blocking_no_review", put=len(put))
-        latch_record(transcript, signature)
+        latch_record(transcript, "REVIEW", REVIEW_SENTINEL)
         block(
             "REVIEW",
             "The conformance pass has not run. This session authored {} interop class(es) and "
-            "every one is on disk, but nothing has checked them against the twelve criteria.\n\n"
+            "every one is on disk, but nothing has checked them against the fourteen criteria.\n\n"
             "Run it now:\n"
             "  Agent(subagent_type=\"iris-interop-skills:conformance-reviewer\")\n"
             "    — the full pass; re-verifies tests through the real iris_test rather than "
             "trusting a self-graded [SqlProc], which is CR-7.\n"
             "  or Skill(iris-interop-skills:conformance-review) to review inline.\n\n"
-            "If the criteria genuinely do not apply here, say so and stop again — this fires "
-            "once per session, not in a loop.".format(len(put))
+            "If the criteria genuinely do not apply here, say so and stop again — this will not "
+            "fire again for the same classes. It fires again only if you write NEW classes into "
+            "IRIS without reviewing them.".format(len(put))
         )
 
 

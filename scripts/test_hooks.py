@@ -544,6 +544,191 @@ check("marker reaches the output", True,
       json.loads(_emitted_drift.stdout)["hookSpecificOutput"]["additionalContext"]
       .startswith("[IIS-DRIFT] "))
 
+# --------------------------------------------------------------------------------------
+# #221  IIS-CG-NAME must not fire on InterSystems' own packages, and must not fire on a READ.
+#
+# 4 of 4 observed denials were false positives: iris_doc(mode=get) of
+# EnsLib.HL7.Service.FileService, whose middle segments are ['HL7', 'Service']. Those names
+# are not ours to rename, the plugin's own skills send the model to them BY NAME, and reading
+# a superclass is the documented introspection path.
+#
+# The mode filter is the subtle half. It is written as "skip only when mode is PRESENT and is
+# not put" rather than "mode == put", because iris_compile sits in the same matcher and carries
+# NO mode key: `mode == "put"` would silently switch this rule off on the one other path a
+# badly named class can land on. The last two cases are that control.
+print("\n#221  interop_conformance_gate — NAME is scoped to classes the model authors")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+def _named(name, **extra):
+    return {"tool_name": "mcp__iris__iris_doc", "tool_input": dict({"name": name}, **extra)}
+
+for _label, _want, _payload in [
+        ("EnsLib read (was 4/4 false positive)", "ALLOW",
+         _named("EnsLib.HL7.Service.FileService.cls", mode="get")),
+        ("EnsLib put — still not ours to rename", "ALLOW",
+         _named("EnsLib.RecordMap.Service.FileService.cls", mode="put")),
+        ("Ens.* and %Library.* exempt too", "ALLOW",
+         _named("%Library.SQLConnection.cls", mode="get")),
+        ("authored .Service. put — POSITIVE CONTROL", "DENY",
+         _named("Pkg.Service.Census.cls", mode="put")),
+        ("authored .Service. read is not authoring", "ALLOW",
+         _named("Pkg.Service.Census.cls", mode="get")),
+        ("iris_compile has NO mode — must still deny", "DENY",
+         {"tool_name": "mcp__iris__iris_compile",
+          "tool_input": {"name": "Pkg.Service.Census.cls"}}),
+]:
+    check(_label, _want, run_hook(GATE, _payload))
+
+
+# --------------------------------------------------------------------------------------
+# #219  IIS-CG-UNDERSCORE. `_` is the concatenation operator; the compiler blames the braces.
+#
+# The exemptions are what keep this from being a noisy deny: a delimited member name is legal
+# (GOBJ 2.6.3), and an XData body carries underscores as DATA — an HL7 schema's ADT_A01, a
+# <Setting Name="Foo_Bar">. The last two cases are the false positives this rule would cause
+# without mask_xdata and the quote check.
+print("\n#219  interop_conformance_gate — underscore in an identifier")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+_UND_CLS = "Class Pkg.DT.ADT_A01ToMenuReq Extends Ens.DataTransformDTL\n{\n}"
+_UND_MEM = ("Class Pkg.Tests.BS.In Extends %UnitTest.TestProduction\n{\n"
+            'Parameter IN_DIR = "/data/IN/";\n}')
+_UND_OK = ("Class Pkg.Tests.BS.In Extends %UnitTest.TestProduction\n{\n"
+           'Parameter InDir = "/data/IN/";\n}')
+_UND_DELIM = ("Class Pkg.MSG.Row Extends (%Persistent, Ens.Request)\n{\n"
+              'Property "My_Property" As %String;\n}')
+# NOTE ON SCOPE: an XML XData body cannot trip this rule anyway — every line starts with '<'
+# and UNDERSCORE_MEMBER is anchored to a line STARTING with a member keyword. So the XML case
+# below is a control, not a demonstration that masking is required. The keyword-initial case
+# after it is the one mask_xdata actually earns its place on; drop the masking and it denies.
+_UND_XDATA = ("""Class Pkg.HL7.Custom Extends %RegisteredObject\n{\n"""
+              """XData Schema\n{\n"""
+              """<Category name='Cust' base='2.5'>\n"""
+              """  <MessageStructure name='ADT_A01' definition='2.5:MSH~[~ZDI~]'/>\n"""
+              """  <MessageType name='ADT_A01' structure='ADT_A01'/>\n"""
+              """</Category>\n}\n}""")
+_UND_XDATA_KW = ("Class Pkg.UTL.Notes Extends %RegisteredObject\n{\n"
+                 "XData Doc\n{\n"
+                 "Method GetFoo_Bar() was renamed in 2026.1\n"
+                 "Parameter OLD_NAME is no longer read\n"
+                 "}\n}")
+
+for _label, _want, _payload in [
+        ("class name carries _  (the #5559 case)", "DENY", doc("Pkg.DT.X.cls", _UND_CLS)),
+        ("Parameter IN_DIR", "DENY", doc("Pkg.Tests.BS.In.cls", _UND_MEM)),
+        ("the fixing rewrite", "ALLOW", doc("Pkg.Tests.BS.In.cls", _UND_OK)),
+        ("delimited member name is LEGAL", "ALLOW", doc("Pkg.MSG.Row.cls", _UND_DELIM)),
+        ("ADT_A01 inside XData is DATA", "ALLOW", doc("Pkg.HL7.Custom.cls", _UND_XDATA)),
+        ("keyword-initial line in XData is DATA", "ALLOW",
+         doc("Pkg.UTL.Notes.cls", _UND_XDATA_KW)),
+        ("a READ is never gated on content", "ALLOW",
+         doc("Pkg.DT.X.cls", _UND_CLS, mode="get")),
+]:
+    check(_label, _want, run_hook(GATE, _payload))
+
+# The Write leg (#219) — and the constraint that keeps it from denying edits to this plugin's
+# OWN documentation. Every build skill here carries `Class … Extends EnsLib.…Adapter` and
+# ADT_A01 inside fenced examples; without the .cls path check a Write of a SKILL.md is a deny.
+print("\n#219  the Write|Edit leg is scoped to .cls paths")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+for _label, _want, _payload in [
+        ("Write of a .cls with _  — must deny", "DENY",
+         {"tool_name": "Write",
+          "tool_input": {"file_path": "/w/src/Pkg/DT/X.cls", "content": _UND_CLS}}),
+        ("Write of a SKILL.md quoting it — ALLOW", "ALLOW",
+         {"tool_name": "Write",
+          "tool_input": {"file_path": "/w/skills/x/SKILL.md",
+                         "content": "Example:\n```\n" + _UND_CLS + "\n```\n"}}),
+        ("Edit new_string on a .cls", "DENY",
+         {"tool_name": "Edit",
+          "tool_input": {"file_path": "/w/src/Pkg/DT/X.cls", "new_string": _UND_CLS}}),
+        ("Write of a plain .md is untouched", "ALLOW",
+         {"tool_name": "Write",
+          "tool_input": {"file_path": "/w/README.md", "content": _UND_CLS}}),
+]:
+    check(_label, _want, run_hook(GATE, _payload))
+
+
+# --------------------------------------------------------------------------------------
+# #212  IIS-CG-INTROSPECT is an ADVISORY. A deny here would block CleanProduction(), the
+# documented remedy for a stuck production — so the lifecycle control is the load-bearing case.
+print("\n#212  hand-rolled introspection gets an advisory, never a deny")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+def _exec_out(code):
+    """ADVISE / DENY / ALLOW — an advisory and a deny are both stdout, so read the payload."""
+    p = subprocess.run([sys.executable, GATE],
+                       input=json.dumps({"tool_name": "mcp__iris__iris_execute",
+                                         "tool_input": {"code": code, "namespace": "NS"}}),
+                       capture_output=True, text=True)
+    if p.returncode != 0 or p.stderr.strip():
+        return "CRASH"
+    if not p.stdout.strip():
+        return "ALLOW"
+    out = json.loads(p.stdout)["hookSpecificOutput"]
+    return "DENY" if out.get("permissionDecision") == "deny" else "ADVISE"
+
+for _label, _want, _code in [
+        ("GetProductionStatus", "ADVISE",
+         "Set tSC=##class(Ens.Director).GetProductionStatus(.n,.s)"),
+        ("GetHostInstance", "ADVISE", '##class(Ens.Director).GetHostInstance("BO.Send")'),
+        ("EnsPortal.* is not an API", "ADVISE",
+         '##class(EnsPortal.Utils).GetProductionStatus(.st)'),
+        ("CleanProduction alone", "ALLOW",
+         "Do ##class(Ens.Director).CleanProduction()"),
+        ("StopProduction alone", "ALLOW",
+         "Do ##class(Ens.Director).StopProduction(30,1)"),
+        # The load-bearing one. Both in a single snippet is how the recovery ladder's remedy is
+        # actually typed: check the status, then clean. Without LIFECYCLE_OK this advises on the
+        # documented fix for a stuck production.
+        ("status + CleanProduction together", "ALLOW",
+         "Set s=##class(Ens.Director).GetProductionStatus(.n,.st)\n"
+         "Do ##class(Ens.Director).CleanProduction()"),
+        ("a real violation still DENIES first", "DENY",
+         'Do $SYSTEM.OBJ.Load("/tmp/x.xml","ck")'),
+]:
+    check(_label, _want, _exec_out(_code))
+
+
+# --------------------------------------------------------------------------------------
+# #210  The stop gate's latch is keyed on the unresolved CONDITION, not on the body of work.
+# Keyed on the body of work, writing one more class changed the key and the gate re-blocked
+# for the same problem — one interruption per workbook step. And a get answering NOT_FOUND
+# cancels the put, which is the evidence the CR-12 message itself asks the model to produce.
+print("\n#210  stop-gate latch is per-condition, and NOT_FOUND cancels a put")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+check("latch stores per key, not one slot", True,
+      (lambda t: (g.latch_record(t, "CR12_claimed", ["A"]),
+                  g.latch_record(t, "REVIEW", g.REVIEW_SENTINEL),
+                  g.latch_seen(t, "CR12_claimed", ["A"]) and
+                  g.latch_seen(t, "REVIEW", g.REVIEW_SENTINEL))[-1])(
+          os.path.join(tempfile.mkdtemp(), "t.jsonl")))
+
+check("a different value is NOT latched", False,
+      (lambda t: (g.latch_record(t, "CR12_claimed", ["A"]),
+                  g.latch_seen(t, "CR12_claimed", ["A", "B"]))[-1])(
+          os.path.join(tempfile.mkdtemp(), "t.jsonl")))
+
+def _blk(payload, is_error=True):
+    return {"is_error": is_error,
+            "content": [{"type": "text", "text": json.dumps(payload)}]}
+
+for _label, _want, _block in [
+        ("NOT_FOUND is proof of absence", True,
+         _blk({"success": False, "error_code": "NOT_FOUND", "error": "no such doc"})),
+        ("NAMESPACE_NOT_FOUND is NOT", False,
+         _blk({"success": False, "error_code": "NAMESPACE_NOT_FOUND"})),
+        ("ATELIER_NOT_FOUND is NOT", False,
+         _blk({"success": False, "error_code": "ATELIER_NOT_FOUND"})),
+        ("a successful get is not absence", False,
+         _blk({"success": True, "content": "Class X {}"}, is_error=False)),
+        ("prose, not JSON, is not absence", False,
+         {"is_error": True, "content": [{"type": "text", "text": "boom"}]}),
+]:
+    check(_label, _want, g.get_says_absent(_block))
+
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)

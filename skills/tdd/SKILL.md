@@ -88,10 +88,15 @@ If the conversation is purely about wiring components into a production (product
 1. SPEC           Write the spec in one or two sentences in the conversation.
 2. TEST           Author Test* methods in a `%UnitTest.TestProduction` subclass, one per spec clause.
                   Each Test* method must have a /// comment describing what spec clause it verifies.
-3. RED            Run the runner via `do ##class(My.Tests.X).Run()`. Confirm failures.
+3. RED            Run each test class:
+                      iris_test(pattern="MyApp.Tests.DT.Csv2Menus", namespace="<NS>")
+                  ONE COMPILED CLASS PER CALL. `pattern` does NOT expand a package: "MyApp.Tests"
+                  comes back NO_TESTS_FOUND with a did_you_mean list of the real names. Fully
+                  qualified, case-correct, and compiled first. Confirm the failures.
 4. IMPLEMENT      Write the minimum DTL/rule/BO method to satisfy the tests.
-5. GREEN          Run the runner. All tests pass.
-                  After GREEN, print the %UnitTest.Portal.Home URL so the user can inspect individual asserts.
+5. GREEN          Re-run iris_test for EVERY test class, all of them after the last compile.
+                  All pass. Then print the %UnitTest.Portal.Home URL so the user can inspect
+                  individual asserts.
 6. REFACTOR       Simplify with green tests as the safety net. Re-run.
 ```
 
@@ -102,9 +107,11 @@ summary unless both happened in this session; if either is missing, say plainly 
 
 Two rules about the numbers you quote for (b):
 
-- **They come from one final run, made after the last edit.** A green from earlier in the task went
-  stale the moment you recompiled — it measured a class that no longer exists. Never assemble one
-  result out of several runs.
+- **They come from the final pass, made after the last edit.** The final pass is ONE `iris_test`
+  call **per test class**, all of them after the last recompile — a suite of N test classes is N
+  calls, and adding those N results up is correct. What is forbidden is mixing **generations**: a
+  green captured before you recompiled measured a class that no longer exists. Touch any source
+  after the pass and you re-run **all** N, not just the class you touched.
 - **Record the baseline first, then hold at zero NEW failures.** Where the namespace already has red
   tests, capture which ones fail *before* you start, verbatim. Green then means *no new failure*,
   not an empty list — and repairing an unrelated pre-existing failure is scope creep: surface it,
@@ -195,14 +202,19 @@ component that was never built.
 | **Persistent message class** | TestProduction class with Test* methods that instantiate, set properties, `%Save()`, query back, assert on serialization. |
 | **Data Transform (DTL)** | Test* methods that call `##class(My.DT.X).Transform(srcObj, .tgtObj)` directly and assert on `tgtObj`. No production lifecycle needed — but still extend TestProduction (free `Run()`/helpers). |
 | **Routing rule (`Ens.Rule.Definition`)** | Two valid styles: **(a) Integration** — drive the actual Router config item via `..SendRequest("Router.Censo", msg, .resp, 0)` and assert via `..GetEventLog(...)` for downstream config-name dispatch. **(b) Unit** — construct `EnsLib.MsgRouter.RoutingEngine.Context`, call `Ens.Rule.Definition.EvaluateRules(...)`, assert on returned actions. (a) catches more real bugs (DTL chain, BO availability), (b) is faster but more brittle to API drift. |
-| **Custom BO method** | Drive the BO **with its real adapter** against a real test endpoint (test DB schema, test file dir, test TCP listener). Two modes: **(a)** `..SendRequest("BO.Cocina", req, .resp, 1)` against the running production, assert via `..GetEventLog` or direct SQL on the side-effect store. **(b)** Instantiate the BO with explicit settings + call its real `OnInit()` + invoke the method directly (more setup, but works without a running production). Never stub the adapter — see pitfall below. |
-| **BO `OnInit`/settings validation** | Test* method invokes `..OnInit()` on a manually-wired BO instance with adapter settings matching production XML. |
+| **Custom BO method** | Drive the BO **with its real adapter** against a real test endpoint (test DB schema, test file dir, test TCP listener). Two modes: **(a)** `..SendRequest("BO.Cocina", req, .resp, 1)` against the running production, assert via `..GetEventLog` or direct SQL on the side-effect store. **(b)** Drive the BO's **adapter** directly — the BO itself does not instantiate (see the pitfall below); the adapter does, and `##class(EnsLib.SQL.OutboundAdapter).%New()` is the supported way to exercise it headlessly. Set the same settings the production item carries, call `OnInit()`, invoke `ExecuteQuery`/`ExecuteUpdate`, then `Disconnect()`. Valid **without a running production only for a BO with no adapter, or with a File/TCP adapter**. With a `jdbc:` DSN it is not: the production must be **started** and must contain an `EnsLib.JavaGateway.Service` item whose name matches `JGService` character for character — `JGService` is required for all JDBC data sources and the adapter reuses that item's settings (ESQL §3.1). Otherwise `<INVALID OREF> 192 initAdapterJG+2^EnsLib.JavaGateway.Common.1`, a frame naming neither your BO nor the adapter: read it as "I cannot find the JGService item", never as "the gateway is broken". Recipe: `business-operations` §"Headless verification". Never stub the adapter — see pitfall below. |
+| **BO `OnInit`/settings validation** | Test* method invokes `..OnInit()` on a manually-wired **adapter** instance whose settings match the production item's XML. A BO *instance* is not available — `%New()` on a BO subclass returns `""`. For a `jdbc:` DSN, the `JGService` precondition in the row above applies here too. |
 | **BPL Business Process** | `..SendRequest("BP.MyProcess", req, .resp, 1)` against the running production (with `TestingEnabled="true"`). Inspect side-effects via `..GetEventLog` or `Ens.MessageHeader`. |
 | **End-to-end inside production (BS→BP→BO chain)** | Same: `..SendRequest` to the entry point (BP, BO, or Router), assert on side-effects. |
 | **Custom HL7 schema** | Two tests, not one. **(a)** the category registered — `EnsLib.HL7.Schema.ResolveSegNameToStructure` / `ResolveSchemaTypeToDocType`. **(b)** the structure is right — drive a real message through an `EnsLib.HL7.MsgRouter.RoutingEngine` whose **`Validation="dm"`** and assert it routes, plus a malformed one that must land on the `BadMessageHandler`. Parsing alone (`ImportFromString`+`DocTypeSet`+`GetValueAt`) reads fields and **never checks segment order**, so a wrong `MessageStructure` passes. See `hl7-schemas`. |
 | **RecordMap** | Two levels. **(a)** the `.Record` was generated — assert the class exists (a plain compile does not generate it). **(b)** the parser works — push a line through `GetObject` on the **RecordMap class** (not `.Record`), asserting an accented field and a quoted-comma field. Give the test stream the **same `CharEncoding` as the map**, or pass a filename and let `GetObject` open it; a default `%IO.StringStream` is `Native` and silently corrupts accents with a `$$$OK` status. See `business-services`. |
 | **Business Service (entry point)** | **Not testable from inside IRIS.** Test from *outside*: copy a file into the BS's `FilePath`, send TCP to its port, POST to its REST URL. Use `pytest`, `curl`, or equivalent external clients. The BS adapter is the contract; it must be exercised via its actual transport. |
 | **Custom inbound adapter** | Same as BS — exercise from outside. |
+
+> **Before you name a test class or a Test\* method:** identifiers are letters and digits only —
+> `_` is the concatenation operator, and `Method TestADT_A01ContainsZdi()` aborts the parser with
+> `#5559 … non-matching {} or () characters`. HL7 work is where this bites, because the message
+> type is `ADT_A01`. See `interop` §"Invariants when writing ANY ObjectScript class".
 
 ## Where to store the tests
 
@@ -246,6 +258,44 @@ Method TestFechaInvalidaSeAisla()
 ```
 
 Run: `do ##class(MyApp.Tests.DT.Censo2Menus).Run()`.
+
+### HL7 test fixtures — the classmethod, never the instance method
+
+`EnsLib.HL7.Message` has two import paths and they do **not** do the same thing:
+
+| Form | Behaviour |
+|---|---|
+| `msg.ImportFromString(raw)` — **instance** method | Parses the **first segment only**. Every other segment is dropped. No error, no warning. |
+| `##class(EnsLib.HL7.Message).ImportFromString(raw, .sc)` — **classmethod** | Parses the full multi-segment message and returns the populated object. |
+
+The instance form is the dangerous one precisely because it does not fail: the fixture ends up
+holding only MSH, every assertion on PID/PV1/AL1/ZDI reads `""`, `<if>` defaults interpret the
+empty string as "use the default", and the test goes **green while testing nothing**. This is the
+`AL1Count` failure mode in a different costume — see `transformations`.
+
+```objectscript
+/// Segments are separated by $Char(13) — CR, the HL7 segment terminator. Not $Char(10), not CRLF.
+Set raw = "MSH|^~\&|HIS|HOSP||HOSP|20260513||ADT^A01|001|P|2.5" _ $Char(13) _
+          "EVN|A01|20260513" _ $Char(13) _
+          "PID|1||HL7-1001^^^HOSP^MR||Perez^Juan^^^^^L||19620315|M" _ $Char(13) _
+          "PV1|1|I|3^301A^E1" _ $Char(13) _
+          "AL1|1|FA|LCT^Lactosa^L" _ $Char(13) _
+          "ZDI|1|Basal|Sin observaciones"
+
+// CLASSMETHOD form — returns the populated message, and `sc` is the only thing that tells you
+Set msg = ##class(EnsLib.HL7.Message).ImportFromString(raw, .sc)
+Do $$$AssertStatusOK(sc)
+
+// DocType goes on AFTER the import. ImportFromString resets the parse state, so assigning it
+// first has no effect at all.
+Set msg.DocType = "MySchema:ADT_A01"
+```
+
+Assert on a segment beyond MSH in every HL7 fixture — `$$$AssertEquals(msg.GetValueAt("PID:3.1"), …)`
+— so that a fixture that silently collapsed to one segment fails the test instead of passing it.
+
+Remember that parsing a message is **not** a test of a custom schema's structure: see the Custom
+HL7 schema row in the decision table above.
 
 ### Routing rule test (integration style — preferred)
 
@@ -526,6 +576,7 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
   | `EnsLib.File.OutboundAdapter` and other adapters | a real object, `$IsObject` = 1 |
 
   **The adapter instantiating is the trap.** `ad=1` printed beside `bo=0` reads as "objects work here, so my class is broken", and sends you to re-inspect the one thing that was fine. A BS/BO is exercised only by the production framework: run it through `%UnitTest.TestProduction` + `iris_test`, or send it a message with the `deploy-smoke-test` agent. If you want to unit-test logic in isolation, put that logic in a plain `%RegisteredObject` helper the host delegates to, and test the helper.
+  **The adapter instantiating is also not a licence to use it anywhere.** `##class(EnsLib.SQL.OutboundAdapter).%New()` is fine, and is how headless verification is written — but with a `jdbc:` DSN, `OnInit()` only initialises when the production is **running** and contains an `EnsLib.JavaGateway.Service` item named exactly like the `JGService` you set (ESQL §3.1). Otherwise: `<INVALID OREF> 192 initAdapterJG+2^EnsLib.JavaGateway.Common.1` — a frame that names neither the adapter nor the BO, so it reads as a broken gateway and sends you rebuilding one that was never broken. Filling `..BusinessHost` by hand does not fix it: `##class(EnsLib.Testing.Service).%New()` is a Business Service and returns `""` (see above).
 - **Stubbing the adapter in BO tests.** In conventional software you'd unit-test the BO method with a mocked adapter — in IRIS Interop that's an anti-pattern. The adapter boundary is exactly where the defects you care about live (auth, classpath, type marshalling, encoding, timeouts). Stubs make the test green while the real thing breaks. Use a real adapter against a real test endpoint.
 - **Forgetting to override `TestControl()`** — TestProduction will start/stop your production every time you `Run()`. Override to no-op when the production is managed externally.
 - **Quoting `TestControl` as evidence that the rest of the class is sound.** The no-op override has no assertion in it — it passes whenever the class compiled and the runner reached it. That makes it a **liveness** signal and never a **correctness** one. Green `TestControl` beside failures tells you the failures are real verdicts rather than a harness fault, and nothing else: a class whose every substantive method is broken, mis-specified, or asserting on the wrong thing still shows it green. Anything shaped `Quit $$$OK` is in this category whatever it is named. Cite the methods that actually assert something.
@@ -594,7 +645,10 @@ Parameter:      PRODUCTION = "MyApp.Production"   — COMPILE-TIME mandatory; mi
 Lifecycle:      override TestControl() to no-op if production runs externally; seed ..BaseLogId in OnBeforeAllTests.
 Dispatch:       ..SendRequest(configName, req, .resp, getReply, timeout)
 Inspect:        ..GetEventLog(type, configName, baseId, .Log, .new)
-Run:            do ##class(MyApp.Tests.X).Run()   — still needs ^UnitTestRoot → existing server dir (unit-tests)
+Run:            iris_test(pattern="MyApp.Tests.DT.Csv2Menus", namespace="<NS>")  — ONE class per call
+                do ##class(MyApp.Tests.X).Run()  — the same thing the tool runs internally, but via
+                iris_execute you lose the parsed result envelope and the log_id iris_get_log needs;
+                still needs ^UnitTestRoot → an existing server dir (unit-tests)
 
 Spec → Test → Red → Implement → Green → Refactor.
 Done = compiled in the target namespace + GREEN via iris_test; local files are a scaffold.
