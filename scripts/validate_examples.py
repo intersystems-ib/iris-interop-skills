@@ -285,6 +285,35 @@ def tier1() -> bool:
 
     r.check("C7", "every 'Example.' pointer in the deliverable resolves", broken_links)
 
+    # ── C9 ────────────────────────────────────────────────────────────────────────────────
+    # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
+    # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
+    # nothing except a sentence in CLAUDE.md. That sentence said 33 while the real figure had
+    # become 34, and the one fence that made the difference was the 1.13.0 Foundation-namespace
+    # recipe: the most load-bearing fact added that week landed in the exact fence shape no tier
+    # compiles, and no number tracked it. A count nobody asserts rots, so it gets a check.
+    #
+    # Deliberately a RATCHET and not an equality. Growth fails -- that is new ungated surface.
+    # A drop only prints: bringing a fence under the gate is the GOAL, and a gate that fails on
+    # progress is one people learn to mute (see the calibration note at the top of this file).
+    _, bare, loose, _ = snippets()
+    recorded = (json.loads(read(SNIPPET_BASELINE)) if SNIPPET_BASELINE.exists() else {}).get("ungated", {})
+    grew, shrank = [], []
+    for label, actual, key in (("bare member", bare, "bare_members"),
+                               ("loose fragment", loose, "loose_fragments")):
+        cap = recorded.get(key)
+        if cap is None:
+            continue
+        if actual > cap:
+            grew.append(f"{label}s: {actual}, baseline {cap} -- {actual - cap} new fence(s) that "
+                        f"no tier compiles; give them a host class, or re-record deliberately")
+        elif actual < cap:
+            shrank.append(f"{label}s down to {actual} from {cap} -- progress; "
+                          f"re-record with --update-baseline")
+    r.check("C9", "no SKILL.md fence has escaped the gate since the baseline", grew)
+    for note in shrank:
+        print(f"          note: {note}")
+
     print(f"  {len(files)} artefacts, {sum(1 for f in files if f.suffix == '.cls')} classes")
     return r.done("Tier 1")
 
@@ -567,7 +596,7 @@ SNIPPET_BASELINE = Path(__file__).resolve().parent / "snippets_baseline.json"
 _CLASS_START = re.compile(r"(?im)^(?=(?:Include\s+[^\n]+\n+)?\s*Class\s+[\w.%]+\s+Extends)")
 
 
-def snippets() -> tuple[dict[str, tuple[str, str]], int, int]:
+def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
     """Extract every compilable class out of the ```objectscript fences in skills/.
 
     Returns (class -> (source, provenance), bare_members, loose_fragments, duplicate_names).
@@ -690,10 +719,22 @@ def tier3() -> bool:
     return ok
 
 
-def update_snippet_baseline(clean: list[str]) -> None:
-    SNIPPET_BASELINE.write_text(
-        json.dumps({"expected_clean": sorted(clean)}, indent=2) + "\n", encoding="utf-8")
-    print(f"snippet baseline recorded: {len(clean)} classes -> {SNIPPET_BASELINE.name}")
+def update_snippet_baseline(clean: list[str] | None = None) -> None:
+    """Re-record the snippet baseline, MERGING rather than replacing.
+
+    This used to take `clean` and write only that key -- and it was never called from anywhere,
+    so it was dead code whose one behaviour was to silently drop any other key. `expected_clean`
+    can only be recomputed from a live compile, so when called without it the recorded list is
+    preserved and only the offline-computable `ungated` counts are refreshed.
+    """
+    data = json.loads(read(SNIPPET_BASELINE)) if SNIPPET_BASELINE.exists() else {}
+    if clean is not None:
+        data["expected_clean"] = sorted(clean)
+    _, bare, loose, _ = snippets()
+    data["ungated"] = {"bare_members": bare, "loose_fragments": loose}
+    SNIPPET_BASELINE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print(f"snippet baseline recorded: {len(data.get('expected_clean', []))} classes, "
+          f"ungated {bare} bare / {loose} loose -> {SNIPPET_BASELINE.name}")
 
 
 def update_baseline() -> None:
@@ -719,6 +760,7 @@ def main() -> int:
 
     if args.update_baseline:
         update_baseline()
+        update_snippet_baseline()
         return 0
 
     if args.preflight:

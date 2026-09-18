@@ -101,8 +101,15 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
     **placeholder dependency** and does not fail the tier — illustrative names are legitimate.
   - **What tier 3 does NOT cover, so a clean run is not read as more than it is:** fences holding
     a bare `Method`/`ClassMethod` (no host class, no knowable superclass) and fences holding loose
-    statements (no compilation unit). Both are counted and printed on every run — currently 20 and
-    33. If you move a rule into one of those, it is ungated again.
+    statements (no compilation unit). If you move a rule into one of those, it is ungated again.
+    - **Tier 1's C9 ratchets both counts** against `ungated` in `scripts/snippets_baseline.json`
+      (currently **20 bare, 34 loose**): growth fails the build, a drop only prints "progress".
+      Re-record deliberately with `--update-baseline`, never to make a red go away.
+    - C9 exists because this figure was carried in this file as prose and **rotted**. It read 33
+      for four releases while the truth was 34, and the single fence that made the difference was
+      the 1.13.0 Foundation-namespace recipe — the most load-bearing fact added that week landed
+      in the one fence shape no tier compiles, and nothing noticed. A count nobody asserts is not
+      a measurement.
   - Practical consequence when writing a snippet: `;` comments are **not** legal at class-member
     level (`Parameter X = "…";  ; note` does not compile — use `//`), and a class needs its body
     braces even in a sketch.
