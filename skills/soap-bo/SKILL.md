@@ -76,9 +76,14 @@ The wizard generates payload classes (the WSDL types). By default these are `%Se
 When a payload class is `%Persistent`, it has a separate row from its carrier. When the carrier message is purged (via Ens purge schedules), the payload **does not auto-delete** — you'll leak rows forever. Add a delete trigger:
 
 ```objectscript
+/// On the CARRIER. {Payload} is the carrier's reference property — the column holding the
+/// payload's id. NOT {ID}: inside a trigger {ID} is the row being deleted, i.e. the CARRIER's
+/// own id, so %DeleteId({ID}) deletes whichever payload happens to share that id — an
+/// unrelated row, or none. It leaks exactly what the trigger was added to clean up, and
+/// silently, because deleting nothing raises nothing.
 Trigger DeleteCascade [ Event = DELETE, Foreach = row/object ]
 {
-    Do ##class(MyApp.SOAP.PayloadType).%DeleteId({ID})
+    Do ##class(MyApp.SOAP.PayloadType).%DeleteId({Payload})
 }
 ```
 

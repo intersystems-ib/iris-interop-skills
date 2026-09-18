@@ -1,4 +1,4 @@
-/// Rule: BestPractices_Interop_IRIS.md §1.7 "RecordMap file intake — configure the prebuilt service, never subclass it"
+/// Rule: BestPractices_Interop_IRIS.md §1.11 "RecordMap file intake — configure the prebuilt service, never subclass it"
 /// Validity: Verified against IRIS for Health 2026.1.
 /// Severity: High (silent data corruption).
 ///

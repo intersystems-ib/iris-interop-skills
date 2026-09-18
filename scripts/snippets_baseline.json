@@ -10,6 +10,7 @@
     "MyApp.MSG.MenuRequestRich",
     "MyApp.MSG.PatientCensusRequest",
     "MyApp.MSG.PersonReq",
+    "MyApp.MSG.PersonReqCascade",
     "MyApp.Productions.MainProduction",
     "MyApp.RecordMap.Censo",
     "MyApp.Search.HL7",

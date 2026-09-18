@@ -238,6 +238,51 @@ def tier1() -> bool:
     for path in re.findall(r"\*\*Example\.\*\*\s*`examples/([^`]+)`", doc):
         if not (BANK / path).exists():
             broken_links.append(f"deliverable cites examples/{path}, which does not exist")
+    # ── C8 ────────────────────────────────────────────────────────────────────────────────
+    # A production <Setting> value is a STRING, so tier 2 compiles a production whose
+    # BusinessRuleName names a class that does not exist anywhere. Found by audit: three of the
+    # four .cls productions in this bank pointed at rule classes that were never written, and
+    # every one of them compiled clean. That is the gate being green on the wrong thing, which
+    # is the failure this bank exists to prevent -- so it gets a check rather than a note.
+    #
+    # Covers .xml artefacts too: the alert-circuit production is XML, which tier 2 skips
+    # entirely, so it is the one place a dangling name would never be compiled at all.
+    CLASS_SETTINGS = ("BusinessRuleName", "RecordMap")
+    ITEM_SETTINGS = ("TargetConfigNames", "BadMessageHandler", "JGService", "DuplexTargetConfigName")
+    shipped = {cn for f in files if f.suffix == ".cls" for cn in class_names(read(f))}
+    dangling = []
+    for f in files:
+        if f.suffix not in (".cls", ".xml"):
+            continue
+        text = read(f)
+        if "<Production " not in text:
+            continue
+        # NOT r'<Item\s[^>]*Name="...' -- [^>]* is greedy and happily swallows up to
+        # ClassName=", so that form collects CLASS names and every item reference then looks
+        # dangling. Parse the tag's attributes, and use a lookbehind so ClassName does not match.
+        items = set()
+        for attrs in re.findall(r"<Item\s+([^>]*)>", text):
+            m = re.search(r'(?<![A-Za-z])Name="([^"]+)"', attrs)
+            if m:
+                items.add(m.group(1))
+        for name, value in re.findall(r'Name="([^"]+)">([^<]+)</Setting>', text):
+            for raw in value.split(","):
+                v = raw.strip()
+                if not v:
+                    continue
+                # an item reference resolves against this production's own items
+                if name in ITEM_SETTINGS and v in items:
+                    continue
+                # a class reference must be a class this bank ships, or an InterSystems class
+                if name in CLASS_SETTINGS:
+                    if v in shipped or v.startswith(("Ens", "EnsLib", "HS", "%")):
+                        continue
+                    dangling.append(f"{rel(f)} -> {name}=\"{v}\" names no shipped class")
+                elif name in ITEM_SETTINGS:
+                    dangling.append(f"{rel(f)} -> {name}=\"{v}\" names no item in this production")
+    r.check("C8", "production settings resolve to a shipped class or an item in the same production",
+            dangling)
+
     r.check("C7", "every 'Example.' pointer in the deliverable resolves", broken_links)
 
     print(f"  {len(files)} artefacts, {sum(1 for f in files if f.suffix == '.cls')} classes")
@@ -525,7 +570,7 @@ _CLASS_START = re.compile(r"(?im)^(?=(?:Include\s+[^\n]+\n+)?\s*Class\s+[\w.%]+\
 def snippets() -> tuple[dict[str, tuple[str, str]], int, int]:
     """Extract every compilable class out of the ```objectscript fences in skills/.
 
-    Returns (class -> (source, provenance), bare_members, loose_fragments).
+    Returns (class -> (source, provenance), bare_members, loose_fragments, duplicate_names).
 
     WHAT THIS GATE DOES NOT COVER, stated here so a clean run is not read as more than it is
     (the same reason the S5 note exists in CLAUDE.md): only fences containing a COMPLETE class
@@ -535,6 +580,7 @@ def snippets() -> tuple[dict[str, tuple[str, str]], int, int]:
     than it looks.
     """
     out: dict[str, tuple[str, str]] = {}
+    dupes: list[str] = []
     members = fragments = 0
     for md in sorted(SKILLS.glob("*/SKILL.md")):
         skill = md.parent.name
@@ -552,13 +598,26 @@ def snippets() -> tuple[dict[str, tuple[str, str]], int, int]:
                 if len(names) != 1:
                     fragments += 1
                     continue
+                # A name that appears in two fences used to be SILENTLY OVERWRITTEN here, so the
+                # run printed "staging N classes" while one fence was never compiled at all --
+                # the exact shape of silent gap this tier exists to close. Measured when found:
+                # 26 complete-class fences, 25 unique names, MyApp.MSG.PersonReq twice inside
+                # `messages`. Collide now and the tier says so.
+                if names[0] in out:
+                    dupes.append("%s (in %s and %s)" % (names[0], out[names[0]][1], skill))
                 out[names[0]] = (part, skill)
-    return out, members, fragments
+    return out, members, fragments, dupes
 
 
 def tier3() -> bool:
     print("Tier 3 -- compile the INLINE snippets in skills/*/SKILL.md\n")
-    sources, members, fragments = snippets()
+    sources, members, fragments, dupes = snippets()
+    if dupes:
+        print("  DUPLICATE CLASS NAME across fences -- one of each pair is never compiled:")
+        for d in dupes:
+            print(f"      {d}")
+        print("  rename one, or the gate silently stages fewer classes than it reports\n")
+        return False
 
     collide = sorted(set(sources) & {n for f in artefacts() if f.suffix == ".cls"
                                     for n in class_names(read(f))})
