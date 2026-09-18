@@ -620,6 +620,12 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
   `production-lifecycle`.
 - **`TestingEnabled="true"` left in a deployed production** — treat it like a debug flag. See §"Enabling the Testing Service" (security note).
 - **Asserting only on `$$$LOGINFO` presence in the event log** ("INSERT OK paciente_id=...") instead of on the row's actual contents → the log proves the BO method ran, not that the destination has the right values. Add at least one assert that reads the side-effect back: a `SELECT` via psql/`Adapter` in `OnAfterAllTests`, or a small **verifier BO** callable via `..SendRequest(verifier, query, .resp, 1)` that returns the row for property-by-property asserts. The log is necessary but insufficient.
+- **A test still red immediately after `iris_compile` may be measuring the OLD code.** A running host
+  job does not reload a class because you recompiled it — `UpdateProduction` does not restart jobs
+  either. Recycle that one item with `iris_production(action=restart, item="<Item>")` before concluding
+  the implementation is wrong; the platform call underneath is `TempStopConfigItem`, and a wrong item
+  name says so (`<Ens>ErrConfigItemNotFound: Item X not found in Production Y`). See
+  `production-lifecycle` §"Hot-swap vs. restart".
 - **Test methods without a description comment** — When a test fails, the first thing the user sees is the method name in the portal. A `///` comment on the method clarifies *what spec clause* the test verifies, not just *what code it exercises*. One line is enough: `/// Verifies that empty Alergias is marshalled to SQL NULL`.
 
 ## Test data isolation — spectrum, not all-or-nothing

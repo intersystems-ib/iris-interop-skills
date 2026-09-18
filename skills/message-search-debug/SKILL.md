@@ -81,7 +81,7 @@ When inspecting a running production through the IRIS MCP, reach for `iris_inter
 | Production state | `iris_production(action=status)` |
 | One item's settings | `iris_production_item(action=get_settings, item="<Item>")` |
 | Change a setting **and apply live** | `iris_production_item(action=set_settings, item=…, settings={…})` — applies via `Ens.Director.UpdateProduction`; pass `apply=false` to batch and apply once |
-| Restart **one** component | `iris_production(action=restart, item="<Item>")` |
+| Restart **one** component (a setting change **or a recompiled class**) | `iris_production(action=restart, item="<Item>")` |
 | Apply pending config to the whole production | `iris_production(action=update)` |
 | Business partners | `iris_interop_query(what=partners)` |
 | SQL-Gateway connections | `iris_query(namespace="%SYS", query="SELECT * FROM %Library.sys_SQLConnection")` — a real table, in `%SYS`, not named after the class (BSQG §2). Test one with `$SYSTEM.SQLGateway.TestConnection(name)`. Full recipe: `business-operations` §"Diagnose a named SQL Gateway connection without the Portal". |
