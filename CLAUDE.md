@@ -142,6 +142,27 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   index" about a class that does. **Print `status.summary` on every query that comes back empty**, and
   treat an unexpected zero as a failed query until the status says otherwise. Related:
   a clean zero needs a positive control.
+- **A mutation harness killed mid-run leaves the MUTANT on disk, and every later "baseline" is the
+  mutant.** The loop writes a mutation, runs the suite, and restores in a `finally` — a Bash-tool
+  timeout (exit 143) kills it before the `finally`, and the next run's `finally` then restores the
+  file to *the mutant it read as the original*, making it permanent. Measured on S32 (v1.57.0):
+  `Set pClone = tBody.%ConstructClone()` stayed on disk as `Set pClone = tBody`, and three rounds of
+  diagnosis went into explaining a `%ConstructClone` that was never being called — five A/B probes all
+  showed correct cloning, and a wrong "measured" comment got written into the artefact on the
+  strength of the mutant's behaviour. **When a green baseline goes red, read the file under test
+  before forming any hypothesis** (new files are untracked, so there is no `git diff` to save you).
+  Give the harness a pre-flight: each anchor present exactly once, the mutant text absent OUTSIDE the
+  anchor (mutants are often substrings of their own anchor, and may legitimately appear elsewhere in
+  the file — tag those), and a sha compared before and after the whole run. Run it backgrounded with
+  a long timeout, never in the foreground against the 2-minute default.
+- **`%UnitTest.TestProduction::TestControl()` is a TEST METHOD, not a hook.** Its inherited body
+  starts the production named by `PRODUCTION`, waits `MINRUN` seconds (default 10) and then STOPS it.
+  Test methods run in name order, so `TestControl` goes first and everything after it runs against a
+  production that has just been shut down. Every suite in the bank overrides it to `Quit $$$OK`,
+  which is right — but a suite that actually needs a live production must then start one itself, in
+  `OnBeforeAllTests`, and wait for `Ens.Director.IsProductionRunning()` rather than trusting
+  `StartProduction`'s return. Without that, every call fails `<Ens>ErrProductionNotRunning` while
+  `IsProductionRunning()` answers 1 from outside the run.
 - **In an example's `/// Rule:` header, `§` means THIS deliverable — cite external books with the
   word "section".** C2 resolves every `§N.N` in an example against the headings of
   `BestPractices_Interop_IRIS.md`, with no exception for a book prefix, so `HXFHIRINS §2.3.1`
