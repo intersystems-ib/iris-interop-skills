@@ -729,6 +729,68 @@ for _label, _want, _block in [
     check(_label, _want, g.get_says_absent(_block))
 
 
+# --------------------------------------------------------------------------- #240
+# tdd_first_green.py gained an advisory red-streak counter. Two behaviours matter and neither is
+# visible from reading the file: the advisory must fire ONCE at the third consecutive red (not every
+# red after it), and a green that FOLLOWED reds must no longer be reported as a first-run green --
+# that was a false positive on the exact flow the hook exists to encourage, found by testing the
+# counter rather than by reading the code.
+import tempfile as _tf, shutil as _sh
+
+_FG = os.path.join(ROOT, "hooks", "tdd_first_green.py")
+
+
+def _fg(project_dir, green, target="My.Tests.X"):
+    """Run the hook and return its marker, or 'silent'."""
+    if green is None:
+        resp = "not json at all"
+    else:
+        resp = {"outcome": "passed" if green else "failed", "success": bool(green)}
+    payload = {"tool_name": "iris_test", "tool_input": {"pattern": target}, "tool_response": resp}
+    pr = subprocess.run([sys.executable, _FG], input=json.dumps(payload), capture_output=True,
+                        text=True, env=dict(os.environ, CLAUDE_PROJECT_DIR=project_dir))
+    if pr.returncode != 0 or pr.stderr.strip():
+        return "CRASH"
+    if not pr.stdout.strip():
+        return "silent"
+    try:
+        ctx = json.loads(pr.stdout)["hookSpecificOutput"]["additionalContext"]
+    except Exception:
+        return "UNPARSEABLE"
+    return ctx.split("]")[0] + "]"
+
+
+print("\n#240 tdd_first_green red-streak counter")
+_d = _tf.mkdtemp()
+try:
+    check("red 1 is silent", "silent", _fg(_d, False))
+    check("red 2 is silent", "silent", _fg(_d, False))
+    check("red 3 advises", "[IIS-TDD-REDLOOP]", _fg(_d, False))
+    check("red 4 does not repeat", "silent", _fg(_d, False))
+    check("green after reds is silent", "silent", _fg(_d, True))
+    check("streak resets after green", "silent", _fg(_d, False))
+    _fg(_d, False)
+    check("third red advises again", "[IIS-TDD-REDLOOP]", _fg(_d, False))
+finally:
+    _sh.rmtree(_d, ignore_errors=True)
+
+_d = _tf.mkdtemp()
+try:
+    # The detector this hook was written for must still fire: a green with NO prior red.
+    check("genuine first-run green fires", "[IIS-TDD-GREEN]", _fg(_d, True, "My.Tests.Fresh"))
+finally:
+    _sh.rmtree(_d, ignore_errors=True)
+
+_d = _tf.mkdtemp()
+try:
+    # An unparseable response must not manufacture a streak -- a schema change would otherwise
+    # look like three failing runs.
+    _fg(_d, None); _fg(_d, None)
+    check("unparseable never advises", "silent", _fg(_d, None))
+finally:
+    _sh.rmtree(_d, ignore_errors=True)
+
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)

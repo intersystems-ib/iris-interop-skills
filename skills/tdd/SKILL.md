@@ -121,6 +121,31 @@ Stepping over 1-2-3 ("just write the DTL first") is the most common anti-pattern
 
 > "I'll write the test first. It defines what 'done' means, and we'll know we're done when it passes."
 
+### Loop budget — stop at the third red
+
+The existing cap covers a test that **will not run** (`NO_TESTS_FOUND`, a compile error). It says
+nothing about a test that runs and **stays red**, which is the longer loop: the model edits, re-runs,
+edits, re-runs, and each iteration costs a compile plus a production restart.
+
+**Read the failing assertion before editing anything.** `iris_test` tells you pass/fail; it is
+`iris_get_log(log_id=…)` and the run's `failure_message` that name the assert and the two values it
+compared. Two edits that leave the failure mode unchanged mean the hypothesis is wrong — not that the
+fix was too small — and the next edit will be the third guess in a row.
+
+**At the third red that told you nothing new, stop and report the blocker**: the class, the assertion,
+and what you have ruled out. That is more useful than a fourth variation.
+
+The budget is deliberately **advisory, not a hard stop.** Measured over a workshop cohort: of the six
+red streaks of three or more in 120 steps, **five went green with no intervention**. A gate that
+blocked at three would have aborted five runs that were about to succeed. A `PostToolUse` hook says so
+once, at the third consecutive red on the same target, and then keeps quiet.
+
+One specific cause to rule out first, because it makes a correct fix look wrong: **a test still red
+immediately after `iris_compile` may be running the old code.** A running host job does not reload a
+recompiled class, and `UpdateProduction` does not restart jobs. Recycle that one item —
+`iris_production(action=restart, item="<Item>")` — and re-run before editing again. See
+`production-lifecycle` §"Hot-swap vs. restart".
+
 ### Step 3 is the load-bearing one — a test that never went red proves nothing
 
 **If the first run of a test class is green, TDD did not happen.** The test was written against
@@ -556,7 +581,8 @@ error. Work the cause instead, in this exact order:
    method. A class that extends the wrong base, or whose methods are not prefixed `Test`, compiles
    but exposes zero tests.
 5. Only after 1–4 — if it still reports `NO_TESTS_FOUND` — STOP and report the blocker: 3 consecutive
-   failed attempts at the same goal is the cap. Mechanism: see `interop` (section "Stop on repeated
+   failed attempts at the same goal is the cap — and a test that RUNS but stays red has its own budget:
+   see §"Loop budget — stop at the third red" above. Mechanism: see `interop` (section "Stop on repeated
    failure"). Do not loop, and do not switch routes to "work around" it — not `$SYSTEM.OBJ.Load` /
    the terminal, not `Run()` via `iris_execute`, not `RunTest(..., "/noload")`, not querying
    `^UnitTest.Result` by hand hoping to find a result. Every one of those gives the same (correct)

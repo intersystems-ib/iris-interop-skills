@@ -439,7 +439,7 @@ bootstrap and any context injected into *this* conversation do not reach it.
 
 ## Stop on repeated failure — do not loop, do not switch mechanism
 
-If the same class won't compile or the same test won't run, read the error and fix the source rather
+If the same class won't compile, or the same test won't run **or won't pass**, read the error and fix the source rather
 than retrying blindly. After **3 consecutive failed attempts at the same goal**, stop and report the
 blocker: what was tried, the exact error, and the current hypothesis. Changing the namespace, package,
 or superclass to make an error disappear is **not** a fix — it relocates the deliverable out of the
