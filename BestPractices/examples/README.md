@@ -58,6 +58,9 @@ its siblings.
 | §1.17 | Sibling: the run that found the bank's own RecordMap was never generated | `ch01_production/tdd-recordmap-getobject-encoding.cls` |
 | §1.18 | Production lifecycle helper — the ladder, and verdicts that read the STATE back | `ch01_production/production-lifecycle-helper.cls` |
 | §1.18 | Sibling: the run — `RecoverProduction()` returns OK from Stopped | `ch01_production/tdd-production-lifecycle.cls` |
+| §1.19 | MLLP production — the Host/Adapter split, with three defaults overridden | `ch02_hl7v2/production-hl7-mllp.cls` |
+| §1.19 | Its rule (a `production=` attribute pins a rule to one production) | `ch02_hl7v2/routing-rule-hl7-mllp.cls` |
+| §1.19 | Sibling: the sweep — every setting's Target vs where the property lives | `ch02_hl7v2/tdd-mllp-setting-targets.cls` |
 | §1.15 | Sibling: naming the destination by READING it (CR-13) — value, `Target` and found/not-found (`Example.Tests.DestinationAssert`) | `ch05_bpl_dtl/tdd-destination-assert.cls` |
 | §2.3 | HL7 v2 escape special characters when building messages manually | `ch02_hl7v2/hl7v2-escape-functionset.cls` |
 | §1.11 | Routing rule for the RecordMap intake — where the DTL belongs instead of a BS subclass | `ch01_production/routing-rule-censo.cls` |

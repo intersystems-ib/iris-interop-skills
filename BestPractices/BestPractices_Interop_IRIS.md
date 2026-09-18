@@ -527,6 +527,47 @@ wait is reasonable, but it is defensive rather than demonstrated.
 - **Example.** `examples/ch01_production/production-lifecycle-helper.cls`,
   `examples/ch01_production/tdd-production-lifecycle.cls`
 
+### 1.19 MLLP: which timeout is a Host setting and which is an Adapter one
+
+A setting on the wrong `Target` is **not applied** — the default stays in force, with no error and no
+log line. MLLP makes that unavoidable because one item carries two timeouts that live on opposite
+sides. Measured per setting (`$parameter(host, "ADAPTER")`, then which class declares the property):
+
+| item | setting | lives on |
+|---|---|---|
+| `EnsLib.HL7.Service.TCPService` | `Port`, `LocalInterface` | **Adapter** |
+| | `AckMode` | **Host** |
+| `EnsLib.HL7.Operation.TCPOperation` | `Port`, `ResponseTimeout` | **Adapter** |
+| | `FailureTimeout`, `ReplyCodeActions` | **Host** |
+
+`ResponseTimeout` is the adapter waiting for an ACK on the wire; `FailureTimeout` is the host deciding
+when to stop retrying. Same item, opposite sides.
+
+**Three defaults worth overriding deliberately**, each measured:
+
+| setting | default | why it matters |
+|---|---|---|
+| `FailureTimeout` | **-1** (origin `EnsLib.HL7.Operation.Standard`) | -1 retries **for ever**. An unreachable peer produces no failure, just a growing queue. See §1.8. |
+| `ReplyCodeActions` | **`""`** (origin `EnsLib.HL7.Operation.ReplyStandard`) | empty leaves an application NACK (AE/AR in MSA-1) **suspended** rather than errored — §1.7's "looks like an error but isn't". |
+| `ResponseTimeout` | 30, on the adapter | state it explicitly so the reader can see it is **shorter** than `FailureTimeout`, per §1.9. |
+
+`AckMode` is a Host setting whose measured default is `"Immed"` — the service ACKs on receipt, not
+after processing. Right for throughput, wrong if the sender treats the ACK as proof of persistence;
+state it rather than inherit it, because it is a contract with the sender.
+
+**Because a wrong target is silent, check it structurally.** For every setting of every item, compare
+its `Target` with the side the property actually lives on — the production definition is readable via
+`Ens.Config.Production.%OpenId()` → `.Items` → `.Settings` → `.Name/.Target/.Value`. A sweep costs no
+more than checking the four settings anyone would think to check, and it keeps working as the
+production grows. Such a sweep is only evidence if it can fail: feed it one deliberately mis-targeted
+setting and require a finding.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled, every setting's target measured.
+- **Severity.** High (a mis-targeted setting is never applied and never reported).
+- **Example.** `examples/ch02_hl7v2/production-hl7-mllp.cls`,
+  `examples/ch02_hl7v2/routing-rule-hl7-mllp.cls`,
+  `examples/ch02_hl7v2/tdd-mllp-setting-targets.cls`
+
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
 
 When a partner emits ER7 messages that deviate from the published HL7 standard (e.g., `SQM_S25` / `SRM_S25` missing `RGS` segment), define a custom HL7 schema based on v2.5 in the Portal, redefine just the affected messages, and set the BS's `MessageSchemaCategory` setting (Portal: “Message Schema Category”) to that schema name.
