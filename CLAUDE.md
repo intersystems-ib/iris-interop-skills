@@ -103,6 +103,20 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   plus `iris_table_info(schema=…)`. All four read plausibly and none would survive a compile or a
   `%Dictionary.CompiledMethod` lookup. When you name a method, a parameter or a macro, check it
   against the running instance, not memory.
+- **Component coverage of the gated bank, and the two gaps that remain.** Every core component
+  type now has at least one compile-gated example: RecordMap definition and its production wiring
+  (§1.7/§1.8), HL7 file intake with the HL7-specific router (§2.10), `%UnitTest.TestProduction`
+  (§5.9), typed SQL parameters (§6.4), bare-adapter BS (§6.7), REST inbound (§6.8), SQL inbound
+  poll (§6.9) — plus the pre-existing SOAP/CDA/BPL/DTL/rule/alerting set. **Two are deliberately
+  NOT gated, and neither is an oversight:**
+  - **FHIR** — `HS.FHIRServer.*` is absent from the `irishealth-community` image the gate runs on
+    (verified: 0 classes). A FHIR example could not be compiled by CI, so shipping one would put
+    ungated code back in the bank, which is the thing tier 3 exists to prevent. The `fhir` skill
+    stays prose plus doc citations until the gate has an image that carries it.
+  - **DICOM** — defers to the vendored MIT snapshot under
+    `BestPractices/external/workshop-iris-dicom-interop/`, which is a real working production. That
+    was a deliberate choice before this pass and it still holds; a thin hand-written duplicate
+    would be worse than a pointer to a complete one.
 - **A grep gate guards a spelling, not the rule it is named after — say so at the gate** (#151).
   Verifying a home-grown check in both directions (S5 was) proves that one known-bad input reaches
   its failure path. It does not prove the check recognises every violation of the constraint. Where

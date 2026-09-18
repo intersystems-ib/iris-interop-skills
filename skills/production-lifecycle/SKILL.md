@@ -155,6 +155,12 @@ Disk is the deliverable: the namespace is not version-controlled, not reviewable
 survive the instance.
 
 
+> **Compiled worked examples** of a production class, showing the Host-vs-Adapter setting split
+> that causes most "the setting had no effect" reports: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch01_production/production-censo-intake.cls`
+> (RecordMap file intake), `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_hl7v2/production-hl7-intake.cls` (HL7 + the HL7-specific
+> router, CR-6), `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/production-sql-poll.cls` (JDBC poll + the mandatory
+> `JGService` item). All three gated by `validate_examples --compile`.
+
 ## Hot-swap vs. restart — when code changes don't take effect
 
 `Ens.Director.UpdateProduction(timeout)` is for **production XML changes** — adding/removing items, modifying settings. It does **NOT** recompile class code and does **NOT** restart the OS jobs running BO/BP/BS instances.

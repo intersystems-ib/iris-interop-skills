@@ -216,6 +216,12 @@ component that was never built.
 > `#5559 … non-matching {} or () characters`. HL7 work is where this bites, because the message
 > type is `ADT_A01`. See `interop` §"Invariants when writing ANY ObjectScript class".
 
+> **A compiled, mutation-checked worked example** lives at
+> `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-testproduction-dtl.cls`. It tests the DTL that ships beside it, and its
+> header records the mutation result: breaking the transform leaves `$$$AssertStatusOK` and
+> `$$$AssertTrue($IsObject(...))` **both passing** while only the assertion on a written field
+> fails. The vacuous green, demonstrated rather than asserted.
+
 ## Where to store the tests
 
 `MyApp.Tests.*` package, compiled in the namespace alongside `MyApp.*`. Source-controlled in Git (VS Code ObjectScript export or `$system.OBJ.Export`). With `%UnitTest.TestProduction.Run()` you don't need `/noload` gymnastics — invoke directly by class name. You **do** still need `^UnitTestRoot` → an existing server-side directory (silent zero-test run otherwise — see the `Run()` bullet above and `unit-tests`).
