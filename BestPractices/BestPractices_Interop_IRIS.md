@@ -1920,6 +1920,77 @@ That is what decides where the aggregation step can live at all.
   `examples/ch05_bpl_dtl/utl-bpl-sync-audit.cls`,
   `examples/ch05_bpl_dtl/tdd-bpl-sync-audit.cls`
 
+### 5.21 BPL `<scope>`: the fault handler that completes the process green
+
+`<scope>`, `<faulthandlers>`, `<catchall>`, `<compensationhandlers>` and `<compensate>` appeared
+**nowhere** in this plugin — not in the 20 skills, not in the deliverable, not in the bank. Measured
+before writing this section: a grep for `<scope` over all of it returned the coverage-map row and
+nothing else.
+
+**The defect is a catchall that logs the fault and falls through.** Measured end to end on the same
+fixture, one line apart:
+
+| catchall body | the BUSINESS PROCESS's own header |
+|---|---|
+| records the fault and returns | `Status=9` **Completed**, `IsError=0` |
+| records the fault **and `set status = $$$ERROR(…)`** | `Status=8` **Error** |
+
+In the first case the failed call is right there in the trace at `Status=8` — and the caller is told the
+process succeeded. Any assertion that reads the downstream header, or the Event Log, passes against it.
+The only value that separates the two is the process's own row.
+
+`status` is the variable the generated wrapper returns (§5.20), so assigning it is how a handler
+propagates instead of swallowing. `..%Context.%LastError` is the fault the scope caught.
+
+**The status numbers, from `Ens.DataType.MessageStatus`' own `DISPLAYLIST`** rather than from memory:
+`1=Created 2=Queued 3=Delivered 4=Discarded 5=Suspended 6=Deferred 7=Aborted 8=Error 9=Completed`.
+Note 4–7: the order is not the one most people guess.
+
+**Four schema facts, each established by compiling, because every error message lists what is allowed
+and never what you need.** `<scope>`'s content model, extracted by feeding the compiler an unknown
+element, is:
+
+```
+(annotation?, ONE activity, compensationhandlers?, faulthandlers)
+```
+
+1. **`<faulthandlers>` is required.** A `<scope>` with no handler does not compile — *"missing elements
+   in content model"*. A scope is not a grouping construct; it is a handler attachment, and the schema
+   enforces that.
+2. **`<catchall>` must be inside `<faulthandlers>`.** Directly under `<scope>` it gives
+   *"element 'catchall' is not allowed for content model '(annotation?,(alert|assign|…))'"* — a dump of
+   every element that is allowed, which never includes `catchall`.
+3. **`<compensationhandlers>` must precede `<faulthandlers>`.** Reversed, it is rejected the same way.
+4. **`<scope>` takes exactly one activity.** Several need a `<sequence>`.
+
+**And the constraint that decides how a handler can be written: `<compensate>` is legal only as a
+direct child of `<catchall>`.** It is in `<catchall>`'s content model and not in `<sequence>`'s.
+Measured:
+
+| catchall body | |
+|---|---|
+| a single `<compensate>` | compiles |
+| a `<sequence>` of `<code>` | compiles |
+| a `<sequence>` containing `<compensate>` | **rejected** |
+
+Since a catchall takes exactly one activity, **a catchall can compensate, or it can do several things,
+but not both.** A handler that must undo work *and* propagate has to put the logging and the
+`set status` inside the **compensation handler**, leaving `<compensate>` as the catchall's only
+activity. That is not a style choice; it is the only shape the schema accepts.
+
+**One more, because it kills the process before any activity runs:** a `<context>` property's
+`initialexpression` is **ObjectScript**, not a literal. `initialexpression='none'` is an undefined
+variable — measured, `<UNDEFINED>%Construct+1^<class>.Context.1`, with the BP header left at
+`Status=8` and not one activity executed. Quote it: `initialexpression='"none"'`.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: every schema fact by
+  compiling, every status by driving messages through a started production.
+- **Validity.** Still valid.
+- **Severity.** High — the default handler shape reports success for a process that failed.
+- **Example.** `examples/ch05_bpl_dtl/bpl-scope-catchall-compensation.cls`,
+  `examples/ch05_bpl_dtl/tdd-bpl-scope-catchall.cls`,
+  `examples/ch05_bpl_dtl/production-bpl-scope.cls`
+
 ### 5.20 A DTL `<code>` block lives inside a `Try`, so `Quit <expr>` will not compile
 
 Writing the obvious early return in a DTL `<code>` block
