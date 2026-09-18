@@ -124,6 +124,24 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   plus `iris_table_info(schema=…)`. All four read plausibly and none would survive a compile or a
   `%Dictionary.CompiledMethod` lookup. When you name a method, a parameter or a macro, check it
   against the running instance, not memory.
+- **…but `%Dictionary.CompiledMethod` UNDERSTATES an index-generated method — the one known hole in
+  the rule above** (v1.49.0, coverage-map X14). `EnsLib.DICOM.Util.AssociationContext` carries an
+  index named `AET`, and that index generates eight methods — `AETExists`, `AETDelete`, `AETOpen`,
+  `AETCheck`, `AETSQLExists` and three more. **Every one reports `FormalSpec = ''` and
+  `ClassMethod = False`.** Both are wrong: measured, `AETExists("a","b")` returns 0 and `AETExists()`
+  throws `<UNDEFINED>` — it takes two arguments and is callable as a classmethod. So a dictionary
+  lookup answered "takes no arguments" about a method that requires two, and a finding was published
+  on that before it was caught. Whenever a name looks like `<IndexName><Verb>`, look the index up in
+  `%Dictionary.CompiledIndex` and **call the method** rather than trusting its signature. The same
+  applies to the `IDKeyExists()` family on any `%Persistent` class.
+- **A `%Dictionary.*` query with a bad column name returns ZERO ROWS, and the error is only in
+  `status.summary`.** `SELECT Name, Generated FROM %Dictionary.CompiledMethod …` gives
+  `SQLCODE -29, Field 'GENERATED' not found` — there is no `Generated` column — and a helper that
+  prints `result.content` without the status shows an empty list, which reads as "nothing matches".
+  That produced three confident wrong conclusions in one session, including "this class carries no
+  index" about a class that does. **Print `status.summary` on every query that comes back empty**, and
+  treat an unexpected zero as a failed query until the status says otherwise. Related:
+  a clean zero needs a positive control.
 - **In an example's `/// Rule:` header, `§` means THIS deliverable — cite external books with the
   word "section".** C2 resolves every `§N.N` in an example against the headings of
   `BestPractices_Interop_IRIS.md`, with no exception for a book prefix, so `HXFHIRINS §2.3.1`
