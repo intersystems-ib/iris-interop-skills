@@ -468,6 +468,40 @@ Setup: Docker-based; populate via `Do ##class(HS.HC.FHIRSQL.Utils.Setup).Setup("
 
 ---
 
+### 4.10 FHIR interop — the Facade wiring, and why it needs a Foundation namespace
+
+**The prerequisite is a namespace, not a class name, and that is why it costs time.** `HS.*` is
+not mapped into an ordinary namespace: in `USER`, `HS.FHIRServer.Interop.Operation` does not exist,
+so every reference reads as a typo and the reflex is to hunt for the "real" name. There isn't one.
+IRIS for Health ships `HSLIB`/`HSSYS`/`HSCUSTOM` in the image; a **Foundation namespace** maps them
+in and is interop-enabled at the same time (HXFHIRINS §2.3.1):
+
+```objectscript
+ Do ##class(HS.Util.Installer.Foundation).Install("FHIRFOUNDATION")
+ Set $namespace = "FHIRFOUNDATION"
+ Do ##class(HS.FHIRServer.Installer).InstallNamespace()
+ Do ##class(HS.FHIRServer.Installer).InstallInstance(appKey, strategyClass, metadataPackages)
+```
+
+A Foundation namespace is a strict **superset** of a plain interop namespace — verified: the whole
+example bank and every inline snippet compile in it with byte-identical results. So it is also what
+the example gate runs in, and FHIR stops being a special case.
+
+**The three interop classes, none of them guessable:** `HS.FHIRServer.Interop.Service` (inbound),
+`HS.FHIRServer.Interop.Operation` (outbound to a **local** FHIR server), and
+`HS.FHIRServer.Interop.HTTPOperation` (outbound to an **external** one). The body travelling between
+them is `HS.FHIRServer.Interop.Request`/`.Response` — not a project message class and not a raw
+stream, so a DTL over a FHIR payload works on the Request's `QuickStreamId`, not on properties.
+
+**Facade vs Repository is one ClassName.** `HTTPOperation` means the resources live in the external
+server and nothing persists locally; `Interop.Operation` means this namespace serves from its own
+storage. Same wiring either way.
+
+- **Source.** Verified against IRIS for Health Community 2026.1 in a Foundation namespace, 2026-09-18.
+- **Validity.** Still valid.
+- **Severity.** High — the namespace prerequisite is invisible until nothing resolves.
+- **Example.** `examples/ch04_fhir/production-fhir-facade.cls`
+
 ## 5. BPL & DTL patterns
 
 ### 5.1 BS that exposes a SOAP service: how to wire it

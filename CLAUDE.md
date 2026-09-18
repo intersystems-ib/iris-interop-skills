@@ -103,16 +103,28 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   plus `iris_table_info(schema=…)`. All four read plausibly and none would survive a compile or a
   `%Dictionary.CompiledMethod` lookup. When you name a method, a parameter or a macro, check it
   against the running instance, not memory.
+- **In an example's `/// Rule:` header, `§` means THIS deliverable — cite external books with the
+  word "section".** C2 resolves every `§N.N` in an example against the headings of
+  `BestPractices_Interop_IRIS.md`, with no exception for a book prefix, so `HXFHIRINS §2.3.1`
+  fails the gate while `HXFHIRINS section 2.3.1` passes. The existing examples already follow this
+  (`ESQL section 8.2.2.1`); it was never written down, and it is one of those rules you discover
+  by tripping the check.
 - **Component coverage of the gated bank, and the two gaps that remain.** Every core component
   type now has at least one compile-gated example: RecordMap definition and its production wiring
   (§1.7/§1.8), HL7 file intake with the HL7-specific router (§2.10), `%UnitTest.TestProduction`
   (§5.9), typed SQL parameters (§6.4), bare-adapter BS (§6.7), REST inbound (§6.8), SQL inbound
   poll (§6.9) — plus the pre-existing SOAP/CDA/BPL/DTL/rule/alerting set. **Two are deliberately
   NOT gated, and neither is an oversight:**
-  - **FHIR** — `HS.FHIRServer.*` is absent from the `irishealth-community` image the gate runs on
-    (verified: 0 classes). A FHIR example could not be compiled by CI, so shipping one would put
-    ungated code back in the bank, which is the thing tier 3 exists to prevent. The `fhir` skill
-    stays prose plus doc citations until the gate has an image that carries it.
+  - **FHIR — RETRACTED, it is gated now.** 1.11.0 said a FHIR example "could not be compiled by
+    CI" because `HS.FHIRServer.*` showed 0 classes. That conclusion was wrong and the check was
+    the reason: it was made in `USER`. `HS.*` is not mapped into an ordinary namespace, and the
+    image does carry `HSLIB`/`HSSYS`/`HSCUSTOM` — a **Foundation namespace** maps them in and is
+    interop-enabled at the same time (`HS.Util.Installer.Foundation.Install()`, HXFHIRINS section
+    2.3.1). A Foundation namespace is a strict **superset**: the whole bank and every snippet
+    compile in it with byte-identical results, so the gate simply runs there now and FHIR is no
+    longer a special case. Third time in three days that a scope-limited lookup was read as
+    absence — see the "check it against the running instance" convention above, and note that
+    *which namespace* is part of "the running instance".
   - **DICOM** — defers to the vendored MIT snapshot under
     `BestPractices/external/workshop-iris-dicom-interop/`, which is a real working production. That
     was a deliberate choice before this pass and it still holds; a thin hand-written duplicate

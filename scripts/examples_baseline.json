@@ -31,6 +31,7 @@
     "Example.MSG.VendorOrder",
     "Example.Migration.Credentials",
     "Example.Productions.CensoIntake",
+    "Example.Productions.FhirFacade",
     "Example.Productions.Hl7Intake",
     "Example.Productions.SqlPoll",
     "Example.RUL.OrderRouting",
