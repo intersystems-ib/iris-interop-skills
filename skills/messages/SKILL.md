@@ -307,7 +307,14 @@ Trade-off: one place to remember "fill both forms when producing Rich". Win: exi
 
 A canonical message that takes values from HL7 segments or REST JSON should declare **almost everything as `%String`**. Typing `Planta As %SmallInt` and then receiving `"PLANTA3"` from `PV1:3.1` or `"P3"` from a lookup produces `ERROR #7207: Datatype value 'PLANTA3' is not a valid number` and terminates the BP. Convert/validate in the DTL **after** extraction, not via property datatype.
 
-Strict types like `%SmallInt`, `%Integer`, `%Boolean`, `%Date` are fine for fields that are populated programmatically (`req.PacienteId = ...` from controlled code) but risky for fields populated from external sources. `%String` plus runtime validation gives clearer error messages and decouples the canonical from upstream surprises.
+One rule with two halves. Strict types like `%SmallInt`, `%Integer`, `%Boolean`, `%Date` are fine for fields populated programmatically (`req.PacienteId = ...` from controlled code) and risky for fields populated from an external source — `%String` plus runtime validation gives clearer messages and decouples the canonical from upstream surprises. The second half is the one that bites: a strict type does not just reject bad input, it rejects it **at `%Save()`**, wrapped twice, naming the property and not the message —
+
+```
+ERROR #7207: Datatype value '15/03/1962' is not a valid number
+ERROR #5802: Datatype validation failed on property 'Pkg.MSG.CensoReq:FechaNacim'
+```
+
+so the trace shows a transform that failed rather than a source that sent a European date. And a `%Date` that *does* validate still carries the `+$HOROLOG` day count, which is not what a `DATE` column wants — see `business-operations` §"JDBC type marshalling" for what that costs downstream.
 
 ## `%String` length — the `MAXLEN=50` trap (and `MAXLEN=""` for big text)
 
