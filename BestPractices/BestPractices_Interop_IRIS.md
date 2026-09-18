@@ -357,6 +357,49 @@ message reaches the `BadMessageHandler` instead of flowing on.
 - **Severity.** High — both failures are silent and both survive a green test.
 - **Example.** `examples/ch02_hl7v2/production-hl7-intake.cls`
 
+### 2.11 Symbolic HL7 field paths — and why an empty result proves nothing
+
+With a DocType assigned, HL7 field paths can be written by **name** — `{PID:PatientName(1).GivenName}`
+rather than `{PID:5(1).2}`. That is worth having: HL7 transforms are reviewed by eye, and numeric
+paths are unreadable exactly where review happens. But the mechanism has two traps, and both are
+silent.
+
+**The compiler cannot check a path.** Measured on 2026.1: a DTL compiles identically with
+`{PID:PatientName(1).FamilyName.Surname}` and with `{PID:PatientNameXX(1).FamilyName.Surname}`,
+which resolves to nothing. Tier 2 is green on both. Only running the transform and asserting an
+output field separates them.
+
+**An empty result is ambiguous.** Measured with `GetValueAt` on one ADT^A01:
+
+| path | value | status |
+|---|---|---|
+| `PID:PatientIdentifierList(1).IDNumber` | `12345` | OK |
+| `PID:PatientIdentifierList(1).ID` | `""` | **ERROR** — `PropertyPath … is invalid` |
+| `PID:PatientID` — a real field, empty in this message | `""` | **OK** |
+
+A mistyped path and a legitimately empty field both yield `""`. The status is the only
+discriminator — and the two-argument `GetValueAt(path)`, which is the form everyone writes and the
+form a DTL `<assign>` generates, **discards it**. This is why "the assertion passed on an empty
+string" is the characteristic way an HL7 transform is wrong.
+
+Note `.IDNumber`, not `.ID`: the field name is right and the obvious component name is wrong, so
+guessing the second half of a path fails the same silent way as guessing the first.
+
+**Fixture rules, all measured:** `ImportFromString` is a classmethod whose third argument is
+`pConfigItem`, *not* a schema category; segments are separated by `$Char(13)`; and **DocType is
+empty after import** — it must be set with `DocTypeSet("2.5:ADT_A01")` or every symbolic path
+returns `""` and the test passes on empty strings.
+
+Set `Parameter REPORTERRORS = 1` on the transform so an unresolvable path is reported rather than
+absorbed into the same `""` an empty field produces. And prefer `create='copy'` for a
+normalisation step: `create='new'` starts from an empty message and silently drops every segment
+you did not explicitly assign.
+
+- **Source.** Bank audit 2026-09-18; the bank's only DTL was object→object in an HL7-first plugin.
+- **Validity.** Verified against IRIS for Health 2026.1 using the stock 2.5 schemas.
+- **Severity.** High — the failure is an empty field, which is also what success looks like for an optional one.
+- **Example.** `examples/ch02_hl7v2/dtl-hl7-symbolic-paths.cls`
+
 ## 3. HL7 v3 / CDA
 
 ### 3.1 CDA-from-XSD class generation: Persistent + no Relationships + OnDelete Cascade
