@@ -48,7 +48,9 @@
 | ✅ | **N16** — `scripts/issue_fingerprint.py` + `scripts/test_issue_fingerprint.py`, wired into the `test-hooks` CI job. **Not** a pytest: this repo's harnesses are stdlib-only so CI needs no dependencies, and matching that beat following the map's wording. The tests caught **4 real bugs** in the helper before it shipped | v1.15.1 |
 | ✅ | **Wave 0 COMPLETE** (v1.15.1) | — |
 | ✅ | Wave 1 **S3** — `msg-persistent-leftmost.cls` + `tdd-message-own-extent.cls`, new deliverable **§5.10**, and the **4 bank message classes that taught the shared-extent shape are fixed**. Measured: `(%Persistent, Ens.Request)` → own extent; `(Ens.Request, %Persistent)` and bare `Ens.Request` → `^Ens.MessageBodyD`. All three compile clean, so tier 2 was green on all three. Test mutation-checked: passes as shipped, fails on both wrong orders | v1.16.0 |
-| ⬜ | Wave 1 remaining: S2, S4–S16 (S1 shipped in v1.14.0) | — |
+| ✅ | Wave 1 **S4** — `msg-persistent-child-delete-cascade.cls` + `dat-address-persistent.cls` + `tdd-delete-cascade.cls`, new deliverable **§5.11**. **The row's premise was wrong:** it said `%SerialObject` "has no such method" — measured, `%DeleteId` DOES exist on `%SerialObject`, compiles, and returns `#5753 Cannot instantiate abstract class` at runtime, which the snippet's `Do` then **discarded**. Found a 4th defect the map never listed: an unguarded trigger makes childless carriers undeletable. Test RUN and mutation-checked against all three | v1.17.0 |
+| ⬜ | Wave 1 remaining: S2, S5–S16 (S1 v1.14.0, S3 v1.16.0, S4 v1.17.0) | — |
+| ⬜ | **Not in any wave, flagged by the corrections as "belongs in wave 1": a custom inbound adapter** (`Extends Ens.InboundAdapter`) — §5.2 prescribes one, zero skills teach the shape, and the silent failure is textbook (an `OnTask` that returns `$$$OK` without calling `..BusinessHost.ProcessInput()` ticks for ever producing nothing) | — |
 | ⬜ | everything else below | — |
 
 **Bank as of v1.15.0: 47 compile-gated classes, 50 artefacts. Tier 1: 9 checks. Tier 3: 29 fences

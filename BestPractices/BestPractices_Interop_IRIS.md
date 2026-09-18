@@ -748,6 +748,33 @@ global name; that is the only mechanical check that exists.
 - **Severity.** High — silent, and expensive exactly when it is discovered.
 - **Example.** `examples/ch05_bpl_dtl/msg-persistent-leftmost.cls`
 
+### 5.11 A `%Persistent` child needs a delete cascade, and the obvious cascade discards its own error
+
+A `%SerialObject` sub-object serialises **inline** into its parent's row: purging the message purges
+it too, and there is nothing to cascade. A `%Persistent` sub-object gets **its own rows**, and
+`Ens.Util.Tasks.Purge` knows nothing about them — it deletes `Ens.MessageHeader` and the message
+row, the child rows stay, and there is no error, no warning and nothing in the Event Log. You find
+out when that table is the largest object in the namespace.
+
+The cascade goes on the class that **references** the child. Four things in it, all of which have
+shipped wrong here:
+
+| | |
+|---|---|
+| `{Address}`, not `{ID}` | inside a trigger `{ID}` is the row being deleted — the carrier's own id. `%DeleteId({ID})` deletes whichever child happens to share it: an unrelated row, or none. Silent, because deleting nothing raises nothing. |
+| the child must really be `%Persistent` | measured on 2026.1, `%DeleteId` **does** exist on `%SerialObject`, so pointing a cascade at one compiles — and returns `ERROR #5753: Cannot instantiate abstract class` at runtime. |
+| capture the `%Status` | `Do ##class(…).%DeleteId(…)` **discards** it. With the row above, that is the entire silent failure: the call fails, the status is dropped, the trigger reports success. |
+| guard the empty reference | the property is optional and `%DeleteId("")` errors, so an unguarded trigger sets `%ok = 0` and makes childless carriers **undeletable** — the trigger meant to help a purge is what stops it. |
+
+`Set %ok = 0` aborts the parent delete, so a purge that cannot clean a child stops rather than
+orphaning it. The alternative is to log and let the delete proceed. Choose deliberately; what is
+never right is discarding the status, which gives you both an orphan and no record.
+
+- **Source.** Bank audit 2026-09-18; the inline snippet this replaces aimed its cascade at a serial class.
+- **Validity.** Verified against IRIS for Health 2026.1, and executed: `childBefore=1 delParent=OK childAfter=0`.
+- **Severity.** High — silent, and unbounded.
+- **Example.** `examples/ch05_bpl_dtl/msg-persistent-child-delete-cascade.cls`
+
 ## 6. Adapters & connectivity
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
