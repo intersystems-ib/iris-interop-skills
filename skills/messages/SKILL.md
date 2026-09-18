@@ -146,17 +146,29 @@ namespace.
 
 The cascade goes on the class that **references** the object — the message — not on the child:
 
-```objectscript
-Class MyApp.MSG.PersonReqCascade Extends (%Persistent, Ens.Request)
-{
-Property Address As MyApp.DAT.Address;   // %Persistent in this variant
+**Gated, executed example — use it instead of retyping this:**
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/msg-persistent-child-delete-cascade.cls`
+with its child `dat-address-persistent.cls` and test `tdd-delete-cascade.cls`.
 
-Trigger DeleteCascade [ Event = DELETE, Foreach = row/object ]
-{
-    Do ##class(MyApp.DAT.Address).%DeleteId({Address})
-}
-}
-```
+The snippet that used to sit here was wrong in two ways that both compiled, and they are worth
+knowing because they are the natural things to write:
+
+It declared `Property Address As MyApp.DAT.Address` with a comment claiming "%Persistent in this
+variant", and a `Trigger DeleteCascade [ Event = DELETE, Foreach = row/object ]` whose body was
+`Do ##class(MyApp.DAT.Address).%DeleteId({Address})`. Both defects:
+
+- **The child it names is `%SerialObject`** (see the class above), not `%Persistent`. Measured on
+  2026.1: `%DeleteId` *does* exist on `%SerialObject`, so this compiles, and at runtime it returns
+  `ERROR #5753: Cannot instantiate abstract class`. A serial child has no rows of its own to leak,
+  so the trigger was solving a problem that did not exist by a means that could not work.
+- **`Do` discards the `%Status`.** That is what makes it silent: the call fails, the status is
+  thrown away, the trigger reports success and the parent delete proceeds. Use `Set tSC = …` and
+  act on it.
+
+The gated version also carries the guard this one lacks: the reference is optional, `%DeleteId("")`
+errors, and an unguarded trigger therefore makes childless carriers **undeletable** — the trigger
+added to help a purge is what stops it.
+
 
 Equivalent alternatives: override `%OnDelete` on the message and clean the references explicitly, or
 — for parent-child hierarchies generated from an XSD — declare `OnDelete = Cascade` on the link (see
