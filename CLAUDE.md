@@ -48,7 +48,13 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   - `examples/` — runnable artefacts indexed in `examples/README.md`, gated by
     `scripts/validate_examples.py` (tier 1 structural in CI; `--compile` against a
     live IRIS before a release). Adding an example means adding its README row.
-  - `external/workshop-iris-dicom-interop/` — vendored MIT DICOM snapshot.
+  - `external/workshop-iris-dicom-interop/` — vendored MIT DICOM snapshot. **Compiled by tier 2b**
+    since 1.15.1 (19 classes, `scripts/external_baseline.json`) — `dicom` calls it "the canonical
+    reference for every pattern here" and until then no tier touched it, which is how it drifted
+    twice. Deliberately **not** subject to tier 1: none of the 19 files carries a `/// Rule:`
+    header, so C1 would fail all of them and greening it would mean editing vendor source. A tier-2b
+    failure means the mirror and the IRIS version disagree — re-sync upstream, never patch the
+    mirror.
 - `.claude-plugin/` — `marketplace.json` + `plugin.json` (this repo is both a
   single-plugin marketplace and the plugin itself; plugin `source` is the repo root).
 

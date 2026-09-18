@@ -49,6 +49,28 @@ Build a short, **stable** signature and put it in the issue **title** so future 
 Normalize away the volatile bits (class names, ids, timestamps, namespaces) so the same defect from a
 different student maps to the **same** fingerprint.
 
+**Do not normalise by hand — there is a helper, and it is tested.** Two people normalising from this
+paragraph produce two different titles, the dedup search in step 2 misses, and the skill has failed at
+the one job it exists for:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/issue_fingerprint.py" \
+    --area mcp --key iris_test \
+    --summary 'NO_TESTS_FOUND in namespace APP for Demo.Tests.Foo at 2026-09-18T07:12:00Z' --search
+# [mcp:iris_test] NO_TESTS_FOUND in namespace <ns> for <class> at <ts>
+# in:title mcp:iris_test          <- the --search line is the step-2 dedup query
+```
+
+Two behaviours worth knowing before you trust it, both asserted in
+`scripts/test_issue_fingerprint.py`:
+
+- **Platform class names are kept, project ones are masked.** `EnsLib.HL7.Service.FileService` is the
+  same defect whoever hits it; `Demo.BS.Censo` is not. Masking the platform name would merge
+  unrelated findings — the direction where a real report is lost as a "+1" on someone else's issue.
+- **A namespace is only masked when the word "namespace" is next to it.** `in namespace APP` → `<ns>`;
+  a bare `in APP` keeps `APP`. Catching that would mean treating any uppercase word as a namespace,
+  which would also eat `NO_TESTS_FOUND`. Phrase it as "namespace APP".
+
 ## Workflow
 
 1. **Decide it's reportable** (above). If not, stop.

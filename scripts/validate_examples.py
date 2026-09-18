@@ -49,6 +49,8 @@ BANK = REPO / "BestPractices" / "examples"
 DOC = REPO / "BestPractices" / "BestPractices_Interop_IRIS.md"
 README = BANK / "README.md"
 BASELINE = Path(__file__).resolve().parent / "examples_baseline.json"
+EXTERNAL = REPO / "BestPractices" / "external"
+EXTERNAL_BASELINE = Path(__file__).resolve().parent / "external_baseline.json"
 
 ARTEFACT_SUFFIXES = (".cls", ".xml", ".sh")
 TIPOS = ("BS", "BP", "BO", "DT", "DTS", "RUL", "MSG", "DAT", "ADP", "UTL", "HL7")
@@ -105,6 +107,11 @@ def artefacts() -> list[Path]:
 
 def rel(p: Path) -> str:
     return str(p.relative_to(BANK))
+
+
+def repo_rel(p: Path) -> str:
+    """Repo-relative path. `rel()` is bank-relative and raises for anything outside it."""
+    return str(p.relative_to(REPO))
 
 
 def read(p: Path) -> str:
@@ -678,6 +685,112 @@ def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
     return out, members, fragments, dupes
 
 
+def external_classes() -> dict[str, tuple[str, str]]:
+    """class name -> (source, repo-relative path) for every .cls under BestPractices/external."""
+    out: dict[str, tuple[str, str]] = {}
+    for f in sorted(EXTERNAL.rglob("*.cls")):
+        text = read(f)
+        for cn in class_names(text):
+            out[cn] = (text, repo_rel(f))
+    return out
+
+
+def tier2_external() -> bool:
+    """Compile the vendor reference tree that no tier used to touch.
+
+    `dicom` calls this tree "the canonical reference for every pattern here" and points readers
+    straight at it -- 19 classes, 1934 lines, and until now compiled by NOTHING. It had already
+    drifted twice (a deprecated JavaGateway item; a duplex target naming an item that does not
+    exist), which is what a reference nobody compiles does.
+
+    TWO DELIBERATE ASYMMETRIES WITH TIER 2.
+
+    1. It gets the compile tier and NOT tier 1. Measured before writing this: 0 of the 19 files
+       carry a `/// Rule:` header, so C1 would fail all 19 and the only way to green it would be to
+       edit vendor source. The structural checks encode OUR conventions; this tree is not ours.
+    2. A failure here means "the vendor tree no longer matches this IRIS version", NOT "go fix the
+       file". The repair is a conscious re-sync with upstream, or a note at the `dicom` pointer --
+       never a local edit that makes the mirror diverge silently.
+
+    They are compiled as ONE batch because they reference each other; class-at-a-time would report
+    dependency failures that do not exist.
+    """
+    print("Tier 2b -- compile the external reference tree\n")
+    sources = external_classes()
+
+    # LOUD ON ZERO. This directory is tracked and non-empty, so "no classes found" means the
+    # walker broke, not that there is nothing to check -- and a silent skip would read in the log
+    # exactly like a pass. (See CLAUDE.md: a clean zero needs a positive control.)
+    if not sources:
+        print(f"  NO CLASSES FOUND under {repo_rel(EXTERNAL)} -- expected 19.")
+        print("  Either the tree was removed (update this tier) or the walk is broken.")
+        print("\nTier 2b: FAILED\n")
+        return False
+
+    # The same shadowing guard tier 3 applies to the bank: one class name must mean one body.
+    bank = {cn for f in artefacts() if f.suffix == ".cls" for cn in class_names(read(f))}
+    snips = set(snippets()[0])
+    collide = sorted((set(sources) & bank) | (set(sources) & snips))
+    if collide:
+        print(f"  NAME COLLISION with the bank or an inline snippet: {collide}")
+        print("  Rename the BANK/SNIPPET copy -- the external tree is a read-only mirror.")
+        print("\nTier 2b: FAILED\n")
+        return False
+
+    iris = Atelier()
+    print(f"  target {iris.base}")
+    print(f"  staging {len(sources)} classes from {repo_rel(EXTERNAL)}")
+
+    staged: list[str] = []
+    ok = False
+    try:
+        try:
+            for cn, (src_text, _) in sources.items():
+                iris.put(f"{cn}.cls", src_text)
+                staged.append(cn)
+        except (urllib.error.URLError, urllib.error.HTTPError) as exc:
+            print(f"  CANNOT REACH IRIS: {exc}")
+            print("\nTier 2b: FAILED\n")
+            return False
+
+        docs = [f"{cn}.cls" for cn in sources]
+        failed = parse_failures(iris.compile(docs), set(sources))
+
+        baseline = json.loads(read(EXTERNAL_BASELINE)) if EXTERNAL_BASELINE.exists() else {}
+        expected = set(baseline.get("expected_clean", []))
+        clean = sorted(set(sources) - set(failed))
+        print(f"\n  compiled clean : {len(clean)} / {len(sources)}")
+        if failed:
+            print(f"  DRIFTED        : {len(failed)}")
+            for cn, err in sorted(failed.items()):
+                flag = "REGRESSION vs baseline" if cn in expected else "not in baseline"
+                print(f"      {cn}  [{sources[cn][1]}]  [{flag}]")
+                print(f"        {err}")
+            print("  This is the mirror disagreeing with this IRIS version. Re-sync upstream or")
+            print("  note the divergence at the `dicom` pointer -- do not patch the mirror.")
+        missing = sorted(expected - set(clean))
+        if missing:
+            print(f"  in baseline but no longer clean/present: {', '.join(missing)}")
+        newly = sorted(set(clean) - expected)
+        if newly and expected:
+            print(f"  new since baseline: {', '.join(newly)}")
+        ok = not failed
+    finally:
+        left = []
+        for cn in staged:
+            try:
+                iris.delete(f"{cn}.cls")
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                left.append(cn)
+        msg = f"  cleanup        : {len(staged) - len(left)} deleted"
+        if left:
+            msg += f", {len(left)} LEFT BEHIND: {left}"
+        print(msg)
+
+    print(f"\nTier 2b: {'the external tree still compiles' if ok else 'FAILED'}\n")
+    return ok
+
+
 def tier3() -> bool:
     print("Tier 3 -- compile the INLINE snippets in skills/*/SKILL.md\n")
     sources, members, fragments, dupes = snippets()
@@ -798,6 +911,19 @@ def update_snippet_baseline(clean: list[str] | None = None) -> None:
           f"ungated {bare} bare / {loose} loose -> {SNIPPET_BASELINE.name}")
 
 
+def update_external_baseline() -> None:
+    names = sorted(external_classes())
+    EXTERNAL_BASELINE.write_text(json.dumps({
+        "_comment": "Vendor reference tree under BestPractices/external. Compiled by tier 2b, and "
+                    "deliberately NOT subject to tier 1 -- none of these files carries a "
+                    "/// Rule: header, and they are a read-only mirror of someone else's repo. A "
+                    "failure means the mirror and this IRIS version disagree; re-sync upstream "
+                    "rather than editing the file.",
+        "expected_clean": names,
+    }, indent=2) + "\n", encoding="utf-8")
+    print(f"external baseline recorded: {len(names)} classes -> {EXTERNAL_BASELINE.name}")
+
+
 def update_baseline() -> None:
     sources = []
     for f in artefacts():
@@ -822,6 +948,7 @@ def main() -> int:
     if args.update_baseline:
         update_baseline()
         update_snippet_baseline()
+        update_external_baseline()
         return 0
 
     if args.preflight:
@@ -836,6 +963,7 @@ def main() -> int:
         # content fault, and must not be reported as 69 broken classes.
         if preflight():
             ok = tier2() and ok
+            ok = tier2_external() and ok
             ok = tier3() and ok
         else:
             ok = False

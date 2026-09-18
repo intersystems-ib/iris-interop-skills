@@ -33,3 +33,6 @@ jobs:
           python-version: '3.11'
       - name: hook regression tests
         run: python3 scripts/test_hooks.py
+
+      - name: issue-fingerprint tests
+        run: python3 scripts/test_issue_fingerprint.py
