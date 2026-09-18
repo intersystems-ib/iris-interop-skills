@@ -1207,6 +1207,56 @@ everything), use `MAXLEN=""` for genuinely unbounded free text, and switch to
 - **Example.** `examples/ch05_bpl_dtl/msg-maxlen-boundaries.cls`,
   `examples/ch05_bpl_dtl/tdd-maxlen-truncation.cls`
 
+### 5.16 `ConvertDateTime` validates ranges, never the calendar — and the `$ZDATEH` equivalent is not equivalent
+
+`Ens.Util.FunctionSet.ConvertDateTime(value, informat, outformat, outf)` is the most-used date
+function in a DTL. The five format pairs the `transformations` skill carries as "Verified
+conversions" were executed on IRIS for Health 2026.1 and **all five are exactly right**. What the
+table did not say is where the function stops caring.
+
+It validates the numeric **ranges** of the fields and never the **calendar**, which splits bad input
+into two silent failure modes with different signatures:
+
+| input | result | why it matters |
+|---|---|---|
+| `31/02/1958` | `1958-02-31` | February has 28 days |
+| `30/02/1958` | `1958-02-30` | |
+| `29/02/2023` | `2023-02-29` | 2023 is not a leap year |
+| `31/04/1958` | `1958-04-31` | April has 30 days |
+| `32/01/1958`, `00/01/1958`, `31/13/1958`, `31/00/1958`, `99/99/9999`, free text | **returned unchanged** | the raw text reaches the column and fails at the JDBC bind, far from the DTL |
+
+The first group is the dangerous one. The output is **well-formed** — it satisfies a length check, a
+regex, a `LIKE '____-__-__'` and any eyeball — and it is not a date, so it travels. Neither group
+raises anything, so "it came back looking like a date" is evidence of nothing.
+
+**The "raw ObjectScript equivalent" is not equivalent.** `transformations` offered
+`$ZDATE($ZDATEH("22/07/1958", 4), 3)` as the same operation. Measured side by side:
+
+| input | `..ConvertDateTime` | `$ZDATE($ZDATEH(…))` |
+|---|---|---|
+| `31/12/1958` | `1958-12-31` | `1958-12-31` |
+| `31/02/1958` | `1958-02-31` | `<ILLEGAL VALUE>` |
+| `32/01/1958` | unchanged | `<ILLEGAL VALUE>` |
+| `99/99/9999` | unchanged | `<ILLEGAL VALUE>` |
+
+`$ZDATEH` checks the calendar and throws; `ConvertDateTime` does not and returns something. The word
+"equivalent" hid the single property you would choose between them for. Prefer `..ConvertDateTime`
+in a DTL for the reasons that still hold — it is in the function picker and round-trips through the
+visual editor — but choose it knowing it will not refuse 31 February, and validate separately when
+that matters.
+
+**`%Q` is a full ODBC timestamp and it is the default for both format arguments.** So
+`ConvertDateTime(x, "%d/%m/%Y", "%Q")` yields `1958-07-22 00:00:00.000`, which a `DATE` column will
+not take — and `ConvertDateTime(x)` with no formats at all returns the value **unchanged**, because
+`in` defaults to `%Q` and the input does not match it. A no-op that reads like a conversion.
+
+Calendar validation belongs in the DTL, per record, alongside the `Valido`/`ErrorMotivo` pattern —
+not in the date function, which does not do it.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (both failure modes are silent, and one of them produces something that looks like a date).
+- **Example.** `examples/ch05_bpl_dtl/tdd-convertdatetime-cheatsheet.cls`
+
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 
 When you import a vendor WSDL in Ensemble/IRIS, the generated SOAP client classes nearly always need at least one of these patches.

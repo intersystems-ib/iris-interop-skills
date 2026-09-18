@@ -57,6 +57,7 @@
     "Example.RUL.OrderRouting",
     "Example.RecordMap.Censo",
     "Example.SEC.ValidateLDAP",
+    "Example.Tests.ConvertDateTime",
     "Example.Tests.DeleteCascade",
     "Example.Tests.DestinationAssert",
     "Example.Tests.DtlFunctionForms",
