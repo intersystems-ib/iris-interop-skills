@@ -309,7 +309,7 @@ Verified in a real integration using the hand-crafted-envelope pattern:
 
 When you're on the **other side** — exposing a SOAP service that an external client (or a sibling IRIS namespace) will call — `%SOAP.WebService`:
 
-- Web app config (Security.Applications): `AutheEnabled=96` (Password + Kerberos, accepts HTTP Basic) — **not** `4=Password` per the docs, which doesn't accept Basic in IRIS 2026.1. See `business-services` for the full table.
+- Web app config (Security.Applications): `AutheEnabled=32` — `32` is the password (Instance Authentication) bit, the one HTTP Basic exercises. `4` is **Kerberos** (`AutheK5API`), not password, and answers `Negotiate` rather than `Basic`; `96` is `32+64` and also admits unauthenticated callers, so use it only when anonymous access is intended. See `business-services` for the bit table.
 - The authenticated user must have **read access to the system globals** the SOAP framework touches (`^ISCSOAP`). Granting `%All` to the service user is the simplest workshop pattern; production should grant `%DB_<TARGET>_DATA:RW` plus enough on `IRISSYS` to read `^ISCSOAP`. The error `<PROTECT> OnPage+9^%SOAP.WebService.1 ^ISCSOAP("LogMaxFileSize")` is the symptom of missing this read access.
 - `Parameter SERVICENAME` and `Parameter NAMESPACE` (the XML target namespace) drive the WSDL. They must match what clients expect from `<service name>` and `targetNamespace` respectively.
 
