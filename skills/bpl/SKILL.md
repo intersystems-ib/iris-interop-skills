@@ -75,7 +75,22 @@ BS.Lab    →  Router.Lab    →  BO.LIS
 - A **custom BPL** is needed for multi-step orchestration: synchronous sub-calls, conditional branches, parallel fan-out/aggregation, error compensation.
 - BPL **context variables** persist across the BPL's lifetime — survive a `<call>` and resume after the response. Use them for state that crosses async calls.
 - IRIS 2026 introduces **delete-on-context** for persistent properties on the BPL context, so message-body bloat from long-lived BPLs is reduced. (Validate the exact syntax via docs before relying on it.)
-- When BPL becomes hard to read (>30 activities, deep nesting), consider a custom `Ens.BusinessProcess` in plain ObjectScript — sometimes more maintainable.
+- When BPL becomes hard to read (>30 activities, deep nesting), consider a custom
+  `Ens.BusinessProcess` in plain ObjectScript — sometimes more maintainable. **Gated example:**
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/bp-class-based-async.cls`. Until 1.19.0
+  this skill recommended that shape while the bank held only `Ens.BusinessProcessBPL`, so "BP" and
+  "BPL" were effectively synonyms here.
+  - **The third argument of `SendRequestAsync` is the whole difficulty.** Measured by running both
+    variants in a real production on 2026.1: with `pResponseRequired = 0` the operation **still runs
+    and still returns a response**, but `OnResponse` is never entered (`OnResponse=0`) and the
+    process completes **successfully**. The reply is discarded in silence, and the Visual Trace shows
+    a completed BP. With `1`, all four callbacks fire.
+  - The default is `1`, so the defect takes writing `0` — usually meaning "I don't need to block".
+    That is not what it controls: blocking is `SendRequestAsync` vs `SendRequestSync`, while
+    `pResponseRequired` is *"will a reply reach me at all"*.
+  - Returning `$$$OK` from `OnRequest` does **not** complete the process while replies are
+    outstanding — the framework tracks them in `..%MasterPendingResponses` and runs `OnComplete`
+    after the last one. That is why `pResponseRequired = 0` presents as a fast, healthy process.
 
 ### Routing rule structure: one rule per source `msgClass`, multiple `<send>` per rule
 

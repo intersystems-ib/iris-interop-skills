@@ -22,6 +22,7 @@
     "Example.Adapters.BO.SOAPClient",
     "Example.Adapters.BO.SqlTypedParmArray",
     "Example.Alerting.RUL.AlertRouter",
+    "Example.BP.OrderFulfil",
     "Example.BP.OrderProcess",
     "Example.BS.CensusFileReader",
     "Example.BS.MyService",
