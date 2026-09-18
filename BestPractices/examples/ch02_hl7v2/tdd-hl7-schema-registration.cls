@@ -22,7 +22,7 @@
 /// WHAT RESOLUTION ACTUALLY RETURNS, on the shipped `Example_2.5` category (base `2.5`):
 ///
 ///     ResolveSegNameToStructure   ZAL      -> 'Example_2.5:ZAL'    the override
-///                                 PID      -> '2.5:PID'            inherited, BASE-prefixed
+///                                 PID      -> '2.5:PID'            inherited, resolved from base:
 ///                                 ZZZ      -> (empty)              unknown
 ///     ResolveSchemaTypeToDocType  ADT_A01  -> 'Example_2.5:ADT_A01' the override
 ///                                 ADT_A04  -> '2.5:ADT_A01'        NOT overridden: falls to the base
@@ -65,6 +65,14 @@
 ///
 /// HOW TO RUN IT -- one compiled class per call, `pattern` does not expand a package:
 ///     iris_test(pattern="Example.Tests.Hl7SchemaRegistration", namespace="<NS>")
+/// WHY THE XML SAYS `base:` AND THESE ASSERTIONS SAY `2.5:`. The companion bootstrap's `<Category>`
+/// writes `definition='base:MSH~[~ZAL~]~base:EVN~…'` — the literal prefix, resolved against the
+/// category's `base` attribute. The importer RESOLVES it on the way in, so `^EnsHL7.Schema` and every
+/// `Resolve*` call return the resolved names. Both forms are therefore correct, in different places:
+/// `base:` is what you author, `2.5:` is what you read back. Measured — switching the bootstrap from
+/// `2.5:` to `base:` left this suite at 7/7, which is the evidence that the resolution really happens
+/// and that these assertions are reading the resolved form rather than the literal one.
+///
 Class Example.Tests.Hl7SchemaRegistration Extends %UnitTest.TestProduction
 {
 
@@ -195,7 +203,9 @@ ClassMethod ImportVariant(pSegName As %String) As %Status [ Private ]
     Do tStream.WriteLine("  <SegmentStructure name='" _ pSegName _ "' description='renamed allergy segment'>")
     Do tStream.WriteLine("    <SegmentSubStructure piece='1' description='Allergy Id' datatype='ST' max_length='10' required='O' ifrepeating='0'/>")
     Do tStream.WriteLine("  </SegmentStructure>")
-    Do tStream.WriteLine("  <MessageStructure name='ADT_A01' definition='2.5:MSH~[~" _ pSegName _ "~]~2.5:EVN~2.5:PID'/>")
+    // `base:`, matching the companion bootstrap and the skill. The importer resolves it against this
+    // category's base='2.5', so the assertions downstream still read '2.5:PID' -- see the header.
+    Do tStream.WriteLine("  <MessageStructure name='ADT_A01' definition='base:MSH~[~" _ pSegName _ "~]~base:EVN~base:PID'/>")
     Do tStream.WriteLine("  <MessageType name='ADT_A01' structure='ADT_A01'/>")
     Do tStream.WriteLine("</Category>")
     Set tSC = tStream.%Save()

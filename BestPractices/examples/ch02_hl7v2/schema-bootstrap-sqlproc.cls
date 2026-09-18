@@ -64,8 +64,19 @@ Parameter WORKDIR = "/tmp/";
 /// Shapes that are easy to get wrong, all per `hl7-schemas`: the root is `<Category>`, not `<Schema>`;
 /// fields are `<SegmentSubStructure piece='N'>`, not `<Field>`; a MessageStructure definition is a
 /// single tilde-separated string, not nested elements; and every segment inherited from the base must
-/// carry the `2.5:` prefix, because overriding a structure re-resolves every segment in it against
-/// THIS category.
+/// carry the literal `base:` prefix, because overriding a structure re-resolves every segment in it
+/// against THIS category.
+///
+/// `base:` IS THE PREFIX, NOT THE VERSION. A `2.5:` prefix names a category and early-binds to it:
+/// measured on 2026.1, the same definition imported under `base="2.5.1"` still stores `2.5:PID` with
+/// `sc=OK`, and a 2.5.1 field name then fails at run time with
+/// `PropertyPath 'producersreference' is invalid`. `base:` is resolved against the `base` attribute of
+/// this `<Category>`, so it keeps pointing at the right parent if that attribute is changed.
+///
+/// AND READING IT BACK SHOWS `2.5:` AGAIN, which is not a sign the XML was ignored. The importer
+/// RESOLVES `base:` on the way in, so `^EnsHL7.Schema` holds the resolved names — which is exactly
+/// what `tdd-hl7-schema-registration.cls` asserts (`PID -> '2.5:PID'`). `EnsLib.HL7.SchemaXML.Export`
+/// writes `base:` back out. Both directions measured.
 XData Category
 {
 <?xml version="1.0" encoding="UTF-8"?>
@@ -74,7 +85,7 @@ XData Category
     <SegmentSubStructure piece='1' description='Allergy Id' datatype='ST' max_length='10' required='O' ifrepeating='0'/>
     <SegmentSubStructure piece='2' description='Allergy Text' datatype='ST' max_length='60' required='O' ifrepeating='0'/>
   </SegmentStructure>
-  <MessageStructure name='ADT_A01' definition='2.5:MSH~[~ZAL~]~2.5:EVN~2.5:PID~[~2.5:PV1~]'/>
+  <MessageStructure name='ADT_A01' definition='base:MSH~[~ZAL~]~base:EVN~base:PID~[~base:PV1~]'/>
   <MessageType name='ADT_A01' structure='ADT_A01'/>
 </Category>
 }
