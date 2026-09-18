@@ -1016,6 +1016,75 @@ deployment. Embedded `&sql` is fine in a **compiled class** — it is `&sql` sen
 - **Severity.** High — the surviving wrong form is invisible to every tier.
 - **Example.** `examples/ch05_bpl_dtl/dtl-lookup-and-functions.cls`
 
+### 5.14 Reading a %UnitTest verdict from a SqlProc — and how an assert-scanner reports a green for a failed run
+
+CR-7 exists because a self-graded `[SqlProc]` is trusted far more readily than it has earned. The
+honest reader is a few lines from the dishonest one, and both look reasonable.
+
+**`DebugRunTestCase` persists nothing.** Measured on 2026.1 with a case that genuinely fails:
+
+```
+##class(%UnitTest.Manager).DebugRunTestCase("", "<case>", "", "")
+  -> no rows in %UnitTest_Result.TestMethod
+  -> ^UnitTest.Result not even defined
+```
+
+It writes to the **device**. So a SqlProc that calls it and returns `passed=N failed=M` is reporting
+numbers it never read from the run. Results are persisted by
+`%UnitTest.Manager.RunTest(<suite>, <qspec>)` with `^UnitTestRoot` pointing at a directory that
+exists **on the IRIS server**; that run loads and compiles the `.cls` files under the suite
+directory, and `/nodelete` keeps them.
+
+**The row shapes**, from one run of a case with one passing and one failing method:
+
+| table | rows |
+|---|---|
+| `TestMethod` | `TestBad` Status=**0** · `TestGood` Status=1 |
+| `TestCase` | `<case>` Status=**0** — the failure rolls up correctly |
+| `TestAssert` | `TestBad/1` AssertEquals **0** · `TestBad/2` **LogMessage 1** · `TestGood/1` AssertEquals 1 · `TestGood/2` **LogMessage 1** |
+
+**Every method gets a trailing `LogMessage` row with Status = 1.** A reader that scans `TestAssert`
+without filtering `Action`, taking the last row per method, therefore sees `LogMessage`/1 for *both*
+methods. Measured, against the same failing run:
+
+| reader | verdict |
+|---|---|
+| reads `TestMethod.Status` | `FAILED: TestBad (1 of 2)` |
+| scans `TestAssert` | **`passed=2 failed=0`** |
+
+**So read `TestMethod.Status`.** It is the verdict, already rolled up, one row per method. If you must
+touch `TestAssert`, filter `Action <> 'LogMessage'` — but the status you want is one table up.
+
+**And no rows is not a pass.** The same two readers, asked about a case that never ran:
+
+| reader | verdict |
+|---|---|
+| correct | `NO RESULTS … nothing was persisted` |
+| naive | **`passed=0 failed=0`** |
+
+An empty result set and a clean one are the same answer to a counter. Treat zero rows as "no verdict
+exists", never as success.
+
+The ID is a `||`-delimited composite — `<instance>||<suite>||<case>||<method>` — so
+`$Piece(id, "||", 4)` locates the method node. It is not a `%List`, which is worth stating because
+the shape invites `$ListGet` and that returns nothing useful.
+
+**Clearing results: use `%KillExtent()`, never `Kill` on the global.** `%UnitTest.Result.TestInstance`
+stores into `^UnitTest.Result`, so killing that global looks like a clean sweep. Measured, it is not:
+afterwards `DELETE FROM %UnitTest_Result.TestInstance` returns `SQLCODE=100` (nothing to delete — the
+data really is gone) while `SELECT COUNT(*)` still returns **2**, because the **indices were left
+behind**. `%DeleteExtent()` then fails with `#5764 could not delete all instances`. `%KillExtent()`
+clears data and indices together and the count goes to 0.
+
+That is the general rule for any persistent class, not a quirk of `%UnitTest`: kill a class's
+`DataLocation` global directly and you orphan its indices, leaving a table whose `COUNT(*)` disagrees
+with its own contents.
+
+- **Source.** Bank audit 2026-09-18. The row proposing this sample described "the 3-arg `DebugRunTestCase`"; measured, it takes five parameters and persists no results at all.
+- **Validity.** Verified against IRIS for Health 2026.1; both readers were run against one real failing result set.
+- **Severity.** High — this is the mechanism by which a self-graded test claims a pass.
+- **Example.** `examples/ch05_bpl_dtl/unittest-sqlproc-result-reader.cls`
+
 ## 6. Adapters & connectivity
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
