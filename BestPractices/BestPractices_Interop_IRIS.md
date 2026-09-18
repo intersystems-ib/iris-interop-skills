@@ -1129,11 +1129,83 @@ That is the general rule for any persistent class, not a quirk of `%UnitTest`: k
 with its own contents.
 
 - **Source.** Bank audit 2026-09-18. The row proposing this sample described "the 3-arg `DebugRunTestCase`"; measured, it takes five parameters and persists no results at all.
+**Two more ways to read the wrong number, both found in v1.37.0 by pointing the reader at a fresh
+run.** Neither errors; each returns a confident wrong answer.
+
+**The case name is not a prefix of the ID.** The `TestCase` ID is `<instance>||<suite>||<case>`, so
+it begins with the *instance number* — a bare class name is a prefix of nothing. Measured against a
+run that had just passed 8 of 8:
+
+```
+Verdict('Example.Tests.MaxLenTruncation')             ->  "NO RESULTS ... nothing was persisted"
+Verdict('20||ZZS29||Example.Tests.MaxLenTruncation')  ->  "PASSED 8/8"
+```
+
+The first form is worse than an error: it reports "nothing ran" for a run that ran and passed, and
+sends you to fix a test runner that is working. Match on `TestCase.Name`, which is what actually
+holds the class name.
+
+**`MAX(ID)` picks the wrong run, because the ID is a string.** `MAX()` compares lexically, so
+`'9||…'` beats `'13||…'`. Order by `CAST($PIECE(ID, '||', 1) AS INTEGER)`. And scoping to a single
+run is not optional — results accumulate, so an unscoped reader sums every run ever recorded:
+measured, five runs of one 8-method suite reported `methods=40`, with a mutation's failure still
+showing three runs after it was reverted.
+
 - **Validity.** Verified against IRIS for Health 2026.1; both readers were run against one real failing result set.
 - **Severity.** High — this is the mechanism by which a self-graded test claims a pass.
 - **Example.** `examples/ch05_bpl_dtl/unittest-sqlproc-result-reader.cls`
 
 ## 6. Adapters & connectivity
+
+### 5.15 A bare `%String` rejects, it does not truncate — and `MAXLEN=""` has a second ceiling
+
+A bare `%String` defaults to `MAXLEN=50`. A longer value is **rejected**, not silently shortened.
+Measured on IRIS for Health 2026.1, one property, four paths:
+
+| path | 50 chars | 51+ chars |
+|---|---|---|
+| `%Save()` | saved, reads back 50 | `ERROR #7201` |
+| `%ValidateObject()` | `$$$OK` | `ERROR #7201` |
+| SQL `INSERT` | `SQLCODE=0` | `SQLCODE=-104 … failed validation` |
+| in memory after `Set` | 50 | **the full length, untouched** |
+
+The last row is the one that matters. The value is never quietly cut: it is held intact in memory
+and refused at every persistence boundary. So the symptom is an error you already have, not data you
+must go looking for — and prose describing this as a silent truncation sends you hunting in the
+wrong place. (Three skill sites said exactly that until v1.36.0.)
+
+**Two things this does NOT cover, because they are different mechanisms.** A **SOAP/XML import** into
+a bounded property is a different path and is unmeasured here — widen the property and the question
+does not arise. And a value cut at a **separator** is unrelated: a RecordMap record separator left
+empty becomes `$char(32)`, so a value containing a space really does split — silently, with `$$$OK`
+(documented in the `business-services` skill, not here). Same visible symptom, different cause;
+distinguishing them is the whole point, and it is why the correction above was applied at three
+sites and deliberately not at that one.
+
+**`MAXLEN=""` is unbounded up to the string ceiling, but the storable maximum is lower.** The ceiling
+is `$$$MaxStringLength` = **3,641,144**. Measured on a `MAXLEN=""` property: 10,000 / 100,000 /
+500,000 / 1,000,000 / 2,000,000 / 3,000,000 / 3,600,000 chars all save and read back intact. At
+exactly 3,641,144 the behaviour splits:
+
+```
+%ValidateObject()  ->  OK                                     <- the value IS a legal string
+%Save()            ->  ERROR #5002: ObjectScript error: <MAXSTRING>%SaveData+18^<Class>.1
+```
+
+Two lessons. The validator and the saver disagree, so "it validates" is not "it stores" — the row is
+assembled into a single global node alongside the object's other data, and that assembly is what
+overflows. And the error names a **generated routine** (`%SaveData` in `<Class>.1`), not your
+property, so it reads like a platform fault rather than a field that is too big. `#7201` names the
+field; `#5002 <MAXSTRING>` does not.
+
+Practical rule: size text properties to the source (`MAXLEN=200` for a name, not `MAXLEN=""` for
+everything), use `MAXLEN=""` for genuinely unbounded free text, and switch to
+`%Stream.GlobalCharacter` well before the ceiling rather than at it.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** Medium (the data is safe; the cost is time spent diagnosing the wrong failure).
+- **Example.** `examples/ch05_bpl_dtl/msg-maxlen-boundaries.cls`,
+  `examples/ch05_bpl_dtl/tdd-maxlen-truncation.cls`
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 

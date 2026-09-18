@@ -39,18 +39,61 @@
 /// The ID is a `||`-delimited composite — `<instance>||<suite>||<case>||<method>` — so
 /// `$Piece(id, "||", 4)` is the method node when you need to locate one. It is not a %List, which
 /// is worth saying because the shape invites `$ListGet` and that returns nothing useful.
+///
+/// THIRD AND FOURTH, both found in v1.37.0 by using this reader on a fresh run — and both produce
+/// a confident wrong answer rather than an error, which is the same failure class the rest of this
+/// file is about.
+///
+/// 3. THE CASE NAME IS NOT A PREFIX OF THE ID. Until v1.37.0 this class's own doc comment said to
+///    call it as `Verdict('Example.Tests.DeleteCascade')`, and the query was
+///    `WHERE TestCase %STARTSWITH ?`. The ID begins with the INSTANCE number, so a bare class name
+///    is a prefix of nothing. Measured against a run that had just passed 8 of 8:
+///        Verdict('Example.Tests.MaxLenTruncation')                -> "NO RESULTS … nothing was persisted"
+///        Verdict('20||ZZS29||Example.Tests.MaxLenTruncation')     -> "PASSED 8/8"
+///    The prescribed call reported "nothing ran" for a run that ran and passed, and the message
+///    sends you to fix a test runner that is working. `Verdict()` now takes the bare case name —
+///    matching `TestCase.Name`, which is what actually holds it — and still accepts a full ID.
+///
+/// 4. `MAX(ID)` PICKS THE WRONG RUN, because the ID is a STRING. `MAX()` on
+///    `<instance>||<suite>||<case>` compares lexically, so `'9||…'` beats `'13||…'` and you read
+///    run 9. Order by `CAST($PIECE(ID, '||', 1) AS INTEGER)` instead. And scoping to ONE run is
+///    not optional: results accumulate, so an unscoped reader sums every run ever recorded —
+///    measured, five runs of this 8-method suite reported `methods=40`, with a mutation's failure
+///    still visible three runs after it was reverted.
 Class Example.UTL.UnitTestResult Extends %RegisteredObject
 {
 
-/// The honest verdict for one test case. Returns "PASSED n/n" or "FAILED: <method>, <method>".
+/// The honest verdict for one test case, from its MOST RECENT run.
+/// Returns "PASSED n/n" or "FAILED: <method>, <method>".
 /// Invoke via: SELECT Example_UTL.UnitTestResult_Verdict('Example.Tests.DeleteCascade')
+/// A full '<instance>||<suite>||<case>' ID also works, and then names that exact run.
 ClassMethod Verdict(pCase As %String) As %String [ SqlProc ]
 {
     Set tTotal = 0, tFailed = 0, tNames = ""
 
-    // TestMethod.Status IS the verdict. One row per method, already rolled up.
-    Set tSQL = "SELECT Name, Status FROM %UnitTest_Result.TestMethod WHERE TestCase %STARTSWITH ?"
-    Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL, pCase)
+    // Resolve the argument to ONE TestCase row. A bare class name matches TestCase.Name -- it is
+    // NOT a prefix of the ID, which starts with the instance number (see the header). Ordering is
+    // on the instance piece CAST TO INTEGER because the ID is a string and '9||' > '13||'.
+    If pCase [ "||" {
+        Set tCaseId = pCase
+    } Else {
+        Set tIdSQL = "SELECT TOP 1 ID FROM %UnitTest_Result.TestCase WHERE Name = ? "_
+                     "ORDER BY CAST($PIECE(ID, '||', 1) AS INTEGER) DESC"
+        Set tIdRS = ##class(%SQL.Statement).%ExecDirect(, tIdSQL, pCase)
+        Set tCaseId = ""
+        If tIdRS.%Next() {
+            Set tCaseId = tIdRS.%Get("ID")
+        }
+        If tCaseId = "" {
+            Quit "NO RESULTS for '" _ pCase _ "' -- no TestCase row of that name, so either the run "_
+                 "never persisted anything or the name is wrong"
+        }
+    }
+
+    // TestMethod.Status IS the verdict. One row per method, already rolled up. Scoped to the one
+    // run resolved above: results ACCUMULATE, and an unscoped reader sums every run ever.
+    Set tSQL = "SELECT Name, Status FROM %UnitTest_Result.TestMethod WHERE TestCase = ?"
+    Set tRS = ##class(%SQL.Statement).%ExecDirect(, tSQL, tCaseId)
     While tRS.%Next() {
         Set tTotal = tTotal + 1
         If 'tRS.%Get("Status") {
@@ -62,7 +105,8 @@ ClassMethod Verdict(pCase As %String) As %String [ SqlProc ]
     // NO ROWS IS NOT A PASS. It means the run never persisted anything -- most likely
     // DebugRunTestCase, or RunTest with ^UnitTestRoot pointing somewhere IRIS cannot see.
     If tTotal = 0 {
-        Quit "NO RESULTS for '" _ pCase _ "' -- nothing was persisted, so there is no verdict to report"
+        Quit "NO RESULTS for '" _ tCaseId _ "' -- the case row exists but has no method rows, so "_
+             "there is no verdict to report"
     }
 
     Quit $Select(tFailed = 0: "PASSED " _ tTotal _ "/" _ tTotal,
