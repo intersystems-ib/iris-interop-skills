@@ -282,6 +282,54 @@ layout is not a contract and which the conformance gate denies reading.
 - **Severity.** High — a silent lie in the one check that exists to catch silent drift.
 - **Example.** `examples/ch01_production/drift-report-disk-vs-namespace.cls`
 
+### 1.15 Pre-flight validation — and why the old validator returned OK for every production it could not read
+
+Check a production **before** starting it: every item's class compiled, and every
+`<send transform= target=>` in its routers' rules resolving to a real class and a real item. At
+runtime those are `<CLASS DOES NOT EXIST>` or `target 'Y' not an item`, mid-message.
+
+The validator this plugin shipped had three defects, all measured:
+
+**1. It returned `OK` from every path where it could not read anything.** No router found → `OK`.
+Rule XData missing → `OK`. Nothing matched in the scan → `OK`. The reassuring answer was also the
+answer for *"I checked nothing"*, and the two were indistinguishable. A verdict must therefore have
+three values, not two: `OK` (checks ran, nothing wrong), `ISSUES` (checks ran, found problems), and
+**`INCONCLUSIVE`** (the check could not be performed). And `OK` should carry its counts — "4 items,
+1 router, 1 send target checked" — so an empty check cannot masquerade as a clean one.
+
+**2. It matched the router by the generic class only**, `WHERE ClassName = 'EnsLib.MsgRouter.RoutingEngine'`,
+so it never saw an HL7 router (`EnsLib.HL7.MsgRouter.RoutingEngine`). Use
+`ClassName LIKE '%MsgRouter.RoutingEngine'`.
+
+**3. `TOP 1` made it pick `Ens.Alert`**, because `Ens.Alert` *is* an `EnsLib.MsgRouter.RoutingEngine`.
+Measured against the two gated productions:
+
+| production | what `TOP 1` picked |
+|---|---|
+| `Example.Alerting.Production` | `Ens.Alert` |
+| `Example.Productions.Hl7Intake` | **`Ens.Alert`** — not `Router.Adt`, which exists and is the HL7 class |
+
+So it validated the *alert* rule and reported on that, in a production whose actual routing it had
+never looked at. Iterate **every** router match; a production may legitimately have several.
+
+**What the corrected validator found on its first real run**, and it is a defect of exactly the kind
+it exists to catch: five of the six gated productions carried an `Ens.Alert` item with
+`AlertOnError=0` and **no `BusinessRuleName`**. An `Ens.Alert` router with no rule is **worse than no
+`Ens.Alert` item at all** — the framework routes every `Ens.AlertRequest` to it, the rule that would
+forward them does not exist, and the alerts are captured and dropped in silence. Those five items
+have been removed; the alert circuit is a production of its own (§7.1). `AlertOnError=1` on ordinary
+items is what feeds that circuit and needs no local router to be correct.
+
+**On `Ens_Config.Item`:** it *is* a queryable table (see §"is it a table at all" in `interop`), so
+embedded `&sql` against it makes the table and its column names compile-verified — a typo fails the
+compile instead of waiting for a run. What is not true is that a missing production errors: it
+returns **zero rows**, which is precisely why "no items" must never be reported as `OK`.
+
+- **Source.** Bank audit 2026-09-18; the validator lived in `bpl` as a bare `ClassMethod`.
+- **Validity.** Verified against IRIS for Health 2026.1; all three defects and the `Ens.Alert` finding were measured.
+- **Severity.** High — a gate that says OK when it saw nothing is worse than no gate.
+- **Example.** `examples/ch01_production/production-preflight-validator.cls`
+
 ## 2. HL7 v2
 
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
