@@ -55,6 +55,7 @@
     "Example.RUL.FhirRouting",
     "Example.RUL.OrderRouting",
     "Example.RecordMap.Censo",
+    "Example.SEC.ValidateLDAP",
     "Example.Tests.DeleteCascade",
     "Example.Tests.DestinationAssert",
     "Example.Tests.DtlFunctionForms",

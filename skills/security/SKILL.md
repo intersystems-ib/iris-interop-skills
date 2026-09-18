@@ -76,13 +76,13 @@ Use IRIS as an OAuth 2.0 broker between a third-party SaaS app and on-premise Ac
 2. Set the customisation namespace to the interop namespace.
 3. Provide two custom subclasses:
    - `OAuth2.Server.Authenticate` — login UI customisation (logo, skip `DisplayPermissions` by submitting `btnAccept` instead of `btnLogin`).
-   - `OAuth2.Server.ValidateLDAP` — credential check via `%SYS.LDAP` (bind anonymously → switch to TLS → bind as admin → look up UserDN by `sAMAccountname` → re-bind with user's password → cleanup).
+   - A `ValidateUser` hook — credential check via `%SYS.LDAP` (bind anonymously → switch to TLS → bind as admin → look up UserDN by `sAMAccountname` → re-bind with user's password → cleanup). **Subclass `%OAuth2.Server.Validate` and override `ValidateUser` only** — inheriting `SupportedClaims` and `ValidateClient` is the point, and a copy silently takes them over. Put it in an application package (`Example.SEC.ValidateLDAP`), not in `OAuth2.Server.*`: that is the system package holding `OAuth2.Server.Configuration` in `%SYS`, and a class of your own wearing that name is indistinguishable from vendor code at a glance.
 4. If fronted by a reverse proxy with a different external path (e.g. external `/dev/oauth2`, IRIS-internal `/<csp-app>/oauth2`), add a rewrite rule on the proxy.
 5. **Smoke test**: hit `<server>/<csp-app>/oauth2/.well-known/openid-configuration` — must return the OIDC discovery document.
 
 May also need to patch `OAuth2.Server.Client.ValidateRedirectURL` when the redirect URI host is externally constrained.
 
-Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch11_security/oauth2-server-validate-ldap.cls.xml`.
+Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch11_security/oauth2-server-validate-ldap.cls` — a **subclass** of `%OAuth2.Server.Validate` overriding `ValidateUser` only. Do not copy the vendor class: measured on 2026.1, the copy this replaced emptied `SupportedClaims` from 6 claims to 0 and declared a five-parameter `ValidateUser` against the vendor's six, which compiles and runs without error while making two-factor unrequestable.
 
 ### Mobile clients (PKCE)
 

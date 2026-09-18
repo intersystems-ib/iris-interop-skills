@@ -120,7 +120,7 @@ its siblings.
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |
 | §11.3 | Sibling: request message the SOAP BO's MessageMap keys on (`Demo.SAML.MSG.InvokeReq`) | `ch11_security/saml2-invoke-request.cls` |
-| §11.5 | OAuth 2.0 + LDAP server-side broker ⚠️ | `ch11_security/oauth2-server-validate-ldap.cls.xml` |
+| §11.5 | OAuth 2.0 + LDAP server-side broker — a **subclass** of `%OAuth2.Server.Validate` | `ch11_security/oauth2-server-validate-ldap.cls` |
 | §11.7 | SSL/TLS trusted CA chain build (`openssl s_client -servername`) ⚠️ | `ch11_security/ssl-trusted-ca-chain.sh` |
 | §13.7 | Credentials migration — walk `Ens.Config.Credentials`, export, re-import | `ch13_migration/credentials-export-reimport.cls` |
 
@@ -139,23 +139,24 @@ maintained version — no local copy here. See `external-repos.md` for URLs.
 
 ## ⚠️ Rows that are indexed but NOT compiled
 
-**Two artefacts in this index are checked by no tier, and the ⚠️ on their rows says so at the point
+**One artefact in this index is checked by no tier, and the ⚠️ on its row says so at the point
 of the claim rather than in a footnote nobody reaches.** (This was three until v1.21.0, when the
 §7.1 alert circuit was converted to a compiled class — and the conversion immediately found that its
-rule could not compile at all.) Tier 2 stages `.cls` files only, and
-`examples_baseline.json` holds class names — so an `.xml` export and a `.sh` script are indexed,
-counted in the artefact total, and compiled by nothing:
+rule could not compile at all; two until v1.35.0, when the §11.5 OAuth artefact became a compiled
+subclass and the conversion found that the copy it replaced had emptied the server's claim list and
+was written against a five-parameter `ValidateUser` the vendor has since grown a sixth formal on.)
+Tier 2 stages `.cls` files only, and `examples_baseline.json` holds class names — so a `.sh` script
+is indexed, counted in the artefact total, and compiled by nothing:
 
 | artefact | why no tier sees it |
 |---|---|
-| `ch11_security/oauth2-server-validate-ldap.cls.xml` | an XML **class export** — the `.cls.xml` suffix is not `.cls` |
 | `ch11_security/ssl-trusted-ca-chain.sh` | a shell script; there is no shell tier |
 
-This matters because these are not small: the §11.5 OAuth artefact is the largest non-`.cls` item
-left in the bank. Tier-1 **C8** does reach the `.xml` files (it is why the alert
-circuit's dangling rule name was caught), so they are not *entirely* unchecked — but nothing
-compiles them, and a green run must not be read as saying otherwise. Tracked in
-`../COVERAGE-MAP.md` (wave item S14 converts the OAuth artefact into a gated `.cls`; S2 did the alerting one in v1.21.0).
+There are no `.xml` class exports left in the bank, so tier-1 **C8** — which reached inside them,
+and is why the alert circuit's dangling rule name was caught — now has nothing to inspect here. What
+remains uncompiled is one shell script, and a green run must not be read as covering it. Tracked in
+`../COVERAGE-MAP.md` (S14 converted the OAuth artefact in v1.35.0; S2 did the alerting one in
+v1.21.0).
 
 ## Rules without code (process / architecture / version-specific)
 
