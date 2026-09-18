@@ -208,6 +208,42 @@ list, which hides the distinction.
 - **Severity.** Medium.
 - **Example.** `examples/ch01_production/production-censo-intake.cls`
 
+### 1.9 On IRIS for Health, an interop namespace is a FOUNDATION namespace
+
+*Foundation Namespaces* (AFNS), opening line: **"Every interoperability-enabled production needs a
+special interoperability-enabled namespace called a foundation namespace."** This is how an interop
+namespace is initialised on **IRIS for Health** and **Health Connect** — it is not a FHIR detail and
+not a recommendation. A Foundation namespace carries the healthcare interoperability configurations
+and the `HS.*` mappings; a plain namespace has none of them.
+
+**On plain IRIS — generic, non-healthcare integration — there is no Foundation concept and no
+`HS.*`.** An interop-enabled namespace is all there is. Establish which product you are on first.
+
+**Why it reads as a naming problem.** Without the mapping `HS.FHIRServer.*`, `HS.SDA3.*` and the
+rest do not exist, so references look misspelled and people hunt for the "real" class name. And
+`Ens.Director` resolves either way, so a namespace can be interop-enabled and still be missing half
+the library — "interop-enabled" is not the same question as "Foundation".
+
+| | how |
+|---|---|
+| **check** | `SELECT Name, Type, Activated FROM HS_Util_Installer.ConfigItem` — the table **existing** is the discriminator. Foundation: a row, `Type='Foundation'`. Plain: `SQLCODE -30, table not found` (AFNS section 1) |
+| **create** | `Do ##class(HS.Util.Installer.Foundation).Install("<NS>")` from `HSLIB` (AFNS section 2) |
+| **convert** | the **same call**, against the existing namespace — AFNS section 3 is explicit that this is what you must do to use IRIS for Health interoperability in a namespace not created as one |
+| **SDA3** | if you use SDA3 transformations, import the SDA3 schema separately (AFNS section 4) |
+
+`Install()` also creates `<NS>PKG.FoundationProduction`, so a production nobody wrote appears in
+`iris_production(action=status)` — and a `start` of your own can then refuse with
+`<Ens>ErrProductionSuspendedMismatch` naming it. That is a real production with a real class, so it
+is the `exists:true` branch of the recovery ladder: stop it by name, do not reach for
+`CleanProduction()`.
+
+- **Source.** AFNS sections 1-4; HXFHIRINS section 2.3.1. Verified on IRIS for Health Community
+  2026.1, including both controls on the ConfigItem check (Foundation: 1 row; `USER`: `-30`).
+- **Validity.** Still valid.
+- **Severity.** High — every symptom points at the wrong thing (a class name), and the real cause
+  is invisible from the namespace itself.
+- **Example.** `examples/ch04_fhir/production-fhir-facade.cls`
+
 ## 2. HL7 v2
 
 ### 2.1 Use a custom HL7 schema for non-standard partner messages

@@ -161,6 +161,34 @@ survive the instance.
 > router, CR-6), `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/production-sql-poll.cls` (JDBC poll + the mandatory
 > `JGService` item). All three gated by `validate_examples --compile`.
 
+## Creating the namespace — on IRIS for Health it is a FOUNDATION namespace
+
+Before any of the lifecycle below applies, the namespace has to be the right KIND of namespace.
+AFNS, opening line: *"Every interoperability-enabled production needs a special
+interoperability-enabled namespace called a foundation namespace."*
+
+```
+# is it one? the table's EXISTENCE is the discriminator (AFNS section 1)
+iris_query(namespace="<NS>", query="SELECT Name, Type, Activated FROM HS_Util_Installer.ConfigItem")
+    Foundation -> a row, Type='Foundation', Activated=1
+    plain      -> SQLCODE -30, Table 'HS_UTIL_INSTALLER.CONFIGITEM' not found
+
+# create it, or CONVERT an existing one — the same call does both (AFNS sections 2 and 3)
+iris_execute(namespace="HSLIB", code="Do ##class(HS.Util.Installer.Foundation).Install(""<NS>"")")
+```
+
+Three consequences for this skill specifically:
+
+- **`Install()` creates a production** — `<NS>PKG.FoundationProduction`. So on a freshly created
+  Foundation namespace `iris_production(action=status)` reports a production nobody wrote, and a
+  `start` of *your* production can hit `<Ens>ErrProductionSuspendedMismatch` naming that one. It is
+  a real production with a real class, so it is the `exists:true` branch of the recovery ladder —
+  stop it by name, do not reach for `CleanProduction()`.
+- **Conversion is in place and is the documented fix** for "we already have a namespace". You do
+  not have to recreate it or move code.
+- **Plain IRIS has none of this.** No `HS.*`, no Foundation concept — an interop-enabled namespace
+  is all there is. Check which product you are on before applying any of it.
+
 ## Hot-swap vs. restart — when code changes don't take effect
 
 `Ens.Director.UpdateProduction(timeout)` is for **production XML changes** — adding/removing items, modifying settings. It does **NOT** recompile class code and does **NOT** restart the OS jobs running BO/BP/BS instances.

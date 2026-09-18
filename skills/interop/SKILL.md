@@ -133,6 +133,51 @@ non-negotiable:
    confirm the target exists and is interop-enabled *before* the first write, not when a compile
    dies with `<CLASS DOES NOT EXIST> Ens.Director`. (The tdd skill's `CheckEnvironment` catches
    this at compile time — too late for calls already aimed at the wrong namespace.)
+4. **On IRIS for Health / Health Connect, the namespace must be a FOUNDATION namespace.** See
+   below — this is the step that is missing when a namespace "exists and looks interop-enabled"
+   and half the library still isn't there.
+
+### Foundation namespaces — IRIS for Health only, and required
+
+> **"Every interoperability-enabled production needs a special interoperability-enabled namespace
+> called a *foundation namespace*."** — *Foundation Namespaces* (AFNS), opening line.
+
+This is not a FHIR detail and not a recommendation. On **IRIS for Health** and **Health Connect**
+it is how an interop namespace is initialised: a Foundation namespace carries the healthcare
+interoperability configurations and the `HS.*` mappings. A plain namespace is missing all of it.
+
+**On plain IRIS — generic, non-healthcare integration — there is no such thing.** There is no
+`HS.*` and no Foundation concept; an interop-enabled namespace is all there is, and none of this
+section applies. Know which product you are on before acting on it.
+
+**Why the failure is hard to read.** Without the mapping, `HS.FHIRServer.*`, `HS.SDA3.*` and the
+rest simply *do not exist*, so every reference looks like a misspelling and the instinct is to hunt
+for the right class name. There isn't one — the namespace is wrong. `Ens.Director` resolves fine
+either way, so `check_config` saying "interop-enabled" does **not** tell you the namespace is a
+Foundation namespace.
+
+**Check it — the table's existence is the discriminator** (AFNS: *"you can check the
+`HS_Util_Installer.ConfigItem` table"*). Verified on 2026.1 with both controls:
+
+```
+iris_query(namespace="<NS>", query="SELECT Name, Type, Activated FROM HS_Util_Installer.ConfigItem")
+  Foundation namespace  -> a row, Type='Foundation', Activated=1
+  plain namespace       -> SQLCODE -30, Table 'HS_UTIL_INSTALLER.CONFIGITEM' not found
+```
+
+`-30` here means "not a Foundation namespace", not "you guessed the table name" — see
+§"Resolving real names" for why that distinction matters.
+
+**Create one, or convert one — same call** (AFNS sections 2 and 3):
+
+```
+iris_execute(namespace="HSLIB", code="Do ##class(HS.Util.Installer.Foundation).Install(""<NS>"")")
+```
+
+Run against an existing non-Foundation namespace, that **converts it in place** — AFNS section 3
+is explicit that conversion is what you must do if you want IRIS for Health interoperability in a
+namespace that was not created as one. Note it also creates a `<NS>PKG.FoundationProduction`, so
+`iris_production(action=status)` afterwards will report a production you did not write.
 
 ## When to split into multiple namespaces / productions
 
