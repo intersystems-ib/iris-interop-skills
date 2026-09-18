@@ -86,6 +86,7 @@ its siblings.
 | §5.11 | Delete cascade for a `%Persistent` child — `{Address}` not `{ID}`, capture the `%Status`, guard the empty ref (`Example.MSG.PersonReqCascade`) | `ch05_bpl_dtl/msg-persistent-child-delete-cascade.cls` |
 | §5.11 | Sibling: the `%Persistent` child that creates the obligation (`Example.DAT.Address`) | `ch05_bpl_dtl/dat-address-persistent.cls` |
 | §5.11 | Sibling: the cascade test — RUN, not just compiled, with a negative control (`Example.Tests.DeleteCascade`) | `ch05_bpl_dtl/tdd-delete-cascade.cls` |
+| §5.12 | Class-based (non-BPL) `Ens.BusinessProcess` — `pResponseRequired=0` runs the operation and drops the reply (`Example.BP.OrderFulfil`) | `ch05_bpl_dtl/bp-class-based-async.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |

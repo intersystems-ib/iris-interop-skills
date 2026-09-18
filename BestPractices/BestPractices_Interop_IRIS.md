@@ -775,6 +775,57 @@ never right is discarding the status, which gives you both an orphan and no reco
 - **Severity.** High — silent, and unbounded.
 - **Example.** `examples/ch05_bpl_dtl/msg-persistent-child-delete-cascade.cls`
 
+### 5.12 Class-based `Ens.BusinessProcess` — the async reply is silently discarded unless you ask for it
+
+`bpl` recommends a class-based BP when a BPL diagram stops being readable, and CR-1 is a rule about
+the shape — but only `Ens.BusinessProcessBPL` was ever shown, so "BP" and "BPL" became synonyms.
+
+Everything turns on the **third positional argument** of `SendRequestAsync`:
+
+```
+..SendRequestAsync(target, request, pResponseRequired, pCompletionKey, pDescription)
+```
+
+Measured by running both versions in a real production on 2026.1 and counting callbacks:
+
+| `pResponseRequired` | `OnRequest` | operation ran | `OnResponse` | `OnComplete` |
+|---|---|---|---|---|
+| `1` (correct) | 1 | 1 | **1** | 1 |
+| `0` (the defect) | 1 | **1** | **0** | 1 |
+
+Read the `0` row carefully, because the intuition about it is wrong: the operation **did** run and
+**did** produce a response. Nothing failed. The reply was simply never routed back, so `OnResponse`
+never executes and the process completes **successfully**. The Visual Trace shows a completed BP with
+a response from the operation — what it cannot show is that your handling of that response never ran.
+
+The default is `1`, so the defect takes writing `0`, which people do when they mean "I don't need to
+block here". That is not what it controls. Async versus blocking is `SendRequestAsync` versus
+`SendRequestSync`; `pResponseRequired` is *"will a reply come back to me at all"*.
+
+**Completion is not what returning `$$$OK` does.** While replies are outstanding the framework tracks
+them in `..%MasterPendingResponses` and completes only after the last one is handled — then
+`OnComplete` runs, and its `response` is what the caller receives. With `pResponseRequired = 0` there
+is nothing to wait for, so completion is immediate, which is precisely why the defect presents as a
+fast, healthy process.
+
+The callback signatures are not guessable, and `callresponse` (the target's reply) versus `response`
+(what this process returns) is easy to get backwards:
+
+```
+OnRequest(request, *response)
+OnResponse(request, &response, callrequest, callresponse, pCompletionKey)
+OnComplete(request, &response)
+OnError(request, &response, callrequest, pErrorStatus, pCompletionKey)
+```
+
+`pCompletionKey` is how replies are told apart: with more than one outstanding call `OnResponse` is
+entered once per reply and the key is the only discriminator.
+
+- **Source.** Bank audit 2026-09-18; the bank had no class-based BP at all.
+- **Validity.** Verified against IRIS for Health 2026.1 in a running production, both variants.
+- **Severity.** High — the reply is dropped and everything reports success.
+- **Example.** `examples/ch05_bpl_dtl/bp-class-based-async.cls`
+
 ## 6. Adapters & connectivity
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
