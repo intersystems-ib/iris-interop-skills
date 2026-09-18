@@ -2194,6 +2194,62 @@ beside failed methods, suspect the setup, not the subject.
 - **Example.** `examples/ch06_adapters/bo-local-object-save.cls`,
   `examples/ch06_adapters/tdd-local-save-status.cls`
 
+### 6.15 Reading an HTTP response: the three things that are not what the skills say
+
+When the payload is not a generated SOAP proxy — a hand-rolled envelope, an unusual content type, a
+legacy endpoint wanting form data — you build the request and read the response by hand. Three of the
+four things commonly said about that are wrong or wrongly explained. All were measured against a
+**real** `%Net.HttpResponse`, because a response built with `%New()` has `Data` that is not even a
+stream.
+
+**1. `SendFormDataArray` is called with three arguments or six, and the difference decides where the
+endpoint lives.** Measured signature:
+
+```
+SendFormDataArray(*pHttpResponse, pOp, pHttpRequestIn, pFormVarNames As %String = "", &pData, pURL, …)
+```
+
+The 6-argument form passes the URL **at the call site**; the 3-argument form omits it and the adapter
+uses its own `URL` setting. Both are legal, and no skill says which it is choosing. Prefer the
+3-argument form — the endpoint belongs in the production, not in code. `pFormVarNames` must be `""`
+for a raw body, which the 3-argument form gets right by default and the 6-argument form has to state.
+
+**2. `Data.Rewind()` before the FIRST read is not needed.** Measured on a real response:
+
+```
+StatusCode=200   Data = %Stream.GlobalCharacter   size=445   AtEnd BEFORE any read = 0
+first Read(80) without Rewind  ->  80 characters of the body
+```
+
+The adapter leaves the stream at the **start**, so a first read works and the "reads empty with
+`$$$OK`" outcome does not occur. **Rewind matters for a SECOND read** — and that is the real
+situation, because anything that has already inspected the body leaves the stream at the end and the
+next read returns `""`. Rewind before reading anyway: it is free and it removes an ordering
+dependency on whatever else touched the response.
+
+**3. `StatusCode` needs a guard, but not because it is multidimensional.** It is
+`%Library.Integer`, `MultiDimensional = False`. The real reason: when the send fails, the response
+parameter comes back **unset**, and `nullResponse.StatusCode` throws `<INVALID OREF>` — naming neither
+the adapter nor the endpoint. Check `$IsObject` on the response; and check it on `Data` too, since a
+response with no body carries a plain value there rather than a stream.
+
+**4. And the quiet one: SOAP and JSON booleans arrive as the strings `"true"` and `"false"`.**
+
+```
+"true"  = 1  ->  0        +"true"   ->  0
+"false" = 0  ->  0        +"false"  ->  0
+```
+
+**Neither polarity survives a numeric comparison.** `If approved = 1` is false for an approved
+response and `If approved = 0` is false for a declined one, and `$Select(+value: …)` takes the false
+branch either way. The code reads correctly, runs without error, and is wrong for every input.
+Compare to the string, case-insensitively, and accept the numeric forms another serialiser might send.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled, and measured against a live response.
+- **Severity.** High (the boolean trap is silent and total).
+- **Example.** `examples/ch06_adapters/http-manual-envelope-bo.cls`,
+  `examples/ch06_adapters/tdd-http-response-reading.cls`
+
 ### 7.1 Alert circuit — the canonical pattern
 
 In every Business Host of the production, enable “Send Alert on Error” (the setting is `AlertOnError`). The exception (always) is the Ens.Alert circuit itself: **Ens.Alert and the BO that sends the alert must have this checkbox DISABLED** to avoid infinite loops.
