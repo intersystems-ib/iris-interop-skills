@@ -215,13 +215,44 @@ Target class: EnsLib.HL7.Message     DocType: 2.3:ADT_A01
 Create:       New (versions differ; structure is not identical)
 
 Actions:
-  set target.MSH:9 = source.MSH:9
+  set target.{MSH:MessageType} = source.{MSH:MessageType}
   foreach k1 in source.{PIDgrpgrp(k1)}:
-    set target.{PIDgrpgrp(k1).PID:5} = source.{PIDgrpgrp(k1).PID:5}
+    set target.{PIDgrpgrp(k1).PID:PatientName(1)} = source.{PIDgrpgrp(k1).PID:PatientName(1)}
     ...
-  if source.PV1:2 = "I":
-    set target.PV1:3 = ..Lookup("FacilityCodes", source.PV1:3, "UNKNOWN")
+  if source.{PV1:PatientClass} = "I":
+    set target.{PV1:AssignedPatientLocation} = ..Lookup("FacilityCodes", source.{PV1:AssignedPatientLocation}, "UNKNOWN")
 ```
+
+### Name the field, do not number it
+
+**Address segments and fields by NAME wherever a DocType is assigned.**
+`{PV1:PatientClass}`, not `{PV1:2}`. `{MSH:MessageType.MessageCode}`, not `{MSH:9.1}`. A positional
+path is correct and unreadable, and a DTL is reviewed by eye — the reviewer deciding whether `PV1:3`
+is the right field is exactly who the name is for.
+
+| positional | named |
+|---|---|
+| `MSH:9.1` | `MSH:MessageType.MessageCode` |
+| `MSH:9.2` | `MSH:MessageType.TriggerEvent` |
+| `MSH:10` | `MSH:MessageControlID` |
+| `PV1:2` | `PV1:PatientClass` |
+| `PV1:3` | `PV1:AssignedPatientLocation` |
+| `PID:5.2` | `PID:PatientName(1).GivenName` |
+| `PID:3.1` | `PID:PatientIdentifierList(1).IDNumber` |
+
+Measured on 2026.1 against the stock 2.5 schema, with three rules that come with it:
+
+- **You cannot mix.** `MSH:MessageType.1` is **invalid**: naming the field obliges you to name the
+  component. Name the whole path or none of it.
+- **Case does not matter** — `MSH:messagetype` and `MSH:MessageType` both resolve. The schema stores
+  lowercase; CamelCase is what reads well.
+- **Only with a DocType.** Without one, only positional paths resolve — which is the real cost of
+  skipping `sourceDocType`, not just a lost validation.
+
+**Do not guess a name.** `##class(EnsLib.HL7.Schema).GetFieldNameFromNumber("2.5","PV1",2)` returns
+`patientclass` and is authoritative. It returns **empty for repeating fields** (`PID:3`, `PID:5`,
+`OBX:5`) — measured — so read those off the Schema Editor, or confirm a candidate with `GetValueAt`
+and check the **status**, since a wrong name and an empty field both return `""`.
 
 ## XSLT for CDA
 

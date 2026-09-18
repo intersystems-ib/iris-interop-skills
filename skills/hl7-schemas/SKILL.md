@@ -73,7 +73,17 @@ Use case: receiving ADT_A01 messages that include a custom `ZPI` segment carryin
    to build the DocType, so a colon here yields `MyApp_2.5:ADT_A01:ADT_A01` and resolves nothing.
    Step 8's `sourceDocType` is a different thing and *does* take the full `category:structure`.
 
-8. **In the DTL**: declare `sourceDocType='MyApp_2.5:ADT_A01'` on `<transform>`. Symbolic field names now resolve for both standard fields (PID, PV1) and the custom ones (ZPI).
+8. **In the DTL**: declare `sourceDocType='MyApp_2.5:ADT_A01'` on `<transform>`. Field names now
+   resolve for both standard fields (PID, PV1) and the custom ones (ZPI).
+
+**And then use them.** Addressing fields by NAME rather than position is the point of assigning a
+schema at all — `{PV1:PatientClass}`, not `{PV1:2}`; `{MSH:MessageType.MessageCode}`, not `{MSH:9.1}`.
+A positional path is correct and unreadable, and HL7 work is reviewed by eye. Measured on 2026.1:
+you **cannot mix** the two (`{MSH:MessageType.1}` is invalid), names are case-insensitive, and
+`##class(EnsLib.HL7.Schema).GetFieldNameFromNumber(category, segment, number)` is the authoritative
+way to find a name — though it returns **empty for repeating fields** (`PID:3`, `PID:5`, `OBX:5`),
+which is when the Schema Editor is the answer. Full table in `transformations` §"Name the field, do
+not number it" and deliverable §2.11.
 
 ## Cookbook — MCP-friendly import via XML + SqlProc
 
