@@ -109,6 +109,7 @@ its siblings.
 | §6.10 | Sibling: a custom consumer that rewinds BEFORE reading (`Example.BO.ArchiveStream`) | `ch06_adapters/bo-stream-container-consumer.cls` |
 | §6.10 | Sibling: the second-read test — EXECUTED, with a negative control (`Example.Tests.StreamContainerRewind`) | `ch06_adapters/tdd-stream-container-rewind.cls` |
 | §6.11 | Subclassing a prebuilt service — `##super()` first in `OnInit`; #5478 enforces TYPES, not arity (`Example.BS.CensoWithWarmup`) | `ch06_adapters/bs-recordmap-service-subclass.cls` |
+| §6.12 | REST outbound BO — there is **no** `EnsLib.REST.OutboundAdapter`; `Post` takes no URL; capture the `%Status` (`Example.BO.RestOutbound`) | `ch06_adapters/bo-rest-outbound.cls` |
 | §7.1 | Canonical `Ens.Alert` circuit, **compiled** — replaces the former `.xml`, whose rule could not compile (`Example.Alerting.Production`) | `ch07_alerting/production-alert-circuit.cls` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |
