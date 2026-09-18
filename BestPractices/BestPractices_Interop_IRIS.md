@@ -1815,6 +1815,49 @@ Three rules follow:
 
 ## 7. Error handling, retries & alerting
 
+### 6.14 The adapter-less BO — and the discarded `%Save()` status that reports success
+
+`business-operations` recommends this shape more strongly than any other: when the destination is a
+`%Persistent` class in the same namespace, **the cleanest BO has no adapter at all**. An adapter
+exists to reach outside the IRIS process; a local class is reached by `%Save()`. Routing that through
+`EnsLib.SQL.OutboundAdapter` means a JDBC round trip to the database you are already inside, plus a
+connection, credentials and a DSN that can be wrong.
+
+**Three silent failure modes**, all measured on 2026.1, all of which complete the message:
+
+| defect | what the operator sees | what the table holds |
+|---|---|---|
+| `Do obj.%Save()` — status discarded | message **Completed**, Event Log empty | no row |
+| `OnMessage` returns `$$$OK` for an unmapped type | message **Completed** | no row |
+| no missing-reference guard | message **Completed** | an **empty junk row** |
+
+The first is one character from correct: `Set sc = obj.%Save()` and `Do obj.%Save()` both compile.
+With a value that fails validation — a `PostCode` of 11 characters against `MAXLEN = 10`, which §5.15
+established is refused rather than truncated — the two forms produce the **same** database outcome and
+opposite reports: `#7201` and an Errored message, versus `$$$OK` and a Completed one.
+
+The third is the quietest and the least expected. On an unset reference, `pRequest.Address` is `""`
+with `$IsObject = 0`, and **reading `.Street` off it returns `""` with no error** — ObjectScript does
+not raise `<INVALID OREF>` here. So an unguarded BO does not fail: it copies empty strings into a new
+object, saves it, and reports success, leaving a row with every column blank.
+
+**`%New()` on an `Ens.BusinessOperation` subclass needs a config name.** Measured:
+
+```
+##class(X).%New()                -> "", $IsObject = 0, and NO error
+##class(X).%New("BO.LocalSave")  -> a live instance
+```
+
+The bank recorded this for `Ens.BusinessService` in section 5.2; it is the same for an operation. The
+argument-less form hands back `""`, the next line calls a method on it, and the caller throws — which
+`%UnitTest` records as a failed method with **zero failed assertions**. When the assert count is zero
+beside failed methods, suspect the setup, not the subject.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (all three modes complete the message).
+- **Example.** `examples/ch06_adapters/bo-local-object-save.cls`,
+  `examples/ch06_adapters/tdd-local-save-status.cls`
+
 ### 7.1 Alert circuit — the canonical pattern
 
 In every Business Host of the production, enable “Send Alert on Error” (the setting is `AlertOnError`). The exception (always) is the Ens.Alert circuit itself: **Ens.Alert and the BO that sends the alert must have this checkbox DISABLED** to avoid infinite loops.
