@@ -45,6 +45,12 @@ Property Department As %String(MAXLEN=80);
 
 ### Why `%Persistent` must be leftmost
 
+**Gated example and the only mechanical check:**
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/msg-persistent-leftmost.cls` and its
+test `…/tdd-message-own-extent.cls`. The test was mutation-checked — it passes as shipped and
+**fails** when the superclass order is reversed, which no other check in that repo does.
+
+
 IRIS treats the **leftmost superclass as primary**, and the primary superclass is what drives
 storage. `Ens.Request` is *already* persistent — it inherits `Ens.MessageBody`, which owns
 `^Ens.MessageBodyD` — so putting it first makes your message inherit that **shared** extent. Listing

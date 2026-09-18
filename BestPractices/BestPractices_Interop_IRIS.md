@@ -716,6 +716,38 @@ generations, not adding up calls. And `^UnitTestRoot` must point at a directory 
 - **Severity.** High — a vacuous green is worse than a red, because it stops the search.
 - **Example.** `examples/ch05_bpl_dtl/tdd-testproduction-dtl.cls`
 
+### 5.10 Message class design — `%Persistent` must be leftmost, and no compile will tell you it is not
+
+An interop message class needs `%Persistent` **as its leftmost superclass** to get its own storage
+extent. `Ens.Request` already inherits persistence, so every spelling below compiles, projects to
+SQL, saves, and reads its properties back correctly. Only where the rows LAND differs — measured on
+IRIS for Health 2026.1 by reading `%Dictionary.CompiledStorage.DataLocation`:
+
+| declaration | `DataLocation` | |
+|---|---|---|
+| `Extends (%Persistent, Ens.Request)` | `^MyApp.MSG.NameD` | own extent ✅ |
+| `Extends (Ens.Request, %Persistent)` | `^Ens.MessageBodyD` | shared — **`%Persistent` present but not leftmost is the same as omitting it** |
+| `Extends Ens.Request` | `^Ens.MessageBodyD` | shared |
+
+IRIS takes the **leftmost** superclass as primary, and the primary superclass is what drives
+storage. The middle row is the trap: it looks like the rule was followed.
+
+**Why a shared extent costs you.** Every message body in the namespace lands in one global, so
+per-message-type purging, a selective index, a `SELECT` over one message type, and any per-type
+storage tuning all stop being available — and you discover this at the point where you have a
+production-sized global and the least freedom to change it. The defect is invisible in development:
+with a hundred test messages nothing about a shared extent looks wrong.
+
+**No tier of the gate can catch this**, which is why it is stated here and asserted in a test. It is
+not a syntax error, not a runtime error, and not a wrong result — it is a storage decision that a
+compiler has no opinion about. The test reads `DataLocation` out of the dictionary and asserts the
+global name; that is the only mechanical check that exists.
+
+- **Source.** Bank audit 2026-09-18; all four interop message classes in this bank had the shared shape.
+- **Validity.** Verified against IRIS for Health 2026.1.
+- **Severity.** High — silent, and expensive exactly when it is discovered.
+- **Example.** `examples/ch05_bpl_dtl/msg-persistent-leftmost.cls`
+
 ## 6. Adapters & connectivity
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
