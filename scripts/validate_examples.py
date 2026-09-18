@@ -489,6 +489,41 @@ def tier1() -> bool:
     r.check("C15", "an Ens.Alert item carries a BusinessRuleName (or is not there at all)",
             alert_norule)
 
+    # ── C16 ───────────────────────────────────────────────────────────────────────────────
+    # An INVISIBLE character in an artefact compiles clean and cannot be seen in a diff.
+    #
+    # Found the hard way (v1.58.0): a zero-width non-joiner (U+200C) landed inside a method name --
+    # `Method Test\u200cReturnedErrorReachesTheAlert()` -- and IRIS ACCEPTED IT. Tier 2 was green, the
+    # suite ran, and %UnitTest still found the method because the name happens to start with "Test".
+    # Any reference to that method by name from anywhere else would have failed, and the reason would
+    # have been invisible in every tool a reader has. Zero-width characters get in through copy-paste
+    # and through generated text; nothing else in this gate would ever notice.
+    #
+    # Scoped to characters with no legitimate use in source: zero-width, BOM, non-breaking space,
+    # and the bidi overrides. Ordinary accented text and typographic dashes are left alone -- the
+    # deliverable and the headers use them deliberately.
+    INVISIBLE = {
+        "\u200b": "ZERO WIDTH SPACE", "\u200c": "ZERO WIDTH NON-JOINER",
+        "\u200d": "ZERO WIDTH JOINER", "\u2060": "WORD JOINER",
+        "\ufeff": "BOM / ZERO WIDTH NO-BREAK SPACE", "\u00a0": "NO-BREAK SPACE",
+        "\u202a": "LEFT-TO-RIGHT EMBEDDING", "\u202b": "RIGHT-TO-LEFT EMBEDDING",
+        "\u202d": "LEFT-TO-RIGHT OVERRIDE", "\u202e": "RIGHT-TO-LEFT OVERRIDE",
+        "\u2066": "LEFT-TO-RIGHT ISOLATE", "\u2067": "RIGHT-TO-LEFT ISOLATE",
+    }
+    invisible = []
+    for f in files:
+        if f.suffix not in (".cls", ".xml", ".md"):
+            continue
+        text = read(f)
+        for ch, name in INVISIBLE.items():
+            if ch not in text:
+                continue
+            line = text[: text.index(ch)].count("\n") + 1
+            invisible.append(
+                f"{rel(f)}:{line} -> contains U+{ord(ch):04X} {name}, which is invisible in every "
+                f"diff and compiles clean. Delete it.")
+    r.check("C16", "no invisible character in an artefact (they compile clean)", invisible)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
