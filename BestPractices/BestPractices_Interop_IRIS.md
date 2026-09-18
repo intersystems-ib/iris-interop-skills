@@ -172,7 +172,7 @@ To prevent concurrent execution of a scheduled Business Service: (a) set Pool Si
 
 ---
 
-### 1.7 RecordMap file intake — configure the prebuilt service, never subclass it
+### 1.11 RecordMap file intake — configure the prebuilt service, never subclass it
 
 The only class you author for a delimited-file intake is the **RecordMap definition**. The Business
 Service, the poll loop and the per-record dispatch are all prebuilt: configure
@@ -192,7 +192,7 @@ in a **DTL on the router**, which is where it belongs and where it is testable.
 - **Severity.** High — the wrong shape costs a rebuild, and the compile error names the signature, not the design.
 - **Example.** `examples/ch01_production/recordmap-censo.cls`, `examples/ch01_production/production-censo-intake.cls`
 
-### 1.8 Production class — the wiring IS the deliverable
+### 1.12 Production class — the wiring IS the deliverable
 
 A production class is an `Ens.Production` subclass whose entire content is one
 `XData ProductionDefinition`. Everything operational lives in that XML: which items exist, their
@@ -208,7 +208,7 @@ list, which hides the distinction.
 - **Severity.** Medium.
 - **Example.** `examples/ch01_production/production-censo-intake.cls`
 
-### 1.9 On IRIS for Health, an interop namespace is a FOUNDATION namespace
+### 1.13 On IRIS for Health, an interop namespace is a FOUNDATION namespace
 
 *Foundation Namespaces* (AFNS), opening line: **"Every interoperability-enabled production needs a
 special interoperability-enabled namespace called a foundation namespace."** This is how an interop
@@ -858,7 +858,7 @@ In 2025+, prefer external services or ObjectScript reimplementation (the 2017+ S
 
 ### 6.7 Custom Business Service with a bare adapter — the case where you DO write the class
 
-Use this shape only when no prebuilt service fits: delimited files are a RecordMap (§1.7), HL7 is
+Use this shape only when no prebuilt service fits: delimited files are a RecordMap (§1.11), HL7 is
 `EnsLib.HL7.Service.FileService` (§2.10). Writing it otherwise means re-implementing a poll loop, a
 parser and a dispatch that already exist.
 

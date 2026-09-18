@@ -3,7 +3,7 @@
 /// Severity: Medium.
 ///
 /// Pattern: the genuine custom-BS case. Use this shape ONLY when no prebuilt service fits —
-/// for delimited files use a RecordMap and configure EnsLib.RecordMap.Service.FileService (§1.7),
+/// for delimited files use a RecordMap and configure EnsLib.RecordMap.Service.FileService (§1.11),
 /// and for HL7 use EnsLib.HL7.Service.FileService (§2.10). Writing this class when a prebuilt
 /// service would do means re-implementing a poll loop, a parser and a dispatch that already exist.
 ///

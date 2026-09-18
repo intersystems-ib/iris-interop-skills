@@ -48,10 +48,12 @@ its siblings.
 
 | Chapter | Rule | File |
 |---|---|---|
-| §1.7 | RecordMap definition for a delimited CSV intake (the only class you author) | `ch01_production/recordmap-censo.cls` |
-| §1.8 | Complete production: prebuilt RecordMap FileService → router → outbound, with Host/Adapter targets | `ch01_production/production-censo-intake.cls` |
+| §1.11 | RecordMap definition for a delimited CSV intake (the only class you author) | `ch01_production/recordmap-censo.cls` |
+| §1.12 | Complete production: prebuilt RecordMap FileService → router → outbound, with Host/Adapter targets | `ch01_production/production-censo-intake.cls` |
 | §2.3 | HL7 v2 escape special characters when building messages manually | `ch02_hl7v2/hl7v2-escape-functionset.cls` |
+| §1.11 | Routing rule for the RecordMap intake — where the DTL belongs instead of a BS subclass | `ch01_production/routing-rule-censo.cls` |
 | §2.10 | HL7 v2 file intake: prebuilt HL7 FileService + the HL7-SPECIFIC router (CR-6) | `ch02_hl7v2/production-hl7-intake.cls` |
+| §2.10 | HL7 routing rule: the HL7 assist class + docCategory/docName constraints (CR-5, CR-6) | `ch02_hl7v2/routing-rule-hl7-adt.cls` |
 | §3.1 | CDA-from-XSD: Persistent + no Relationships + OnDelete Cascade | `ch03_cda/cda-from-xsd-persistence-pattern.cls` |
 | §3.1 | Sibling: the `<component>` child class the §3.1 template cascades to (`Example.CDA.Component`) | `ch03_cda/cda-from-xsd-component.cls` |
 | §3.2 | Comanda/Resposta inheritance for one-of-N subtypes — the abstract envelope | `ch03_cda/comanda-resposta-inheritance.cls` |
@@ -64,6 +66,7 @@ its siblings.
 | §3.4 | SOAP carrying CDA / HL7 as MessageBody — the patched generated proxy | `ch03_cda/soap-messagebody-hl7-proxy.cls` |
 | §3.4 | Sibling: BO half of the same pattern (`Demo.Vendor.BO.AcceptMessage`) | `ch03_cda/soap-messagebody-hl7-operation.cls` |
 | §4.10 | FHIR Facade production wiring (Foundation namespace prerequisite; Facade vs Repository is one ClassName) | `ch04_fhir/production-fhir-facade.cls` |
+| §4.10 | Routing rule for the FHIR Facade — msgClass on HS.FHIRServer.Interop.Request | `ch04_fhir/routing-rule-fhir.cls` |
 | §5.1 | BS that exposes a SOAP service | `ch05_bpl_dtl/soap-business-service.cls` |
 | §5.1 | Sibling: request message of that BS (`Example.MSG.AcceptOrderReq`) | `ch05_bpl_dtl/msg-acceptorder-req.cls` |
 | §5.1 | Sibling: response message of that BS (`Example.MSG.AcceptOrderRsp`) | `ch05_bpl_dtl/msg-acceptorder-rsp.cls` |
@@ -105,6 +108,7 @@ maintained version — no local copy here. See `external-repos.md` for URLs.
 | §2.6 HL7 v2 in XML form | Canonical: `intersystems-ib/Healthcare-HL7-XML` (actively maintained) |
 | §11.1 SAML 2.0 charset fix | Canonical: `intersystems-ib/SAML-COS` (built specifically to address the bug) |
 | §11.4 SAML 1.1 wrapper for e-prescription | Canonical: `intersystems-ib/SAML11-COS` |
+| §7.1 | Alert routing rule — the link that makes the Ens.Alert circuit actually fire | `ch07_alerting/alert-routing-rule.cls` |
 | §9.1 Deployment tool | Canonical: `PYDuquesnoy/IRIS-Interop-Deployment` |
 
 ## Rules without code (process / architecture / version-specific)

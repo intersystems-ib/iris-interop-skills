@@ -1,16 +1,16 @@
-/// Rule: BestPractices_Interop_IRIS.md §1.8 "Production class — the wiring IS the deliverable"
+/// Rule: BestPractices_Interop_IRIS.md §1.12 "Production class — the wiring IS the deliverable"
 /// Validity: Verified against IRIS for Health 2026.1.
 /// Severity: Medium.
 ///
 /// Pattern: a complete production for a delimited-file intake — CSV in, RecordMap, router,
-/// outbound. Read this next to §1.7's RecordMap definition (examples/ch01_production/recordmap-censo.cls).
+/// outbound. Read this next to §1.11's RecordMap definition (examples/ch01_production/recordmap-censo.cls).
 ///
 /// THE POINT OF THE EXAMPLE: there is NO custom Business Service here, and that is correct.
 /// EnsLib.RecordMap.Service.FileService supplies the file adapter, the poll loop and the
 /// per-record dispatch. Writing an Ens.BusinessService subclass for a RecordMap flow is always
 /// wrong, and subclassing the FileService to reshape records does not work either —
 /// FileService.OnProcessInput receives the whole file as a %Stream.Object and has no per-record
-/// hook, so the override replaces the loop it was meant to use (§1.7). Reshaping belongs in a
+/// hook, so the override replaces the loop it was meant to use (§1.11). Reshaping belongs in a
 /// DTL on the router.
 ///
 /// TARGET="Host" vs TARGET="Adapter" IS THE THING TO GET RIGHT. The Portal lists both in one

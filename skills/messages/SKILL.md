@@ -141,7 +141,7 @@ namespace.
 The cascade goes on the class that **references** the object — the message — not on the child:
 
 ```objectscript
-Class MyApp.MSG.PersonReq Extends (%Persistent, Ens.Request)
+Class MyApp.MSG.PersonReqCascade Extends (%Persistent, Ens.Request)
 {
 Property Address As MyApp.DAT.Address;   // %Persistent in this variant
 
