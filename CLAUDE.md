@@ -83,6 +83,26 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   merely unproven, it is measurably **not** the lever. What remains is content-against-prompt: what
   a description *says* relative to the prompts it must match, which is per-skill work with a
   measurement each time, never a rule applied across skills.
+- **Every inline ```objectscript fence that is a complete class IS COMPILED** (tier 3,
+  `scripts/validate_examples.py --compile`). This exists because the snippets people actually read
+  were gated by nothing while the bank was gated and clean — and when the gate was first run, **6
+  of 25 did not compile**, including the canonical BS skeleton. Every defect found in the
+  2026-09-17 audit lived in that ungated text; none was in the bank.
+  - A fence may hold several classes; they are split and compiled separately.
+  - A snippet naming a class it does not ship (`MyApp.Msg.SomeRequest`) is reported as a
+    **placeholder dependency** and does not fail the tier — illustrative names are legitimate.
+  - **What tier 3 does NOT cover, so a clean run is not read as more than it is:** fences holding
+    a bare `Method`/`ClassMethod` (no host class, no knowable superclass) and fences holding loose
+    statements (no compilation unit). Both are counted and printed on every run — currently 20 and
+    33. If you move a rule into one of those, it is ungated again.
+  - Practical consequence when writing a snippet: `;` comments are **not** legal at class-member
+    level (`Parameter X = "…";  ; note` does not compile — use `//`), and a class needs its body
+    braces even in a sketch.
+- **Prefer a compiled example to a prose assertion about an API.** Three methods prescribed by
+  these skills did not exist — `..ValidateSettings()`, `ExecuteUpdateNull`, `StartTransaction` —
+  plus `iris_table_info(schema=…)`. All four read plausibly and none would survive a compile or a
+  `%Dictionary.CompiledMethod` lookup. When you name a method, a parameter or a macro, check it
+  against the running instance, not memory.
 - **A grep gate guards a spelling, not the rule it is named after — say so at the gate** (#151).
   Verifying a home-grown check in both directions (S5 was) proves that one known-bad input reaches
   its failure path. It does not prove the check recognises every violation of the constraint. Where

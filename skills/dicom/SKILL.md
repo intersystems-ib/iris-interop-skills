@@ -170,10 +170,24 @@ outbound. The BS subclasses both `Ens.BusinessService` and `%CSP.REST`:
 
 ```objectscript
 Class DICOM.BS.RESTService Extends (Ens.BusinessService, %CSP.REST)
-XData UrlMap {
+{
+
+Parameter ADAPTER = "";
+
+XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
+{
 <Routes>
     <Route Url="/studies" Method="POST" Call="NewStudy"/>
 </Routes>
+}
+
+/// %CSP.REST dispatches here; the BS half is reached with ..OnProcessInput or by
+/// Ens.Director.CreateBusinessService. See business-services §"REST/CSP entry point".
+ClassMethod NewStudy() As %Status
+{
+    Quit $$$OK
+}
+
 }
 ```
 

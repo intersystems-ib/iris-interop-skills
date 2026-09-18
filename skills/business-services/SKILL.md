@@ -27,46 +27,72 @@ What's the input?
 
 ## Canonical pattern — custom BS skeleton
 
-This is the **subclass** case: it extends the prebuilt `EnsLib.RecordMap.Service.FileService`, which
-already supplies `EnsLib.File.InboundAdapter`. Do **not** also declare `Parameter ADAPTER` — that
-keyword names an *adapter*, and `…Service.FileService` is a Business Service, not one. A BS that
-needs a bare adapter instead extends `Ens.BusinessService` and declares e.g.
-`Parameter ADAPTER = "EnsLib.File.InboundAdapter"`.
+**First decide whether you need a custom BS at all.** For a RecordMap flow you usually do not —
+configure the prebuilt `EnsLib.RecordMap.Service.FileService` and put any reshaping in a DTL on the
+router. See §"Record Mapper — file gotchas" for the prebuilt-component table.
+
+**And know what subclassing `FileService` actually gives you**, because the obvious move does not
+work. Verified against IRIS for Health 2026.1 with `%Dictionary.CompiledMethod`:
+
+| class | `OnProcessInput` receives |
+|---|---|
+| `EnsLib.RecordMap.Service.FileService` | `pInput As %Stream.Object` — **the whole file** |
+| `EnsLib.RecordMap.Service.FTPService` | `pInput As %Stream.Object` — the whole file |
+| `EnsLib.RecordMap.Service.Standard` / `.Base` | `pInput As %RegisteredObject` |
+
+All three take **three** arguments: `(pInput, Output pOutput As %RegisteredObject, ByRef pHint As %String)`.
+
+So overriding `OnProcessInput` on a `FileService` hands you the **stream, not a record**, and
+replaces the record loop that service exists to run — you would have to re-implement parsing.
+There is no per-record hook on it either: `SendRecord()` exists only on the `Batch*` services.
+A 2-argument override typed `pInput As EnsLib.RecordMap.Base` does not compile at all:
+
+```
+ERROR #5478: Keyword signature error in ...:Method:OnProcessInput, keyword 'method argument/s
+signature' must be '%Stream.Object,%Library.RegisteredObject,%Library.String' or its subclass
+```
+
+**The genuine custom-BS case** is a bare adapter, where the signature is yours to define — this is
+the skeleton to copy:
 
 ```objectscript
-Class MyApp.BS.PatientCensusFromCSV Extends EnsLib.RecordMap.Service.FileService
+Class MyApp.BS.PatientCensusFromCSV Extends Ens.BusinessService
 {
+
+Parameter ADAPTER = "EnsLib.File.InboundAdapter";
+
 Parameter SETTINGS = "RequiredField:Basic";
 
-/// TargetConfigNames is already declared by EnsLib.RecordMap.Service.Base — do NOT redeclare it.
+Property TargetConfigNames As %String(MAXLEN = 1000);
+
 Property RequiredField As %String;
 
-/// Hand control to the base class FIRST, then validate.
-/// On a PREBUILT EnsLib service the base OnInit is the only place the host's parser state is
-/// set up — ..recordMapFull for RecordMap services, ..%Parser for EnsLib.HL7.Service.Standard.
-/// Return $$$OK from here without calling ##super() and that state stays "" for the entire life
-/// of the running service: GetObject() ends up calling $classmethod("", …), OnProcessInput's
-/// stream-position guard swallows the error, and the service consumes and DELETES every input
-/// file while producing zero messages and zero Event Log entries — green in the Portal.
+/// Validate settings, and fail loud at startup rather than at first message.
+/// On a PREBUILT EnsLib service you would call ##super() FIRST — the base OnInit is the only
+/// place the parser state is initialised. Here the inherited Ens.BusinessService.OnInit does
+/// nothing by default (ESQL §6.5 "Initializing the Adapter"), so there is nothing to chain to.
 Method OnInit() As %Status
 {
-    Set tSC = ##super()
-    Quit:$$$ISERR(tSC) tSC
-
-    // Validate required settings — fail loud at startup, not at first message
     If ..TargetConfigNames = "" Quit $$$ERROR($$$EnsErrGeneral, "TargetConfigNames is required")
     If ..RequiredField = "" Quit $$$ERROR($$$EnsErrGeneral, "RequiredField is required")
     Quit $$$OK
 }
 
-Method OnProcessInput(pInput As EnsLib.RecordMap.Base, Output pOutput As %RegisteredObject) As %Status
+Method OnProcessInput(pInput As %Stream.Object, Output pOutput As %RegisteredObject) As %Status
 {
-    Set tRequest = ##class(MyApp.Msg.PatientCensusRequest).%New()
-    // populate tRequest from pInput
+    Set tRequest = ##class(Ens.StringContainer).%New()
+    Set tRequest.StringValue = pInput.Read(32000)
     Quit ..SendRequestAsync(..TargetConfigNames, tRequest)
 }
+
 }
 ```
+
+`Ens.StringContainer` stands in for a project message class only so the snippet is self-contained
+and compilable; a real service sends its own `<Pkg>.MSG.<Name>Req`.
+
+Do **not** declare `Parameter ADAPTER` when you extend a prebuilt `…Service.FileService` — that
+keyword names an *adapter*, and `FileService` is a Business Service, not one.
 
 ### `OnProcessInput`'s signature is fixed by the base class — there is not one shape
 

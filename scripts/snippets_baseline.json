@@ -1,0 +1,26 @@
+{
+  "expected_clean": [
+    "App.BS.Preauth",
+    "DICOM.BS.RESTService",
+    "My.Tests.X",
+    "MyApp.BS.PatientCensusFromCSV",
+    "MyApp.DAT.Address",
+    "MyApp.DT.AL1Subtransform",
+    "MyApp.MSG.MenuRequest",
+    "MyApp.MSG.MenuRequestRich",
+    "MyApp.MSG.PatientCensusRequest",
+    "MyApp.MSG.PersonReq",
+    "MyApp.Productions.MainProduction",
+    "MyApp.RecordMap.Censo",
+    "MyApp.Search.HL7",
+    "MyApp.Tests.BO.Menus2Cocina",
+    "MyApp.Tests.BPL.MyProcess",
+    "MyApp.Tests.DT.Censo2Menus",
+    "MyApp.Tests.DTL.PatientCensusToHL7",
+    "MyApp.Tests.Lookup.GeneroPlanta",
+    "MyApp.Tests.Rule.RoutingCenso",
+    "MyApp.UTL.AlertFilterFunctions",
+    "MyApp.UTL.FunctionSet",
+    "REDSA.RecordMap.Ifa"
+  ]
+}
