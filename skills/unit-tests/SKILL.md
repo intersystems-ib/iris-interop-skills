@@ -233,7 +233,7 @@ Method TestControl() As %Status { Quit $$$OK }
 
 Method TestHappyPath()
 {
-    Set tSrc = ##class(MyApp.Msg.PatientCensusRequest).%New()
+    Set tSrc = ##class(MyApp.MSG.PatientCensusRequest).%New()
     Set tSrc.PatientId = "P12345"
     Set tSrc.AdmissionDate = "2026-05-06 10:00:00"
     Set tSrc.Department = "ICU"
@@ -246,7 +246,7 @@ Method TestHappyPath()
 
 Method TestEmptyDepartment()
 {
-    Set tSrc = ##class(MyApp.Msg.PatientCensusRequest).%New()
+    Set tSrc = ##class(MyApp.MSG.PatientCensusRequest).%New()
     Set tSrc.PatientId = "P12345"
     Set tSC = ##class(MyApp.DT.PatientCensusToADT).Transform(tSrc, .tTarget)
     Do $$$AssertStatusOK(tSC)

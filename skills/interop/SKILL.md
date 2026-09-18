@@ -271,11 +271,24 @@ The skeleton, identical for every case — take a parameter, return a **string**
 happened, never a bare `%Status`:
 
 ```objectscript
-/// Headless bootstrap. Invoke via: SELECT MyApp.Bootstrap_DoTheThing('arg')
-ClassMethod DoTheThing(pArg As %String = "") As %String [ SqlProc ]
+/// Host class for headless bootstrap procedures. Shown WITH its class wrapper deliberately: as a
+/// bare `ClassMethod` this snippet had no compilation unit, so no tier could compile it and the
+/// one thing a reader most needs to get right — the `[SqlProc]` keyword surviving a real compile —
+/// was gated by nothing.
+Class MyApp.Bootstrap Extends %RegisteredObject
 {
-    Set sc = ##class(Some.Generator).DoIt(pArg)      // the call iris_execute would swallow
+
+/// The shape is identical for every API in the table below: take a parameter, and return a
+/// **string** that says what happened — never a bare `%Status`. In HTTP CodeMode a returned status
+/// is not captured, so a failure is indistinguishable from a success.
+/// Invoke via: SELECT MyApp.Bootstrap_GenerateRecordMap('MyApp.RecordMap.Censo')
+ClassMethod GenerateRecordMap(pMap As %String = "") As %String [ SqlProc ]
+{
+    // the object-generator call iris_execute would silently swallow
+    Set sc = ##class(EnsLib.RecordMap.Generator).GenerateObject(pMap)
     Quit $Select($$$ISOK(sc): "ok", 1: "FAIL: " _ $system.Status.GetErrorText(sc))
+}
+
 }
 ```
 

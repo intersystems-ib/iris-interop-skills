@@ -169,6 +169,38 @@ materialises each part as `EnsLib.DICOM.Document`, then forwards to a DIMSE
 outbound. The BS subclasses both `Ens.BusinessService` and `%CSP.REST`:
 
 ```objectscript
+/// The message carried to the BP: the Ids of the DICOM documents built from one upload.
+/// `%Persistent` leftmost so this gets its OWN extent (`messages` §"Why `%Persistent` must be
+/// leftmost"). Note the external workshop's equivalent is `DICOM.Msg.StowRsReq`, which extends
+/// `Ens.Request` alone and hand-writes a `Storage` block — neither is what this plugin prescribes,
+/// and the external tree is compiled by no tier, so nothing has ever checked it.
+Class DICOM.MSG.StowRsReq Extends (%Persistent, Ens.Request)
+{
+
+Property DICOMDocumentIdList As list Of %String;
+
+/// Purging the message must not orphan the documents it points at. `Ens.Util.Tasks.Purge` deletes
+/// the header; without this the `EnsLib.DICOM.Document` rows accumulate with no error anywhere.
+ClassMethod %OnDelete(oid As %ObjectIdentity) As %Status [ Private, ServerOnly = 1 ]
+{
+    Set tObj = ..%OpenId($$$oidPrimary(oid))
+    Quit:'$IsObject(tObj) $$$OK
+    For i=1:1:tObj.DICOMDocumentIdList.Size {
+        Do ##class(EnsLib.DICOM.Document).%DeleteId(tObj.DICOMDocumentIdList.GetAt(i))
+    }
+    Quit $$$OK
+}
+
+}
+```
+
+The service itself. **`Include EnsDICOM` must sit directly above the class**, not further up the file:
+it is what defines `$$$Str2MsgTyp`, and an `Include` separated from its class by anything else is a
+different file layout than the one that compiles.
+
+```objectscript
+Include EnsDICOM
+
 Class DICOM.BS.RESTService Extends (Ens.BusinessService, %CSP.REST)
 {
 
@@ -181,15 +213,58 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 </Routes>
 }
 
-/// %CSP.REST dispatches here; the BS half is reached with ..OnProcessInput or by
-/// Ens.Director.CreateBusinessService. See business-services §"REST/CSP entry point".
+/// %CSP.REST dispatches here as a CLASSMETHOD, so it has no BS instance — that is why
+/// Ens.Director.CreateBusinessService is the first line and not an afterthought. The name it takes
+/// is the production ITEM name, not this class name.
 ClassMethod NewStudy() As %Status
 {
-    Quit $$$OK
+    Set tSC = $$$OK
+    Try {
+        $$$ThrowOnError(##class(Ens.Director).CreateBusinessService("DICOM REST Service", .tService))
+        Set tMsg = ##class(DICOM.MSG.StowRsReq).%New()
+
+        // Walk the multipart/related parts. NextMimeData("") starts the iteration and returns ""
+        // when exhausted — a `while` on the name, not an index.
+        Set tName = %request.NextMimeData("")
+        While tName '= "" {
+            Set tPart = %request.GetMimeData(tName)
+            If tPart.Attributes("ContentType") = "application/dicom" {
+                $$$ThrowOnError(##class(EnsLib.DICOM.Document).CreateFromDicomFileStream(tPart, .tDoc))
+                Do tDoc.SetValueAt($$$Str2MsgTyp("C-STORE-RQ"), "CommandSet.CommandField")
+                Do tDoc.%Save()          // assigns the Id used as the BP payload pointer
+                Do tMsg.DICOMDocumentIdList.Insert(tDoc.%Id())
+            }
+            Set tName = %request.NextMimeData(tName)
+        }
+
+        $$$ThrowOnError(tService.OnProcessInput(tMsg))
+        Set %response.Status = ..#HTTP202ACCEPTED   // async: the documents are not stored yet
+    } Catch ex {
+        Set %response.Status = ..#HTTP500INTERNALSERVERERROR
+        Set tSC = ex.AsStatus()
+        $$$LOGERROR(ex.DisplayString())
+    }
+    Quit tSC
 }
 
 }
 ```
+
+Three things in there that a shortened version of this class loses, and all three are silent:
+
+- **`Include EnsDICOM`** — `$$$Str2MsgTyp` is a macro from it. Without the include the class does not
+  compile, so a fence that omits it cannot be the fence you copy.
+- **The content-type test.** A part that is not `application/dicom` is skipped. Drop the test and a
+  stray part becomes a `CreateFromDicomFileStream` failure on an upload that looked valid.
+- **A body at all.** This method used to read `Quit $$$OK` in this skill. That compiles, and the
+  endpoint then answers **200 to every POST while discarding every study** — the worst shape of
+  failure available to an ingest endpoint, and the reason the gate compiling this fence green was
+  never evidence that it worked.
+
+`CreateFromDicomFileStream` declares its first parameter as `%FileBinaryStream`, while
+`%request.GetMimeData()` returns a stream that is not necessarily file-backed. ObjectScript does not
+enforce the declared type, and the workshop code passes the MIME part directly — but if you see a
+stream-related error inside the call, that mismatch is the first thing to check.
 
 Per-part flow:
 

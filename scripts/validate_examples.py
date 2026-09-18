@@ -594,6 +594,15 @@ SNIPPET_BASELINE = Path(__file__).resolve().parent / "snippets_baseline.json"
 # A fence may hold more than one class (messages/SKILL.md does), and may be preceded by an
 # Include line that belongs to the class. Split on the class boundary, keeping any Include.
 _CLASS_START = re.compile(r"(?im)^(?=(?:Include\s+[^\n]+\n+)?\s*Class\s+[\w.%]+\s+Extends)")
+# Lines that legitimately PRECEDE a class and belong to it: blank lines, `//` comments (`///`
+# included), `;` comments, and `Include` directives.
+#
+# `Include` is here because _CLASS_START's optional `(?:Include...)?` prefix cannot do the job: the
+# lookahead matches at the Include position AND at the Class position, so re.split() always cut
+# between them and the directive was dropped from the staged class. `$$$Str2MsgTyp` / `$$$Sql*` come
+# from an Include, so a fence that needs one was being compiled without it.
+_COMMENT_ONLY = re.compile(
+    r"\A(?:[^\S\n]*(?://[^\n]*|;[^\n]*|Include\s+[^\n]*)?\n)*[^\S\n]*\Z")
 
 
 def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
@@ -610,6 +619,7 @@ def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
     """
     out: dict[str, tuple[str, str]] = {}
     dupes: list[str] = []
+    indented: list[str] = []
     members = fragments = 0
     for md in sorted(SKILLS.glob("*/SKILL.md")):
         skill = md.parent.name
@@ -622,11 +632,34 @@ def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
                     fragments += 1
                 continue
             parts = [p for p in _CLASS_START.split(block) if p.strip()]
+            # _CLASS_START splits immediately BEFORE `Class`, so a `///` doc comment written
+            # above the class becomes a nameless part: counted as a loose fragment AND dropped
+            # from what is compiled, i.e. the class is gated without the `/// Rule:` header that
+            # is this repo's whole convention. Re-attach it to the class it documents.
+            #
+            # MEASURED, so the comment does not overclaim: this was LATENT, not active. Re-running
+            # the fixed parser over the pre-fix content gives an identical 26 classes / 34
+            # fragments, so no fence had ever carried a leading doc comment. It was tripped by the
+            # first snippet class written with one -- which C9 caught on its first real outing, as
+            # a fragment count that rose 34 -> 35 for an edit that added no fragment.
+            pending = ""
             for part in parts:
                 names = class_names(part)
                 if len(names) != 1:
-                    fragments += 1
+                    if not names and _COMMENT_ONLY.match(part):
+                        pending += part
+                    else:
+                        # A fence whose `Class` line is INDENTED (written inside a markdown list)
+                        # reaches here: the outer search tolerates leading whitespace but
+                        # class_names() does not -- correctly, since ObjectScript requires column 0.
+                        # Counting it as a loose fragment was silent, and hid a class the reader
+                        # would copy verbatim into something that cannot compile. Say so.
+                        if re.search(r"(?m)^[ \t]+Class\s+[\w.%]+\s+Extends", part):
+                            indented.append(f"{skill}: {re.search(r'(?m)^[ \t]+Class\s+([\w.%]+)', part).group(1)}")
+                        fragments += 1
+                        pending = ""
                     continue
+                part, pending = pending + part, ""
                 # A name that appears in two fences used to be SILENTLY OVERWRITTEN here, so the
                 # run printed "staging N classes" while one fence was never compiled at all --
                 # the exact shape of silent gap this tier exists to close. Measured when found:
@@ -635,6 +668,13 @@ def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
                 if names[0] in out:
                     dupes.append("%s (in %s and %s)" % (names[0], out[names[0]][1], skill))
                 out[names[0]] = (part, skill)
+            if pending.strip():
+                fragments += 1  # trailing comment with no class after it
+    if indented:
+        print("  INDENTED CLASS FENCE -- not staged, and not copy-pasteable (ObjectScript needs")
+        print("  `Class` at column 0). Dedent the fence:")
+        for i in indented:
+            print(f"      {i}")
     return out, members, fragments, dupes
 
 
@@ -710,6 +750,27 @@ def tier3() -> bool:
                 iris.delete(f"{cn}.cls")
             except (urllib.error.HTTPError, urllib.error.URLError):
                 left.append(cn)
+
+        # Deleting the CLASS does not deregister a SearchTable's properties: a row survives in
+        # Ens_Config.SearchTableProp keyed `<Class>~<ExtentSuperclass>`. Re-staging the same name
+        # is fine, so a repeated run stays green and the leak is invisible -- but RENAME a
+        # SearchTable snippet and the next run fails with
+        #   <EnsSearchTable>PropCollision: Property 'X' in class 'New' cannot override the
+        #   definition from class 'Old'
+        # naming a class that no longer exists anywhere. Measured on 2026-09-18: that is exactly
+        # what N8 (MyApp.Search.HL7 -> MyApp.Search.Hl7Adt) hit, and renaming is a Wave 0 activity,
+        # so it would have recurred. CI never sees it -- a fresh container has no prior row -- which
+        # is precisely why it has to be cleaned here rather than left to be rediscovered.
+        registered = [cn for cn in staged if "SearchTable" in sources.get(cn, ("", ""))[0]]
+        if registered:
+            where = " OR ".join(f"ClassDerivation LIKE '{cn}~%'" for cn in registered)
+            try:
+                iris.query(f"DELETE FROM Ens_Config.SearchTableProp WHERE {where}")
+                print(f"  deregistered            : {len(registered)} SearchTable prop set(s)")
+            except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+                print(f"  SearchTable props LEFT REGISTERED ({exc}) -- a later rename will "
+                      f"fail with PropCollision naming a class that no longer exists")
+
         msg = f"  cleanup                 : {len(staged) - len(left)} deleted"
         if left:
             msg += f", {len(left)} LEFT BEHIND: {left}"

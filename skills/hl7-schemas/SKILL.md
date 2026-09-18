@@ -66,8 +66,12 @@ Use case: receiving ADT_A01 messages that include a custom `ZPI` segment carryin
 7. **Assign to the BS** (see `business-services`):
 
    ```xml
-   <Setting Target="Host" Name="MessageSchemaCategory">MyApp_2.5:ADT_A01</Setting>
+   <Setting Target="Host" Name="MessageSchemaCategory">MyApp_2.5</Setting>
    ```
+
+   The **category only** — never `MyApp_2.5:ADT_A01`. The service concatenates this value with MSH-9
+   to build the DocType, so a colon here yields `MyApp_2.5:ADT_A01:ADT_A01` and resolves nothing.
+   Step 8's `sourceDocType` is a different thing and *does* take the full `category:structure`.
 
 8. **In the DTL**: declare `sourceDocType='MyApp_2.5:ADT_A01'` on `<transform>`. Symbolic field names now resolve for both standard fields (PID, PV1) and the custom ones (ZPI).
 
@@ -362,7 +366,7 @@ A complete custom-schema artefact set has three parts, all source-controlled on 
 
 ## When custom schema is NOT necessary
 
-If the messages are standard ADT_A01 v2.5 — no Z-segments, no overridden fields — just assign `MessageSchemaCategory="2.5:ADT_A01"` and don't author a custom category. Defining `MyApp_2.5` as an empty copy of `2.5` adds maintenance burden with no benefit, and version upgrades won't auto-propagate to your "custom" category.
+If the messages are standard ADT_A01 v2.5 — no Z-segments, no overridden fields — just assign `MessageSchemaCategory="2.5"` and don't author a custom category. Defining `MyApp_2.5` as an empty copy of `2.5` adds maintenance burden with no benefit, and version upgrades won't auto-propagate to your "custom" category.
 
 ## Escaping special characters when building HL7 v2 strings by hand
 
@@ -388,7 +392,21 @@ Helper FunctionSet pattern (`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_h
 - Editing a built-in category instead of creating a custom one → upgrades will overwrite changes.
 - Removing a field from a custom schema while DTLs still reference it → DTL compile fails (good — but at runtime if you slip).
 - Forgetting that schema categories are **per-namespace** — same name in different namespaces are unrelated.
-- **`MessageSchemaCategory="2.5"` without `:MessageType`** — DTLs lose symbolic field-name resolution and fall back to numeric paths (`PID:3.1` instead of `PID:PatientIdentifierList(1).ID`). Always combine: `Version:MessageType` (e.g. `2.5:ADT_A01`).
+- **`MessageSchemaCategory="2.5:ADT_A01"` — a DocType where a category belongs.** This entry used to
+  say the opposite (that a bare `2.5` loses symbolic resolution and you must "always combine
+  `Version:MessageType`"). Measured on 2026.1 via the service's own resolution step,
+  `EnsLib.HL7.Schema.ResolveSchemaTypeToDocType()`:
+
+  | value | MSH-9 | result |
+  |---|---|---|
+  | `2.5` | `ADT_A01` | DocType `2.5:ADT_A01`, `$$$OK` — symbolic paths resolve |
+  | `2.5` | `ADT_A08` | DocType `2.5:ADT_A01` — a DocType names the **structure**, not the trigger event |
+  | `2.5:ADT_A01` | `ADT_A01` | `<Ens>ErrGeneral: DocType not found for message type 2.5:ADT_A01:ADT_A01` |
+
+  The setting is **concatenated** with MSH-9, so the colon form cannot resolve at all — it does not
+  "pin" the structure, it fails. Both spellings look interchangeable because both are `a:b`: a
+  **DocType** is `category:structure` and belongs in `sourceDocType` / `DocTypeSet()`; a **schema
+  category** is the left half alone and is what `MessageSchemaCategory` takes.
 - **`--` inside an XML comment breaks the schema import.** `<!-- accepts what the hospital sends -- unpatched -->`
   fails with `ERROR #6301: SAX XML Parser Error: '--' sequence is illegal in comment`. The schema XML is
   parsed strictly (it is an XML rule, not an IRIS quirk); use an em-dash or a second comment instead.

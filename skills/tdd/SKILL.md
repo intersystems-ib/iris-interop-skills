@@ -383,7 +383,7 @@ Method TestEmptyAlergiasToNull()
 {
     ; Catches marshalling bugs that no stub would: does the real JDBC driver
     ; translate "" to SQL NULL, or to empty string?
-    Set req = ##class(MyApp.Msg.MenuRequest).%New()
+    Set req = ##class(MyApp.MSG.MenuRequest).%New()
     Set req.PacienteId = "TEST-EMPTY"
     Set req.Nombre = "X"  Set req.Apellidos = "Y"  Set req.TipoDieta = "Basal"
     Set req.Alergias = ""
@@ -419,7 +419,7 @@ Method OnBeforeAllTests() As %Status
 /// Verifies that BP.MyProcess receives a request and returns a response object
 Method TestProcessReceivesAndForwards()
 {
-    Set req = ##class(MyApp.Msg.SomeRequest).%New()
+    Set req = ##class(MyApp.MSG.SomeRequest).%New()
     Set req.Field = "value"
     Do $$$AssertStatusOK(..SendRequest("BP.MyProcess", req, .resp, 1, 30))
     ; SendRequest with GetReply=1 waits for the response. Resp is now populated.

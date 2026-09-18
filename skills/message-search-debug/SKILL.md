@@ -287,7 +287,7 @@ Everything above assumes someone already declared the fields. Authoring one is a
 plus one production setting:
 
 ```objectscript
-Class MyApp.Search.HL7 Extends EnsLib.HL7.SearchTable
+Class MyApp.Search.Hl7Adt Extends EnsLib.HL7.SearchTable
 {
 XData SearchSpec [ XMLNamespace = "http://www.intersystems.com/EnsSearchTable" ]
 {
@@ -322,7 +322,7 @@ and `EnsLib.HL7.Operation.Standard`, so **every** HL7 service and operation carr
 <Item Name="BS.AdtIn" ClassName="EnsLib.HL7.Service.FileService" Enabled="true">
   <Setting Target="Adapter" Name="FilePath">/data/hl7in</Setting>
   <Setting Target="Host"    Name="MessageSchemaCategory">2.5</Setting>
-  <Setting Target="Host"    Name="SearchTableClass">MyApp.Search.HL7</Setting>
+  <Setting Target="Host"    Name="SearchTableClass">MyApp.Search.Hl7Adt</Setting>
   <Setting Target="Host"    Name="TargetConfigNames">BO.AdtOut</Setting>
 </Item>
 ```
@@ -331,7 +331,7 @@ Or on a running production, without editing the class:
 
 ```
 iris_production_item(action="set_settings", item="BS.AdtIn", production="MyApp.Production",
-                     settings={"SearchTableClass": "MyApp.Search.HL7"}, namespace="APP")
+                     settings={"SearchTableClass": "MyApp.Search.Hl7Adt"}, namespace="APP")
 ```
 
 (That changes the namespace only — pull the production class back to `src/` afterwards, see
@@ -347,7 +347,7 @@ are queried by `PropId` exactly as shown in Join 2 — the subclass never gets a
 Verified end to end: an `ADT_A01` through a `FileService` with the above settings produced six rows
 for one message — four built-in (`MSHControlID`, `MSHTypeName`, `PatientID`, `PatientName`) and two
 from the custom subclass, the latter carrying
-`ClassDerivation = MyApp.Search.HL7~EnsLib.HL7.SearchTable`. A built-in prop whose field is empty
+`ClassDerivation = MyApp.Search.Hl7Adt~EnsLib.HL7.SearchTable`. A built-in prop whose field is empty
 in the message simply gets no row (`PatientAcct` was absent because PID-18 was).
 
 #### `PropValue` is stored LOWERCASED under the default `PropType`

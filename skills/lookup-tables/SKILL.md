@@ -22,7 +22,34 @@ The user wants to map source codes to target codes — e.g. internal department 
   bare `Lookup(...)` in a business rule; the bare form inside a DTL compiles and then throws
   `<UNDEFINED>` at `Transform()` time (see `transformations` §"Calling a utility function").
   Third parameter is what to return on miss.
-- Also accessible from ObjectScript via `##class(Ens.Util.LookupTable).GetValue("TableName", key, .value)`.
+- Also accessible from ObjectScript — but **check the spelling and the third argument**, because the
+  obvious reading of both is wrong. Verified against `%Dictionary.CompiledMethod` on IRIS for Health
+  2026.1:
+
+```objectscript
+/// Wrapped in a class on purpose: as loose statements this was a claim ABOUT an API, and the
+/// previous claim here named a method (`GetValue`) that does not exist. As a class the gate
+/// compiles it, so the signature below is checked rather than asserted.
+Class MyApp.UTL.CodeLookup Extends %RegisteredObject
+{
+
+/// `%GetValue(pTableName, pKeyName, &pExists)` — the VALUE is the RETURN; the third argument is a
+/// by-ref "was the key found" flag, NOT a default. There is no `GetValue` without the leading `%`.
+ClassMethod Translate(pTable As %String, pKey As %String, pDefault As %String = "") As %String
+{
+    Set tValue = ##class(Ens.Util.LookupTable).%GetValue(pTable, pKey, .tExists)
+    // A miss and a stored empty string are BOTH "", so pExists is the only way to tell them apart.
+    Quit $Select('tExists: pDefault, 1: tValue)
+}
+
+}
+```
+
+  A miss returns `""`, which is indistinguishable from a key whose stored value is empty — `.pExists`
+  is the only way to tell them apart. If what you want is *value-or-default* rather than
+  *value-plus-did-it-exist*, use the FunctionSet instead, which is also what DTL's `..Lookup()` calls:
+  `##class(Ens.Util.FunctionSet).Lookup(table, value, default, defaultOnEmptyInput)` — the fourth
+  argument (default `0`) decides whether an **empty input key** also returns the default.
 - Lookup tables **export with the production** — they're part of the deploy bundle.
 
 ## When to use a lookup table vs. an inline switch / if
@@ -88,6 +115,13 @@ obvious-looking mask is the broken one:
   `$ZSTRIP(x,"*E")` both return the empty string for every input. That failure is silent — the
   helper returns, every lookup misses, and with the DTL below's `""` default every message throws
   `InvalidDieta` instead. Prefer `"*WC"` and fold accents explicitly.
+- **`"*WC"` strips INTERNAL whitespace too, not just the ends.** `"  Diabetica Fria  "` → `DiabeticaFria`.
+  Every worked example above is a single word, so this never shows up in them. If spaces inside the key
+  are significant, trim with `"<>W"` (`→ "Diabetica Fria"`) instead of stripping with `"*WC"`.
+
+The same broken mask shipped in `transformations` §"Custom DTL functions via FunctionSet subclass"
+until 2026-09-18 — this note was correct and the other copy was not, which is exactly what made the
+other copy look trustworthy. Keep the two in step.
 
 Do not reach for the `$ZCONVERT(..., "O", "UTF8")` / `$ZCONVERT(..., "I", "Latin1")` round trip to
 strip accents. Measured leg by leg on 2026.1, it fails **twice, in two different ways**:

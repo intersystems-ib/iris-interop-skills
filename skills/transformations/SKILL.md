@@ -156,10 +156,34 @@ ClassMethod ParseFechaDDMMYYYY(value As %String) As %Date [ Final ]
 
 ClassMethod NormalizeKey(value As %String) As %String [ Final ]
 {
-    Quit $ZSTRIP($ZCONVERT(value, "L"), "*-CWE")    // lowercase + strip whitespace/control/diacritics-like
+    // Mask is "*WC" and accents are folded EXPLICITLY -- see the warning below before changing it.
+    Set tAccents = "áéíóúàèìòùäëïöüâêîôûñç", tPlain = "aeiouaeiouaeiouaeiouncc"
+    Quit $TRANSLATE($ZSTRIP($ZCONVERT(value, "L"), "*WC"), tAccents, tPlain)
 }
 }
 ```
+
+**The mask is the whole difficulty, and `$ZSTRIP` masks are validated at RUNTIME — this class
+compiles clean whichever one you write, so tier 2 can never catch a wrong one.** This method used to
+carry `"*-CWE"` with the comment "strip whitespace/control/diacritics-like". Measured on IRIS for
+Health 2026.1 against `"  Diabetica Fria  "`:
+
+| mask | result |
+|---|---|
+| `*-CWE` | **raises `<FUNCTION>`** — every call, every message |
+| `*CWE`, `*E` | `""` — the empty string for *every* input. `E` does not mean "ASCII punctuation"; it strips everything (#114) |
+| `*WC` | `DiabeticaFria` — note it removes **internal** whitespace too, not just the ends |
+| `<>W` | `Diabetica Fria` — leading/trailing only |
+
+Two consequences worth keeping straight. `<FUNCTION>` at least fails loudly; `""` does not — the
+helper returns, every lookup misses, and with a `""` default the DTL rejects every message for a
+reason that names the data rather than the mask. And if your keys contain spaces that *matter*, `*WC`
+is not the mask you want: use `<>W` to trim only the ends. There is no mask that folds accents, which
+is why `$TRANSLATE` does it above.
+
+The canonical version of this note, with the `$ZCONVERT` round-trip that also fails, is
+`lookup-tables` §"Two `$ZSTRIP` traps" (#114). It was already correct while this section was wrong;
+change one and change the other.
 
 ### A custom function is called `##class(...)`-qualified — the opposite of a built-in
 

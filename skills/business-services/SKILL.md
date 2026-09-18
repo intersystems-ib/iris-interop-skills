@@ -297,7 +297,7 @@ nesting level (one element for a flat CSV).
 **`targetClassname` is the class the generator will create**, and it is free — it does not have to
 be `<RecordMap class>.Record`. Both conventions are in production use: a `.Record` suffix on the
 map's own name (`MyApp.RecordMap.Censo` → `MyApp.RecordMap.Censo.Record`), or a sibling package
-(`REDSA.RecordMap.Ifa` → `REDSA.Record.Ifa`). `name` is the record's identifier; it commonly
+(`MyApp.RecordMap.Invoice` → `MyApp.Record.Invoice`). `name` is the record's identifier; it commonly
 mirrors either the map class or `targetClassname`.
 
 **On `xmlns`**: the `XMLNamespace` on the `XData` header is what matters. Repeating it as
@@ -309,16 +309,16 @@ it. Both `http://www.intersystems.com/recordmap` and
 ### Fixed-width instead of delimited
 
 `type="fixedWidth"` — **camelCase**. No `<Separators>`; every `<Field>` carries `position` (1-based,
-absolute within the record) and `width`. Verbatim from a running production, one of eight
-fixed-width maps generated at container start:
+absolute within the record) and `width`. A production-shaped invoice record — absolute offsets, a
+600-char line, a trailing `FILLER` — with identifiers genericised:
 
 ```objectscript
-Class REDSA.RecordMap.Ifa Extends EnsLib.RecordMap.RecordMap
+Class MyApp.RecordMap.Invoice Extends EnsLib.RecordMap.RecordMap
 {
 
 XData RecordMap [ XMLNamespace = "http://www.intersystems.com/recordmap" ]
 {
-<Record name="REDSA.Record.Ifa" type="fixedWidth" recordTerminator="&#10;" targetClassname="REDSA.Record.Ifa">
+<Record name="MyApp.Record.Invoice" type="fixedWidth" recordTerminator="&#10;" targetClassname="MyApp.Record.Invoice">
   <Field name="TipoReg"       datatype="%String" position="1"   width="3"  />
   <Field name="NumFactura"    datatype="%String" position="4"   width="15" />
   <Field name="NumAlbaran"    datatype="%String" position="19"  width="15" />
@@ -645,14 +645,52 @@ iris_production_item(namespace="<NS>", action="set_settings", item="<BS item>",
 
 ## HL7 Business Service: schema assignment is **non-negotiable**
 
-For any HL7 BS (`EnsLib.HL7.Service.FileService`, `TCPService`, `SOAPService`, etc.) **always assign Version + MessageType** — not just version. The standard format combines both as a colon-separated `MessageSchemaCategory`:
+For any HL7 BS (`EnsLib.HL7.Service.FileService`, `TCPService`, `SOAPService`, etc.) **always assign
+`MessageSchemaCategory`** — an HL7 service with none parses every message as generic, and only numeric
+paths resolve (see "Why this matters" below).
+
+Assign the **category alone**. Quoting the property's own description on 2026.1: it is the *"category
+to apply to incoming message types to produce a complete DocType specification… combines with the
+document type Name (MSH:9)"*. So the version is what you set, and the structure comes from each
+message:
 
 ```xml
 <Item Name="BS.HL7Census" ClassName="EnsLib.HL7.Service.FileService" ...>
-  <Setting Target="Host" Name="MessageSchemaCategory">2.5:ADT_A01</Setting>
+  <Setting Target="Host" Name="MessageSchemaCategory">2.5</Setting>
   ...
 </Item>
 ```
+
+This corrects earlier guidance in this skill to "always assign Version + MessageType" as a
+colon-separated `2.5:ADT_A01`. **That form does not work at all** — measured on 2026.1 by calling the
+service's own resolution step, `EnsLib.HL7.Schema.ResolveSchemaTypeToDocType()`:
+
+| `MessageSchemaCategory` | MSH-9 | Result |
+|---|---|---|
+| `2.5` | `ADT_A01` | DocType `2.5:ADT_A01`, `$$$OK` |
+| `2.5` | `ADT_A08` | DocType `2.5:ADT_A01` — the DocType names the **structure**, not the trigger event |
+| `2.5:ADT_A01` | `ADT_A01` | `<Ens>ErrGeneral: DocType not found for message type 2.5:ADT_A01:ADT_A01` |
+
+The category is **concatenated** with MSH-9, so a colon-separated value produces the nonsense
+`2.5:ADT_A01:ADT_A01` and resolves nothing. The gated example
+(`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_hl7v2/production-hl7-intake.cls`) has always used
+the bare category.
+
+**The conflation to avoid, because both are written `a:b` and only one of them belongs here:** a
+**DocType** is `category:structure` (`2.5:ADT_A01`) and is what you put in a DTL's `sourceDocType` or
+pass to `DocTypeSet()`. A **schema category** is the left half alone, and is what this setting takes.
+
+A colon does appear in this setting, but only inside a **per-type override**, never as the whole
+value. The full grammar is a comma-separated list where each entry after the default category maps a
+type Name (with `*` as a trailing wildcard) to a category or a full DocType:
+
+```xml
+<Setting Target="Host" Name="MessageSchemaCategory">2.3.1, ADT_*=2.5, BAR_P10=2.4, ORM_O01_6=2.4:RDE_O01</Setting>
+```
+
+Use that when one feed mixes versions. Note also, from the same description: *"a DocType assignment
+may be needed for Validation or SearchTableClass indexing"* — an unassigned DocType silently disables
+both.
 
 If the messages are **Ad-hoc** — Z-segments, custom structures, fields the standard schema doesn't expose — define an Ad-hoc HL7 schema via Management Portal → Interoperability → Build → HL7 Schema Editor (see `hl7-schemas`) and reference it with the same `MessageSchemaCategory` setting.
 
@@ -714,13 +752,22 @@ This requires `EnsLib.SOAP.InboundAdapter` (an adapter that strips Authorization
 When the BS is invoked from REST/CSP code (an `%CSP.REST` handler, a custom CSP page, etc.) rather than from a transport adapter, the pattern is a custom BS class with **no adapter at all**:
 
 ```objectscript
+/// The request this endpoint accepts. Declared in the SAME fence as the service so the pair is a
+/// complete compilation unit — with the class referenced but never shown, the gate could only
+/// report the service as a placeholder dependency and never actually compile it.
+/// `%Persistent` is leftmost deliberately: see `messages` §"Why `%Persistent` must be leftmost".
+Class MyApp.MSG.SomeRequest Extends (%Persistent, Ens.Request)
+{
+Property Payload As %String(MAXLEN = 4096);
+}
+
 Class MyApp.BS.RestEntry Extends Ens.BusinessService
 {
 Parameter ADAPTER;
-Parameter SERVICEINPUTCLASS = "MyApp.Msg.SomeRequest";
+Parameter SERVICEINPUTCLASS = "MyApp.MSG.SomeRequest";
 Parameter SERVICEOUTPUTCLASS = "Ens.Response";
 
-Method OnProcessInput(pInput As MyApp.Msg.SomeRequest, Output pOutput As Ens.Response) As %Status
+Method OnProcessInput(pInput As MyApp.MSG.SomeRequest, Output pOutput As Ens.Response) As %Status
 {
     Set pOutput = ##class(Ens.Response).%New()
     Set tSC = ..SendRequestAsync("Router.MyRouter", pInput)

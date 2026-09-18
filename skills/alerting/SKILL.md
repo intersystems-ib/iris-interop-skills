@@ -60,38 +60,21 @@ Two real, repeatedly observed failure modes flood the alert mailbox:
 
 Defend with a portable function set (`Ens.Rule.FunctionSet` extension) called from the `Ens.Alert` routing rule:
 
-```objectscript
-Class MyApp.UTL.AlertFilterFunctions Extends Ens.Rule.FunctionSet [ LegacyInstanceContext, Not ProcedureBlock ]
-{
+**Do not hand-write it — it is already gated.** The worked, compiled version is
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch07_alerting/alert-dedup-functionset.cls`
+(`Demo.FilterAlerts.FunctionSet`). This section used to carry its own inline copy, and the copy had
+drifted into a **defective fork** of that file — it compiled clean, so nothing caught it. Both of its
+defects are the kind that leave the production green:
 
-/// True if (SourceConfigName, ErrorMessage) was already reported within Interval seconds today.
-ClassMethod AlreadyReportedErr(SourceConfigName, ErrorMessage, Interval = 60) As %Boolean
-{
-    set datetime=$H, day=+datetime, seconds=$p(datetime,",",2)
-    kill ^FilterAlerts("Err",day-1)  // Purge previous day
-    if $data(^FilterAlerts("Err",day,seconds\Interval,$extract(ErrorMessage,1,200))) {
-        quit 1
-    } else {
-        set ^FilterAlerts("Err",day,seconds\Interval,$extract(ErrorMessage,1,200))=""
-    }
-    quit 0
-}
+| The obvious form | Why it fails | What the gated version does |
+|---|---|---|
+| `set SessionId=%Ensemble("SessionId")` | `%Ensemble` exists only inside a business-host process. Referenced bare from anywhere else — a terminal call, a unit test outside a production — it raises `<UNDEFINED>`, which surfaces as a rule-evaluation error and **loses the alert** you were trying to protect. | `$get(%Ensemble("SessionId"))` and `quit:SessionId="" 0` — with no session context the honest answer is "not reported yet", so the alert goes through instead of erroring. |
+| `kill ^FilterAlerts("Err",day-1)` | Only ever reaches **yesterday**. Every day on which no alert is evaluated leaks its subtree permanently: after a quiet weekend, Friday's and Saturday's buckets are never revisited and stay in the global for ever. | a `PurgeDaysBefore(pKind, pToday)` helper that drops *every* older subtree. |
 
-/// True if any alert was already produced for this Ensemble session today.
-ClassMethod AlreadyReportedPerSession() As %Boolean
-{
-    set SessionId=%Ensemble("SessionId"), day=+$H
-    kill ^FilterAlerts("Session",day-1)
-    if ($data(^FilterAlerts("Session",day,SessionId))) {
-        quit 1
-    } else {
-        set ^FilterAlerts("Session",day,SessionId)=""
-    }
-    quit 0
-}
-
-}
-```
+Read the file for the two contract surprises that are easy to get wrong in either version: the window
+is a **fixed** `seconds \ Interval` bucket and not a sliding one, and `SourceConfigName` is accepted
+but deliberately **not** part of the key — keying on the error text alone is what makes the
+BP-and-BO-in-one-session case dedupe at all.
 
 Wire it in the `Ens.Alert` routing rule as a guard:
 

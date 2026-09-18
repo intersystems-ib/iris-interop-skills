@@ -92,7 +92,7 @@ When a single origin needs to fan out to multiple destinations (e.g. CSV → Pos
     </when>
   </rule>
   <rule name="CensoREST">
-    <constraint name="msgClass" value="MyApp.Msg.MenuRequestRich"/>
+    <constraint name="msgClass" value="MyApp.MSG.MenuRequestRich"/>
     <when condition="1">
       <send target="BO.Cocina"/>
       <send target="BO.CocinaSOAP"/>
@@ -266,8 +266,20 @@ Document the trade-off explicitly in the production: "this BS is synchronous bec
 When a BP catches an error and raises `Ens.AlertRequest`, a downstream BO catching the same error raises another. The session emits two alerts for one operational incident. Filter at the `Ens.Alert` router with a dedup function set — see `alerting` for the canonical guard.
 
 ```
-when MyApp.UTL.AlertFilterFunctions.AlreadyReportedErr(SourceConfigName, AlertText, 60) → skip
+when AlreadyReportedErr(Document.SourceConfigName, Document.AlertText, 60) → skip
 ```
+
+Two things in that one line, both of which this skill previously had wrong:
+
+- **Bare name, never package-qualified.** The rule expression parser resolves methods across every
+  `Ens.Rule.FunctionSet` subclass in the namespace — that is what the FunctionSet pattern is for. A
+  qualified call does not parse at all: `<Ens>ErrInvalidToken` at the offset of the `.`, surfacing as
+  `#5490` from the rule generator. See `alerting` §"Wire it in the `Ens.Alert` routing rule".
+- **`Document.`, not bare field names.** The guard runs in an `EnsLib.MsgRouter.RoutingEngine`
+  context, so the `Ens.AlertRequest` fields are reached through `Document.`.
+
+The function set itself is gated — do not re-type it:
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch07_alerting/alert-dedup-functionset.cls`.
 
 ## ObjectScript error-handling idiom inside BPL code blocks
 
