@@ -73,6 +73,10 @@ its siblings.
 | §2.12 | Sibling: the run — four join shapes, and the DocType-less silent miss | `ch02_hl7v2/tdd-searchtable-rows-landed.cls` |
 | §2.13 | Headless HL7 schema bootstrap — grammar in `XData`, and the two-global removal | `ch02_hl7v2/schema-bootstrap-sqlproc.cls` |
 | §2.13 | Sibling: the run — resolution arities, and the base-fallback that looks like success | `ch02_hl7v2/tdd-hl7-schema-registration.cls` |
+| §2.14 | Repeating-segment DTL — index loop, and PID needs it too in a grouped message | `ch02_hl7v2/dtl-hl7-repeating-segments.cls` |
+| §2.14 | The per-repeat sub-transform (`EnsLib.HL7.Segment` → `Ens.StringContainer`) | `ch02_hl7v2/dtl-obx-to-text.cls` |
+| §2.14 | Sibling: the `list Of` target one entry per repeat lands in | `ch02_hl7v2/msg-obs-summary.cls` |
+| §2.14 | Sibling: the run — asserts THREE repeats, not the absence of an error | `ch02_hl7v2/tdd-hl7-repeating-segments.cls` |
 | §3.1 | CDA-from-XSD: Persistent + no Relationships + OnDelete Cascade | `ch03_cda/cda-from-xsd-persistence-pattern.cls` |
 | §3.1 | Sibling: the `<component>` child class the §3.1 template cascades to (`Example.CDA.Component`) | `ch03_cda/cda-from-xsd-component.cls` |
 | §3.2 | Comanda/Resposta inheritance for one-of-N subtypes — the abstract envelope | `ch03_cda/comanda-resposta-inheritance.cls` |

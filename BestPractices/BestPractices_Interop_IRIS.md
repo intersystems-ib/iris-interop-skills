@@ -896,6 +896,51 @@ Assume three arguments on the first and the segment name lands in the dummy slot
 - **Example.** `examples/ch02_hl7v2/schema-bootstrap-sqlproc.cls`,
   `examples/ch02_hl7v2/tdd-hl7-schema-registration.cls`
 
+### 2.14 Repeating segments: iterate by index, and the group path fails with an error status
+
+**The worst failure mode here is a successful transform that processed nothing.** A loop whose bound is
+wrong, or whose filter never matches, leaves the target collection empty and returns `$$$OK`: the
+message completes, the Visual Trace is clean, and nothing surfaces. So a test for this pattern must
+assert a **count**, not an absence — an assertion of the form "the transform did not error" passes
+against a transform that did nothing at all. Measured: a message with no `OBX` transforms cleanly to an
+empty list, and the only thing distinguishing that from a broken loop is the number of entries.
+
+**Iterate by index and filter by name.** `source.SegCount` bounds it, `seg.Name` selects. And in a
+**grouped** message that is not merely how you enumerate repeats — it is how you reach anything below
+the top level at all, single segments included. Measured on a 2.5 `ORU_R01`, where `PID` sits inside
+`PATIENT_RESULT → PATIENT`:
+
+| path | result |
+|---|---|
+| `GetSegmentAt(i)` for `i = 1..SegCount`, filtering `Name="OBX"` | reaches all three repeats |
+| `GetSegmentAt("OBX(1)")` | no object, **error status** |
+| `GetValueAt("OBX(1):3.2")` | `""`, **error status** |
+| `PID:3.1`, `PID:PatientIdentifierList(1).IDNumber`, `PID:PatientName(1).FamilyName` | `""`, **error status** |
+| `PIDgrp(1).PID:3.1`, `PATIENT(1).PID:3.1`, `PATIENT_RESULT(1).PATIENT.PID:3.1`, `…PATIENT(1).PID:3.1` | `""`, **error status** |
+| the index route, then `seg.GetValueAt("3.1")` | `12345` |
+
+**Both failures set an error status**, which the skills did not say before v1.48.0. So this is silent
+only for a caller that discards one — and `GetValueAt`'s status is its **third by-reference argument**,
+exactly the one a `<code>` block omits. Pass it and check it.
+
+**Whether a segment is grouped depends on the message type.** `NK1` and `AL1` are *top-level* in an
+`ADT_A01`, so `GetSegmentAt("NK1(1)")` there returns the object and `GetValueAt("NK1(1):2.1")` returns
+the value. It is `OBX` in an `ORU_R01` — and `NK1` in message types that group it — where the path
+fails. Check the structure before concluding the path form is at fault.
+
+**The sub-transform should take a `EnsLib.HL7.Segment`, not the message.** The caller has already
+isolated one repeat, so the sub-transform never needs to know which repeat it is; and relative to a
+segment there is no index and no group, so numeric paths just work. A sub-transform declared over the
+bare segment class has no `sourceDocType`, so symbolic names there yield empty — give it a DocType if
+you want names, and otherwise use numbers honestly.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and run with three repeats.
+- **Severity.** High (the zero-iteration form completes successfully and produces nothing).
+- **Example.** `examples/ch02_hl7v2/dtl-hl7-repeating-segments.cls`,
+  `examples/ch02_hl7v2/dtl-obx-to-text.cls`,
+  `examples/ch02_hl7v2/msg-obs-summary.cls`,
+  `examples/ch02_hl7v2/tdd-hl7-repeating-segments.cls`
+
 ### 3.1 CDA-from-XSD class generation: Persistent + no Relationships + OnDelete Cascade
 
 When importing CDA into ObjectScript classes from the XSD via the XML Schema Wizard, the only working combination is:
