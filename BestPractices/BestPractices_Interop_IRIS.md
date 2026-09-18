@@ -3010,16 +3010,52 @@ If '##class(EnsLib.DICOM.Util.AssociationContext).AETExists(tCalling, tCalled) {
 
 ### 15.3 An association context with zero presentation contexts saves clean
 
-`CreateAssociation` walks `^EnsDICOM.Dictionary("as","u",…)` and inserts a presentation context for
-every SOP class whose entry matches the type list. A friendly name that matches **nothing** — a typo,
-or a name from a different IRIS version — inserts nothing, and the context still `%Save()`s and
-returns `$$$OK`. `AETExists` is then true, so an `OnStart` guard written as above never retries, and
-every association is refused at negotiation because the two sides share no presentation context.
-There is no error at configuration time and nothing in the Event Log.
+**Corrected 2026-09-18, and the correction is the useful part.** An earlier revision of this section
+blamed a friendly name or transfer syntax "matching nothing". Measured, that path is **loud**:
+
+```
+CreateAssociation("A", "B", $ListBuild("1.2.3.4.not.a.syntax"))
+  ->  <EnsDICOM>TransferSyntaxNotSupported: Transport Syntax '1.2.3.4.not.a.syntax' is NOT supported
+      AETExists = 0, nothing saved
+```
+
+So is a blank AE title — `<EnsDICOM>BadCallingAET` / `BadCalledAET`, each naming *which* side is
+wrong. The platform validates the values it is handed.
+
+What it does not validate is the **content** of what it saved. An `AssociationContext` with an empty
+`PresentationContexts` list passes `%ValidateObject()`, passes `%Save()`, and makes `AETExists`
+return 1 — measured: `newContexts=0 validate=OK save=OK AETExists=1`. So the `OnStart` guard in §15.2
+is satisfied for ever by a context that offers the remote AE nothing, every association is refused at
+negotiation, and there is no error at configuration time and nothing in the Event Log.
+
+Two routes produce one, and neither involves a bad UID:
+
+1. **A type list that matches nothing.** The platform's `CreateAssociation` has **no** type-list
+   argument — the vendored sample's four-argument wrapper does (§15.1), and it substring-matches
+   `pTypeList` entries against the dictionary's *descriptions*. Measured on 289 abstract syntaxes:
+
+   | call | presentation contexts |
+   |---|---|
+   | platform `CreateAssociation(calling, called)` | **237** |
+   | wrapper, `pTypeList` = `("Storage","FIND")` | 209 |
+   | wrapper, `pTypeList` = `("Storage")` | 197 |
+   | wrapper, `pTypeList` = `("Storge")` — one typo | **0**, and it returns `$$$OK` |
+
+   Worse than silent: the wrapper **deletes the pre-existing context first**. Measured — register
+   `("Storage")` for a pair (197 contexts), then re-run the same pair with `("Storge")`, and the
+   result is 0 contexts and `$$$OK`. A typo on a redeploy destroys a working configuration.
+2. **A hand-built or imported context** — `%New(calling, called)` then `%Save()` with nothing
+   inserted, or an `ImportXML`/`ImportAssociation` of a file that carries none.
 
 The check is therefore not "did `CreateAssociation` succeed" but "does the saved context have
-presentation contexts": `EnsLib.DICOM.Util.AssociationContext` has a `PresentationContexts`
-collection, and a count of zero is the finding.
+presentation contexts": `EnsLib.DICOM.Util.AssociationContext.PresentationContexts` is a
+`list Of EnsLib.DICOM.Util.PresentationContext`, and a count of zero is the finding. Narrowing the
+list deliberately is legitimate and is why the wrapper exists — some simulators and older SCPs refuse
+a request carrying 237 presentation contexts. Narrowing it to nothing is the defect, and by its
+return value the two are identical.
+
+- **Example.** `examples/ch15_dicom/utl-dicom-association-registrar.cls`,
+  `examples/ch15_dicom/tdd-dicom-onstart-associations.cls`
 
 ### 15.4 Modality Worklist date parsing — `$ZDATEH(value, 5)` and the error trap
 
@@ -3046,6 +3082,49 @@ in from a non-DICOM source parses rather than failing loudly.
 - **Severity.** High (every failure mode here is a green production and a blank modality).
 - **Example.** `examples/ch15_dicom/dicom-mwl-date-functionset.cls`, and the complete production under
   `examples/external/workshop-iris-dicom-interop/`.
+
+### 15.5 Registering DICOM associations from OnStart — and the verify step that makes it worth doing
+
+An association context is **data in the namespace**, not part of the production definition. It is not
+in source control, a deployment package does not carry it, and `%Installer` does not create it. A
+production exported, imported and started in a fresh namespace therefore comes up with no association
+contexts at all and refuses every association — green production, blank modality, empty Event Log.
+
+Registering from `Ens.Production::OnStart(pTimeStarted As %String) As %Status` — a **ClassMethod**,
+whose base implementation is empty — makes the configuration part of the deployable and idempotent.
+Three things make the difference between an `OnStart` that helps and one that does not:
+
+1. **Verify the count, not the status.** `$$$OK` from `CreateAssociation` and a true `AETExists` are
+   both true of the empty context in §15.3. Read `PresentationContexts.Count()`.
+2. **Repair rather than report.** If a context exists with zero presentation contexts, the
+   `If 'AETExists(...)` guard will skip creation for ever and nothing else in the system will fix it.
+   `AETDelete` then `CreateAssociation`, then re-count.
+3. **Log the number.** A start line reading `DEMO_MODALITY->DEMO_IRIS=237 contexts` is auditable; one
+   reading `associations OK` is the same sentence the broken case would print.
+
+Returning an error from `OnStart` stops the production from starting, which is the right default here:
+a misconfigured association is a reason not to come up, not something to learn from a modality's blank
+screen three days later. A deployment that would rather start degraded should log the status and return
+`$$$OK` — deliberately, and visibly.
+
+**The AE titles are ADAPTER settings**, not host ones: `EnsLib.DICOM.Adapter.TCP`'s SETTINGS are
+`LocalAET,RemoteAET,TraceVerbosity,ARTIM,TXTIM`, while the host (`EnsLib.DICOM.Service.TCP` /
+`.Operation.TCP`, both `EnsLib.DICOM.Duplex.TCP`) contributes only `DuplexTargetConfigName`. Both host
+classes declare `ADAPTER = EnsLib.DICOM.Adapter.TCP`. And both are **duplex** — one TCP association
+carries request and response — which is why each names the other with `DuplexTargetConfigName` rather
+than `TargetConfigNames`.
+
+The titles therefore appear twice: in the production's adapter settings and in whatever `OnStart`
+registers. That duplication is real and unavoidable; the example's test reads them back out of the
+production definition rather than retyping them a third time.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-18: signatures from
+  `%Dictionary.CompiledMethod`, counts and statuses by probe.
+- **Validity.** Still valid.
+- **Severity.** High — every failure mode in this section is a green production that negotiates nothing.
+- **Example.** `examples/ch15_dicom/production-dicom-onstart-associations.cls`,
+  `examples/ch15_dicom/utl-dicom-association-registrar.cls`,
+  `examples/ch15_dicom/tdd-dicom-onstart-associations.cls`
 
 ## Appendix B — References
 
