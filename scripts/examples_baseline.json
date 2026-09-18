@@ -20,6 +20,7 @@
     "Demo.Vendor.WSC.PrescriptionWS",
     "Example.Adapters.BO.JavaGateway",
     "Example.Adapters.BO.SOAPClient",
+    "Example.Adapters.BO.SqlBatchTransaction",
     "Example.Adapters.BO.SqlTypedParmArray",
     "Example.Alerting.Production",
     "Example.Alerting.RUL.AlertRouter",

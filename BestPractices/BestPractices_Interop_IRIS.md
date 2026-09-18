@@ -1281,6 +1281,50 @@ One more, from `component-map` and worth keeping: `resp.StatusCode` is multidime
 - **Severity.** High — a prescribed class that does not exist, and a call form that posts to the wrong place.
 - **Example.** `examples/ch06_adapters/bo-rest-outbound.cls`
 
+### 6.13 SQL batch in one transaction — autocommit IS the transaction, and the restore is the hard part
+
+One row per message needs no explicit transaction: let the driver's autocommit do it and let a
+failure suspend the message. Several rows per message, all-or-nothing, needs the pattern below.
+
+**Turning autocommit off is the transaction start.** There is no `StartTransaction()` — an earlier
+revision of these skills prescribed one, and it fails at runtime with `<METHOD DOES NOT EXIST>`.
+Measured with origins, because the origin says how portable each call is:
+
+| call | returns | origin | |
+|---|---|---|---|
+| `SetAutoCommit(pAutoCommit=1)` | `%Status` | `EnsLib.SQL.Common` | portable |
+| `Commit()` | `%Status` | `EnsLib.SQL.Common` | portable |
+| `Rollback()` | `%Status` | `EnsLib.SQL.Common` | portable |
+| `Transact(type)` | `%Status` | **`EnsLib.SQL.CommonJ`** | **JDBC only** |
+
+`Transact` is public and real, but it comes from the JDBC common class, so the first three are the
+ones that also work over ODBC.
+
+**The leak is the whole difficulty, and it is silent.** `SetAutoCommit(1)` on the happy path only
+runs if nothing jumped out first. A `Quit` inside the `Catch` — the natural thing to write — leaves
+autocommit **off** on a `StayConnected` connection, so the transaction stays open and **the next
+message inherits it**. That message's inserts join a transaction it knows nothing about, and whether
+they land depends on what becomes of a transaction opened for someone else. Nothing reports it. The
+message that caused it completed.
+
+Three rules follow:
+
+1. **Restore in one place every path reaches.** ObjectScript has no `finally`, so that place is
+   *after* the `Try`/`Catch`, not inside either arm.
+2. **Guard the restore with a flag set only after `SetAutoCommit(0)` returned OK.** Restoring a
+   transaction you never started is its own bug, and on a cold adapter `SetAutoCommit` can fail while
+   connecting.
+3. **Do not overwrite your `%Status` with the rollback's.** The rollback's status answers "did the
+   undo work" — assign it over yours and a clean rollback of a failed batch reports success. Log it
+   separately: a failed batch *and* a failed undo is a worse situation than either alone.
+
+`SetAutoCommit` connects first if the adapter is cold, so calling it inside `OnMessage` is safe.
+
+- **Source.** Bank audit 2026-09-18: zero `TSTART`/autocommit artefacts in the bank, while the prose had been correct since the `StartTransaction` retraction.
+- **Validity.** Verified against IRIS for Health 2026.1; names and origins from `%Dictionary.CompiledMethod`. The example compiles with no DSN configured.
+- **Severity.** High — the failure lands on the *next* message.
+- **Example.** `examples/ch06_adapters/sql-bo-batch-transaction.cls`
+
 ## 7. Error handling, retries & alerting
 
 ### 7.1 Alert circuit — the canonical pattern
