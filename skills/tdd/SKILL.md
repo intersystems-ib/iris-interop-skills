@@ -306,7 +306,7 @@ HL7 schema row in the decision table above.
 ### Routing rule test (integration style — preferred)
 
 ```objectscript
-Class MyApp.Tests.Rule.RoutingCenso Extends %UnitTest.TestProduction
+Class MyApp.Tests.Rule.RoutingCenso Extends MyApp.Tests.Base
 {
 
 Parameter PRODUCTION = "MyApp.Production";
@@ -315,6 +315,11 @@ Method TestControl() As %Status { Quit $$$OK }
 
 Method OnBeforeAllTests() As %Status
 {
+    // ##super() FIRST: the base allocates this run's RunId here. Skip it and ..Key()
+    // silently returns "TST--<tag>" for every test, colliding with every other run that did
+    // the same -- the failure this whole section exists to prevent.
+    Set tSC = ##super()
+    Quit:$$$ISERR(tSC) tSC
     &sql(SELECT NVL(MAX(ID),0) INTO :tMax FROM Ens_Util.Log)
     Set ..BaseLogId = tMax + 1, ..LastLogId = ..BaseLogId
     Quit $$$OK
@@ -324,7 +329,8 @@ Method OnBeforeAllTests() As %Status
 Method TestRouterDispatchaACocina()
 {
     Set rec = ##class(MyApp.RecordMap.Censo.Record).%New()
-    Set rec.ID = "TEST-RULE-1"  ; prefix for cleanup
+    Set tKey = ..Key("RULE-1")   ; one value, used by the insert AND the assert below
+    Set rec.ID = tKey
     ; ... fill the rest of the record fields ...
     Do $$$AssertStatusOK(rec.%Save())
 
@@ -335,8 +341,8 @@ Method TestRouterDispatchaACocina()
     Kill Log
     Do ..GetEventLog("info", "BO.Cocina", baseId, .Log, .new)
     Set tFound = 0
-    For i=1:1:$G(Log) { If Log(i,"Text") [ "TEST-RULE-1" Set tFound = 1 Quit }
-    Do $$$AssertTrue(tFound, "TEST-RULE-1 dispatched to BO.Cocina")
+    For i=1:1:$G(Log) { If Log(i,"Text") [ tKey Set tFound = 1 Quit }
+    Do $$$AssertTrue(tFound, tKey _ " dispatched to BO.Cocina")
 }
 
 }
@@ -353,7 +359,7 @@ Method TestRouterDispatchaACocina()
 
 
 ```objectscript
-Class MyApp.Tests.BO.Menus2Cocina Extends %UnitTest.TestProduction
+Class MyApp.Tests.BO.Menus2Cocina Extends MyApp.Tests.Base
 {
 
 Parameter PRODUCTION = "MyApp.Production";
@@ -362,6 +368,11 @@ Method TestControl() As %Status { Quit $$$OK }
 
 Method OnBeforeAllTests() As %Status
 {
+    // ##super() FIRST: the base allocates this run's RunId here. Skip it and ..Key()
+    // silently returns "TST--<tag>" for every test, colliding with every other run that did
+    // the same -- the failure this whole section exists to prevent.
+    Set tSC = ##super()
+    Quit:$$$ISERR(tSC) tSC
     &sql(SELECT NVL(MAX(ID),0) INTO :tMax FROM Ens_Util.Log)
     Set ..BaseLogId = tMax + 1, ..LastLogId = ..BaseLogId
     Quit $$$OK
@@ -384,7 +395,8 @@ Method TestEmptyAlergiasToNull()
     ; Catches marshalling bugs that no stub would: does the real JDBC driver
     ; translate "" to SQL NULL, or to empty string?
     Set req = ##class(MyApp.MSG.MenuRequest).%New()
-    Set req.PacienteId = "TEST-EMPTY"
+    Set tKey = ..Key("EMPTY")
+    Set req.PacienteId = tKey
     Set req.Nombre = "X"  Set req.Apellidos = "Y"  Set req.TipoDieta = "Basal"
     Set req.Alergias = ""
     Do $$$AssertStatusOK(req.%Save())
@@ -393,7 +405,7 @@ Method TestEmptyAlergiasToNull()
     Do $$$AssertStatusOK(..SendRequest("BO.Cocina", req, .resp, 0))
     Hang 2
 
-    Do ..ExpectInsertLogged(baseId, "TEST-EMPTY", "INSERT OK logged for TEST-EMPTY")
+    Do ..ExpectInsertLogged(baseId, tKey, "INSERT OK logged for " _ tKey)
 }
 
 }
@@ -634,11 +646,56 @@ For shared destinations (one PostgreSQL `Cocina.Menus` table used by both prod a
 
 | Approach | When |
 |---|---|
-| **Prefix discipline** (`TEST-*` on PK fields) + cleanup in `OnAfterAllTests` | Workshop, dev, single-developer sessions. Lowest infra, low blast radius if tests crash mid-run. |
+| **Per-run key suffix** (`TST-<runid>-*` on every value that lands on a unique column) + cleanup in `OnAfterAllTests` | Workshop, dev, single-developer sessions. Lowest infra. **A fixed literal is not enough:** a second run of the same suite collides with the first run's rows even when the first exited cleanly — `ERROR #5808: Key not unique` in IRIS, `duplicate key value violates unique constraint` in PostgreSQL — and `OnAfterAllTests` is by definition the callback a mid-run crash skips. Fixed keys are right only for an UPSERT/MERGE destination, or when the duplicate path **is** the subject under test. |
 | **Separate schema** in the same DB (`MenusTest`) with its own credentials | CI on shared infra, multiple devs running tests concurrently. |
 | **Separate DB / credentials / BO item** (`CocinaTest`, `BO.CocinaTest`) | Production-grade CI with isolation requirements (e.g. test data must never bleed into prod backups). |
 
-Default to **prefix** unless you have a concrete reason to escalate. Auditing a workshop production for "weak isolation" because it uses prefix-only is misreading the spectrum.
+Default to **a per-run suffix inside the shared destination** unless you have a concrete reason to escalate. Auditing a workshop production for "weak isolation" because it isolates by key rather than by database is misreading the spectrum. The suffix does not replace cleanup — it makes the suite **re-runnable when cleanup did not run**, and it lets cleanup target exactly this run's rows (`LIKE 'TST-'_..RunId_'-%'`).
+
+One run id, one place, and every key built from it:
+
+```objectscript
+Class MyApp.Tests.Base Extends %UnitTest.TestProduction
+{
+
+// A base class is still a TestProduction subclass, so it needs this too -- omitting it is
+// `ERROR #5001: Parameter PRODUCTION must be specified` at compile time, exactly as §"Required
+// parameters" says. Subclasses may override it.
+Parameter PRODUCTION = "MyApp.Production";
+
+/// Unique per RUN, not per test: every key this suite writes carries it, so a second run cannot
+/// collide with the first even if the first never reached OnAfterAllTests.
+Property RunId As %String;
+
+Method OnBeforeAllTests() As %Status
+{
+    // $Increment on a global is the short, collision-free choice. $JOB reuses pids; $ZTIMESTAMP and
+    // $Horolog are long and unique only by luck; CreateGUID() is 36 characters in every key and log line.
+    Set ..RunId = $Increment(^MyApp.Tests.RunId)
+    Quit $$$OK
+}
+
+/// Build every test key through here, so the INSERT and the ASSERT cannot drift apart.
+Method Key(pTag As %String) As %String [ CodeMode = expression ]
+{
+"TST-"_..RunId_"-"_pTag
+}
+
+}
+```
+
+Each suite then cleans **its own** destination — the `DELETE` names a table, so it belongs in the suite
+that owns that table, not in a shared parent every suite inherits:
+
+```objectscript
+/// In MyApp.Tests.BO.Menus2Cocina. Scoped by this run's prefix, so it cannot take another run's rows.
+Method OnAfterAllTests() As %Status
+{
+    Set tPattern = "TST-" _ ..RunId _ "-%"
+    &sql(DELETE FROM Cocina.Menus WHERE paciente_id LIKE :tPattern)
+    Quit $$$OK
+}
+```
 
 ## See also
 

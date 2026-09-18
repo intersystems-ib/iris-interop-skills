@@ -21,6 +21,7 @@
     "MyApp.Search.Hl7Adt",
     "MyApp.Tests.BO.Menus2Cocina",
     "MyApp.Tests.BPL.MyProcess",
+    "MyApp.Tests.Base",
     "MyApp.Tests.DT.Censo2Menus",
     "MyApp.Tests.DTL.PatientCensusToHL7",
     "MyApp.Tests.Lookup.GeneroPlanta",
@@ -31,7 +32,7 @@
     "MyApp.UTL.WsdlFetch"
   ],
   "ungated": {
-    "bare_members": 18,
+    "bare_members": 19,
     "loose_fragments": 33
   }
 }
