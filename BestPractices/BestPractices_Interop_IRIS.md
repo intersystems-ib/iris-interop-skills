@@ -1444,6 +1444,63 @@ establish what it claims is the same defect as a test that grades itself.
 - **Example.** `examples/ch05_bpl_dtl/lookup-bootstrap-sqlproc.cls`,
   `examples/ch05_bpl_dtl/tdd-lookup-bootstrap.cls`
 
+### 5.18 A misspelled %UnitTest lifecycle callback is never invoked — and `GetEventLog`'s window floor is not its argument
+
+**The four callbacks, exactly.** All are instance `Method`s returning `%Status`:
+
+| callback | arguments |
+|---|---|
+| `OnBeforeAllTests()` | **none** |
+| `OnAfterAllTests()` | **none** |
+| `OnBeforeOneTest(testname)` | one |
+| `OnAfterOneTest(testname)` | one |
+
+That asymmetry is the trap — the per-test pair takes a name, the all-tests pair takes nothing, so an
+argument copied from one to the other looks right.
+
+**Three ways to get it wrong, and only one is silent:**
+
+| mistake | outcome |
+|---|---|
+| declared `ClassMethod` | `ERROR #5477` at compile: *keyword 'ClassMethod' must be '0'* — **loud** |
+| misspelled (`OnBeforeAllTest`) | compiles clean, **never invoked** — silent |
+| an extra *defaulted* argument | compiles clean, **and still runs** — harmless |
+
+Measured with a marker global: `extra-arg ran=1 | misspelled ran=NO`. A cleanup that is never invoked
+does not fail the run it belongs to — it fails the **next** one, by leaving rows behind, and it fails
+it in the direction of *passing*, because the next run's assertions are satisfied by the previous
+run's data.
+
+**`GetEventLog`'s top node IS the count**, so the conventional `For i=1:1:$G(Log)` bound is correct:
+`GetEventLog("all","",0,.Log,.new)` gave `Log=287`, `new=287`, and a `$Order` walk agreed.
+
+**But the window floor is not the `baseId` argument — it is the HIGHER of `baseId` and the instance's
+`BaseLogId`.** Measured, `MAX(ID)=287`:
+
+| `BaseLogId` | `baseId` | rows |
+|---|---|---|
+| 287 | 0 | 1 |
+| 287 | 1 | **1** — the argument is ignored |
+| 0 | 0 | 287 |
+| 0 | 287 | **1** — here the argument wins |
+| unset | 1 | 287 |
+
+So you can only ever **raise** the floor: passing a smaller `baseId` cannot widen the window, and
+`baseId = 0` does not mean "from the beginning" — it means "whatever `BaseLogId` says".
+
+This interacts with advice the plugin gives and is right to give. `tdd` says to seed `BaseLogId` in
+`OnBeforeAllTests` from `MAX(ID)`, which correctly scopes every later read to this run. The
+consequence, nowhere written down before, is that **no argument can then reach back past it** — a test
+that believes it is reading "the whole log" is reading a handful of rows.
+
+Which is why an absence claim needs a non-empty window. "No error was logged" over a window of zero
+entries passes, and nothing in the assertion says how much it examined. Establish the window is
+non-empty first.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (a cleanup that never runs makes the *next* run pass over stale data).
+- **Example.** `examples/ch05_bpl_dtl/tdd-lifecycle-and-eventlog.cls`
+
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 
 When you import a vendor WSDL in Ensemble/IRIS, the generated SOAP client classes nearly always need at least one of these patches.
