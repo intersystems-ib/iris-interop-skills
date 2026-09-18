@@ -135,12 +135,20 @@ jobs:
           # This is why the bank can carry FHIR examples at all. An earlier revision of CLAUDE.md
           # claimed FHIR "cannot be compile-gated" on the community image — that was wrong, and
           # it was wrong because the check was made in USER instead of a Foundation namespace.
-          docker exec iris-interop-skills-ci iris session IRIS -U HSLIB \
-            'Do ##class(HS.Util.Installer.Foundation).Install("FHIRFOUNDATION")' || true
-          # Positive control: fail loudly here rather than reporting 40 broken classes later.
-          docker exec iris-interop-skills-ci iris session IRIS -U FHIRFOUNDATION \
-            'Write "HS.FHIRServer.Interop.Operation mapped: ",##class(%Dictionary.CompiledClass).%ExistsId("HS.FHIRServer.Interop.Operation"),!' \
-            | tee /tmp/fhircheck
+          # Pipe the ObjectScript on STDIN (docker exec -i). The single-argument form of
+          # `iris session` takes a routine reference, not a `Do` statement, and answers
+          # <INVALID ARGUMENT>; the installer also emits a lot of progress output that wants a
+          # real session. This is the form verified by hand before being put here.
+          docker exec -i iris-interop-skills-ci iris session IRIS -U HSLIB <<'EOS' || true
+          do ##class(HS.Util.Installer.Foundation).Install("FHIRFOUNDATION")
+          halt
+          EOS
+          # POSITIVE CONTROL. Fail loudly here rather than reporting 40 broken classes later and
+          # leaving someone to work out that the namespace, not the bank, was the problem.
+          docker exec -i iris-interop-skills-ci iris session IRIS -U FHIRFOUNDATION <<'EOS' | tee /tmp/fhircheck
+          write "HS.FHIRServer.Interop.Operation mapped: ",##class(%Dictionary.CompiledClass).%ExistsId("HS.FHIRServer.Interop.Operation"),!
+          halt
+          EOS
           grep -q 'mapped: 1' /tmp/fhircheck || { echo "Foundation namespace did not map HS.*"; exit 1; }
 
       - name: Preflight — is this target usable at all?
