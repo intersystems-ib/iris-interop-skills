@@ -11,6 +11,50 @@ FHIR work on IRIS splits along **two architectural patterns**. Picking the wrong
 
 The user mentioned FHIR, a Façade, a Repository, OAuth2 PKCE, Bundle resources, SMART-on-FHIR, or FHIR SQL projection.
 
+## Prerequisite — a FOUNDATION namespace. Nothing below works without it
+
+**Do this before the decision tree, not after the first `<CLASS DOES NOT EXIST>`.** `HS.*` is not
+mapped into an ordinary namespace: in `USER`, `HS.FHIRServer.Interop.Operation` does not exist, so
+every reference reads as a typo and the reflex is to hunt for the real class name. There isn't one
+— the namespace is wrong. And `Ens.Director` resolves either way, so "the namespace is
+interop-enabled" is **not** the same answer.
+
+AFNS, opening line: *"Every interoperability-enabled production needs a special
+interoperability-enabled namespace called a foundation namespace."* On IRIS for Health and Health
+Connect this is how an interop namespace is initialised at all — it is not a FHIR-specific step.
+(On plain IRIS there is no `HS.*` and no Foundation concept; see `interop` §"Foundation namespaces".)
+
+**Check, with the discriminator being whether the table exists at all:**
+
+```
+iris_query(namespace="<NS>", query="SELECT Name, Type, Activated FROM HS_Util_Installer.ConfigItem")
+  Foundation  -> a row, Type='Foundation', Activated=1
+  plain       -> SQLCODE -30, Table 'HS_UTIL_INSTALLER.CONFIGITEM' not found
+```
+
+**Create or convert — the same call does both** (AFNS sections 2 and 3):
+
+```
+iris_execute(namespace="HSLIB", code="Do ##class(HS.Util.Installer.Foundation).Install(""<NS>"")")
+```
+
+Then the FHIR server itself, per HXFHIRINS section 2.3.1:
+
+```objectscript
+ Set $namespace = "<NS>"
+ Do ##class(HS.FHIRServer.Installer).InstallNamespace()
+ Do ##class(HS.FHIRServer.Installer).InstallInstance("/csp/healthshare/<ns>/fhir/r4",
+     "HS.FHIRServer.Storage.JsonAdvSQL.InteractionsStrategy", $lb("hl7.fhir.r4.core@4.0.1"))
+```
+
+Two things that surprise people afterwards: `Install()` also creates a
+`<NS>PKG.FoundationProduction`, so a production you did not write shows up in
+`iris_production(action=status)`; and if you use SDA3 transformations you must import the SDA3
+schema separately (AFNS section 4, Management Portal → Health → *namespace* → Schema Documentation).
+
+Worked, compile-gated example of the interop wiring:
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch04_fhir/production-fhir-facade.cls`
+
 ## Decision tree — Façade vs Repository
 
 | If… | Use |
