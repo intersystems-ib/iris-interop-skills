@@ -2663,6 +2663,59 @@ the production to assert that the circuit fires and carries the right text.
 
 ---
 
+### 6.18 Resolving a path from a Setting: the class that compiles and the value that escapes
+
+CR-10 (`conformance-review/SKILL.md:144`) tells you to move a hardcoded path into a Setting, or resolve
+it at run time with `##class(%Library.File).ManagerDirectory()` / `.TempFilename("csv")` /
+`$SYSTEM.Util.InstallDirectory()`, and adds the parenthetical "note: `InstallDirectory` is on
+`%SYSTEM.Util`, **not** on `%Library.File`". That note is right, it is the **only** line in the plugin
+that says so, and a parenthesis is not enough — because the wrong spelling **compiles**:
+
+```
+##class(%Library.File).InstallDirectory()     compiles CLEAN
+                                             -> <METHOD DOES NOT EXIST> at run time
+```
+
+Measured both halves. Tier 2, and any CI that only compiles, passes a class that cannot run. Stronger
+than CR-10's claim, and what makes it safe to rely on: `InstallDirectory` exists on `%SYSTEM.Util` and
+on **no other class in the instance**.
+
+**The part CR-10 does not mention is the one that loses data.** Once the path is a Setting, an operator
+owns its value, and `NormalizeFilename` treats an absolute value as authoritative — it discards the
+base. Measured against `InstallDirectory()` = `/usr/irissys/`:
+
+| Setting value | `NormalizeFilename(value, base)` | `base_value` (naive concat) |
+|---|---|---|
+| `mgr/` | `/usr/irissys/mgr` | `/usr/irissys/mgr/` |
+| `csp/../mgr` | `/usr/irissys/mgr` | `/usr/irissys/csp/../mgr` |
+| `/abs/path` | **`/abs/path`** — escapes | `/usr/irissys//abs/path` — nonsense |
+| `../etc` | **`/usr/etc`** — escapes | `/usr/irissys/../etc` |
+
+Three conclusions. `NormalizeFilename` is the right API: it resolves `..` and absorbs the duplicate
+separator that `InstallDirectory`'s trailing `/` otherwise creates. **Concatenation is wrong in every
+row** — and wrong in a way that only shows up for some values, which is how it survives a smoke test.
+And **a Setting an operator can edit can point anywhere on the filesystem**, by two different routes
+(an absolute value, or enough `..`), so a component that means "somewhere under the install tree" has
+to enforce that rather than assume it.
+
+The containment test is a prefix comparison between the **normalised** path and the **normalised** base.
+Normalise both: `InstallDirectory()` carries a trailing separator on this platform and that is
+guaranteed nowhere, so comparing a normalised path against a raw base is ill-defined. It is a real
+containment check and not a string trick — measured, an escaped path does **not** text-prefix the base
+once normalised (`../etc` becomes `/usr/etc`).
+
+Finally, keep "the Setting is empty", "it resolves outside the tree" and "the directory does not
+exist" as three different errors. They have three different fixes — a configuration edit, a policy
+decision, and a filesystem change — and one generic "bad path" makes the operator guess.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-18: the compile-then-fail
+  behaviour, the owner of `InstallDirectory`, and every row of the table by probe.
+- **Validity.** Still valid.
+- **Severity.** High — one half compiles clean and dies at run time; the other half silently leaves the
+  install tree.
+- **Example.** `examples/ch06_adapters/path-from-setting-and-runtime.cls`,
+  `examples/ch06_adapters/tdd-path-from-setting.cls`
+
 ## 9. Deployment, source control & CI/CD
 
 ### 9.1 The home-grown deploy tool: `IRIS-Interop-Deployment`
