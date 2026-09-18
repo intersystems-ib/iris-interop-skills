@@ -330,6 +330,71 @@ returns **zero rows**, which is precisely why "no items" must never be reported 
 - **Severity.** High — a gate that says OK when it saw nothing is worse than no gate.
 - **Example.** `examples/ch01_production/production-preflight-validator.cls`
 
+### 1.16 System Default Settings accept anything — and auditing them needs the adapter, not just the host
+
+**Nothing validates a System Default Settings row.** Measured on IRIS for Health 2026.1, three rows
+saved against a real, registered production:
+
+| row | result |
+|---|---|
+| `ItemName='BS.Adt'`, `SettingName='FilePath'` (both real) | accepted |
+| `ItemName='BS.Typo'` — no such item | **accepted** |
+| `SettingName='NoSuchSetting'` — no such setting | **accepted** |
+
+`%Save()` returns `$$$OK` for all three. A misspelled item or setting name produces a row nothing
+will ever read, for ever, with no error. This is the archetypal never-read setting, and the only
+verification previously on offer was "confirm it shows blue in the portal" — a colour, in a UI.
+
+**The trap that makes a naive audit worse than none.** The obvious check for "is this a real
+setting?" is the host class's `GetSettings()`. On `EnsLib.HL7.Service.FileService`:
+
+```
+host GetSettings has MessageSchemaCategory=1  TargetConfigNames=1  AlertOnError=1
+host GetSettings has FilePath = 0        <-- and FilePath is set on that very item
+```
+
+`FilePath` is an **adapter** setting. The host declares `ADAPTER = "EnsLib.File.InboundAdapter"`, and
+the adapter owns `FilePath`, `FileSpec`, `ArchivePath`, `CallInterval`, `Charset`. An audit that
+consults only the host reports all five as orphans — false positives on the most commonly set values
+in a file-based production, which is how a report gets ignored and then switched off. The valid set
+is the **union**:
+
+```
+host GetSettings()  ∪  adapter GetSettings()      adapter = $parameter(host, "ADAPTER")
+```
+
+Measured both ways: `EnsLib.File.InboundAdapter` has all five; `EnsLib.File.OutboundAdapter` has
+`FilePath` and `Charset` but **not** `FileSpec`, `ArchivePath` or `CallInterval` — correctly, those
+are inbound-only. `EnsLib.HL7.MsgRouter.RoutingEngine` has `ADAPTER = ""` and no adapter half at all.
+
+**The API that looks right and cannot be called.** `Ens.Config.DefaultSettings` has
+`findIfSettingInThisClass(pClassname, pSettingName)` — exactly this question. Measured:
+`ClassMethod = False`, `Private = True`, `Internal = True`. Calling it raises
+`<METHOD DOES NOT EXIST>` rather than `<PRIVATE METHOD>`, because it is an *instance* method reached
+as a classmethod — an error that sends you hunting for a typo in the name. Use `GetSettings()`, a
+public ClassMethod on 412 host and adapter classes.
+
+**What `GetSettings` fills**, because guessing the shape costs a round trip — a **two-level** array:
+
+```
+pSettings(":", <name>)                  every setting, flat — 57 for the FileService
+pSettings(":localizedCategory", <cat>)  the category names
+pSettings(<category>, <name>)           the same settings, grouped
+```
+
+Membership is a level-2 `$Data(pSettings(cat, name))` walk. The top level holds **categories**, so a
+first attempt that `$Order`ed over it found nothing at all.
+
+**And the report must refuse what it cannot read.** `Ens_Config.Item` is populated for *registered*
+productions, so an uncompiled or misspelled production name reads as zero items — and an audit that
+called that "nothing to report" would return a clean bill of health for a production it never looked
+at. See §1.15 for the same defect in the pre-flight validator.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (a never-read setting is silent, and a false-positive report is worse than none).
+- **Example.** `examples/ch01_production/default-settings-audit.cls`,
+  `examples/ch01_production/tdd-default-settings-audit.cls`
+
 ## 2. HL7 v2
 
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
