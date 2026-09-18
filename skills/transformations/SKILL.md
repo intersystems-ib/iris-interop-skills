@@ -121,20 +121,45 @@ Three traps:
 
 - **`%Q` is a full ODBC timestamp, not a date.** It is the *default* for both `in` and `out`, so it
   is easy to reach for — but `..ConvertDateTime(x,"%d/%m/%Y","%Q")` yields
-  `1958-07-22 00:00:00.000`, which a `DATE` column will reject or silently truncate. For a date-only
-  target use `%Y-%m-%d`.
-- **It does not validate the calendar, and a bad value is returned unchanged.** Per `EBUS § A.1`:
-  *"If `val` does not match the `in` format, `out` is ignored and `val` is returned unchanged."* So
-  `31/02/1958` comes back as `1958-02-31` and free text passes straight through, reaching the column
-  and failing at the JDBC bind — far from the DTL that caused it. Per-record validation belongs in
-  the DTL (the `Valido`/`ErrorMotivo` pattern below), not in the date function.
+  `1958-07-22 00:00:00.000`, which a `DATE` column will reject or truncate at the database layer. For
+  a date-only target use `%Y-%m-%d`. And because `%Q` is the default for **both** arguments,
+  `..ConvertDateTime(x)` with no formats returns `x` **unchanged** — a no-op that reads like a
+  conversion.
+- **It validates the field RANGES and never the CALENDAR**, which gives bad input two silent
+  failure modes, not one. Measured on 2026.1:
+  - day 1–31 **and** month 1–12 → **reformatted, calendar unchecked**: `31/02/1958` → `1958-02-31`,
+    `30/02/1958` → `1958-02-30`, `29/02/2023` → `2023-02-29` (not a leap year), `31/04/1958` →
+    `1958-04-31`. This is the dangerous half — the output is well-formed, so it satisfies a length
+    check, a regex and any eyeball, and it is not a date. It travels.
+  - anything outside those ranges → **returned unchanged** (`32/01/1958`, `00/01/1958`,
+    `31/13/1958`, `31/00/1958`, `99/99/9999`, free text). Per `EBUS section A.1`: *"If `val` does not
+    match the `in` format, `out` is ignored and `val` is returned unchanged."* The raw text then
+    reaches the column and fails at the JDBC bind — far from the DTL that caused it.
+
+  Neither raises anything, so "it came back looking like a date" is evidence of nothing. Per-record
+  calendar validation belongs in the DTL (the `Valido`/`ErrorMotivo` pattern below), not in the date
+  function, which does not do it.
 - **`ConvertDateTimeToUTC` does not exist** (verified absent on IRIS for Health 2026.1 —
   `<METHOD DOES NOT EXIST>`). For timezone work, look up the actual available API rather than
   guessing a symmetrical name.
 
-The raw ObjectScript equivalent is `$ZDATE($ZDATEH("22/07/1958",4),3)` → `1958-07-22` (format 4 =
-`DD/MM/YYYY` in, 3 = `YYYY-MM-DD` out), but prefer `..ConvertDateTime` in a DTL: it is in the picker,
-it round-trips through the visual editor, and it does not need a `<code>` block.
+The raw ObjectScript form is `$ZDATE($ZDATEH("22/07/1958",4),3)` → `1958-07-22` (format 4 =
+`DD/MM/YYYY` in, 3 = `YYYY-MM-DD` out). **It is not equivalent, and the difference is validation** —
+measured side by side:
+
+| input | `..ConvertDateTime` | `$ZDATE($ZDATEH(…))` |
+|---|---|---|
+| `31/12/1958` | `1958-12-31` | `1958-12-31` |
+| `31/02/1958` | `1958-02-31` | `<ILLEGAL VALUE>` |
+| `32/01/1958` | unchanged | `<ILLEGAL VALUE>` |
+| `99/99/9999` | unchanged | `<ILLEGAL VALUE>` |
+
+`$ZDATEH` checks the calendar and throws; `ConvertDateTime` does not and returns something. Still
+prefer `..ConvertDateTime` in a DTL — it is in the picker, it round-trips through the visual editor,
+and it needs no `<code>` block — but choose it knowing it will not refuse 31 February.
+
+Oracle for every row and both failure modes (run and mutation-checked):
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-convertdatetime-cheatsheet.cls`.
 
 ## Custom DTL functions via FunctionSet subclass
 
