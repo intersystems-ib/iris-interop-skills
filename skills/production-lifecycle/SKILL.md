@@ -34,50 +34,21 @@ namespace. Both directions had happened, and nothing made it visible.
 
 The check is cheap, and it has to report **both** directions to earn the words "in sync":
 
-```objectscript
-ClassMethod DriftReport(pPkg As %String, pSrcDir As %String) As %String [ SqlProc ]
-{
-    Set onlyIris = "", onlyDisk = ""
-    // Namespace side: %Dictionary SQL, never ^oddCOM/^oddDEF. The dictionary globals are
-    // undocumented internals whose layout is not a contract, and the conformance gate denies
-    // reading them — `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` (an agent, not a skill).
-    Set sql = "SELECT Name FROM %Dictionary.ClassDefinition WHERE Name %STARTSWITH ?"
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, sql, pPkg _ ".")
-    While rs.%Next() {
-        Set k = rs.%Get("Name")
-        Set inIris(k) = ""
-        If '##class(%File).Exists(pSrcDir _ "/" _ $Replace(k, ".", "/") _ ".cls") {
-            Set onlyIris = onlyIris _ $Select(onlyIris="":"", 1:", ") _ k
-        }
-    }
-    // Disk side: walk the tree, so a file that was never compiled is visible too.
-    Do ..DriftDisk(pSrcDir, pSrcDir, .onDisk)
-    Set k = ""
-    For {
-        Set k = $Order(onDisk(k))  Quit:k=""
-        If '$Data(inIris(k)) {
-            Set onlyDisk = onlyDisk _ $Select(onlyDisk="":"", 1:", ") _ k
-        }
-    }
-    Set out = ""
-    If onlyIris '= "" { Set out = "ONLY IN IRIS: " _ onlyIris }
-    If onlyDisk '= "" { Set out = out _ $Select(out="":"", 1:" | ") _ "ONLY ON DISK: " _ onlyDisk }
-    Quit $Select(out="":"in sync", 1:out)
-}
+**Gated, compiled and RUN:**
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch01_production/drift-report-disk-vs-namespace.cls`
+(`Example.UTL.DriftReport`). It lived here as two **bare `ClassMethod`s**, so no tier compiled it —
+which mattered more than usual, because its earlier form did not compile at all (see the first trap
+below) and this is the one snippet this skill tells you to run at the end of every build.
 
-ClassMethod DriftDisk(pRoot As %String, pDir As %String, ByRef pOut) [ Private ]
-{
-    Set rs = ##class(%ResultSet).%New("%File:FileSet")
-    Do rs.Execute(pDir, "*")
-    While rs.Next() {
-        Set nm = rs.Get("Name")
-        If rs.Get("Type") = "D" { Do ..DriftDisk(pRoot, nm, .pOut)  Continue }
-        If $ZConvert($Piece(nm, ".", *), "L") '= "cls" Continue
-        Set rel = $Extract(nm, $Length(pRoot) + 2, *)
-        Set pOut($Replace($Extract(rel, 1, *-4), "/", ".")) = ""
-    }
-}
+Invoke it headlessly:
+
 ```
+SELECT Example_UTL.DriftReport_DriftReport('<Pkg>', '<src dir as IRIS sees it>')
+```
+
+Both failure modes below were executed against the gated class: an unmounted `src` returned
+`ONLY IN IRIS: <class>`, and a wrong package prefix returned **`in sync`** having compared nothing.
+
 
 Run it before declaring a production done, and after any session that used the Management Portal
 or a wizard — those write straight into the namespace and never touch disk.

@@ -244,6 +244,44 @@ is the `exists:true` branch of the recovery ladder: stop it by name, do not reac
   is invisible from the namespace itself.
 - **Example.** `examples/ch04_fhir/production-fhir-facade.cls`
 
+### 1.14 Drift between disk and namespace is silent — the check, and the two ways it lies to you
+
+Nothing in the toolchain compares a namespace against its source tree, so the two diverge with no
+symptom. Run the check at the end of every build; it is the only thing that notices.
+
+**Its earlier form did not compile**, which is the worst possible defect in a check you are told to
+run every time. Reproduced on 2026.1:
+
+```
+Continue:$Extract(k, 1, n) '= (pPkg _ ".")   ->  #1012: Expected EOL or spaces : 'n) '='
+Continue:$Extract(k,1,n)'=(pPkg_".")         ->  compiles
+```
+
+**An ObjectScript postconditional ends at the first space.** The argument must be unbroken, so the
+readable spacing you would write anywhere else is a parse error — and nothing in the message points
+at spacing. (`Continue` itself is fine with a postconditional inside a loop; outside a loop it is a
+different error, `#1051`.)
+
+**Two ways the report lies, and both look like answers.** Measured by running it:
+
+| scenario | output | why |
+|---|---|---|
+| source tree not mounted where IRIS can see it | `ONLY IN IRIS: <every class>` | `%File` sees the **IRIS host's** filesystem. In a container, `pSrcDir` is a path *inside* the container. |
+| package prefix typo'd or over-qualified | **`in sync`** | the namespace side matches zero classes, the disk side finds nothing under it, and an empty comparison returns the same string as a clean one |
+
+The second is the dangerous one: **an empty comparison and a clean comparison are indistinguishable.**
+If the report has never named a class you know exists, you have not tested it.
+
+**And the SQL is a string, so the compiler never sees it.** `%ExecDirect` takes the statement as
+text — a wrong table, a wrong column, a typo'd `%STARTSWITH` all compile and fail at runtime. Use
+`%Dictionary.ClassDefinition`, the documented dictionary class, and never `^oddCOM`/`^oddDEF`, whose
+layout is not a contract and which the conformance gate denies reading.
+
+- **Source.** Bank audit 2026-09-18; the helper lived in `production-lifecycle` as bare `ClassMethod`s that no tier could compile.
+- **Validity.** Verified against IRIS for Health 2026.1; the `#1012` trap and both failure modes were executed.
+- **Severity.** High — a silent lie in the one check that exists to catch silent drift.
+- **Example.** `examples/ch01_production/drift-report-disk-vs-namespace.cls`
+
 ## 2. HL7 v2
 
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
