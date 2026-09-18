@@ -2,8 +2,12 @@
   "expected_clean": [
     "App.BS.Preauth",
     "DICOM.BS.RESTService",
+    "DICOM.MSG.StowRsReq",
     "My.Tests.X",
+    "MyApp.BO.WriteCensusToSQL",
     "MyApp.BS.PatientCensusFromCSV",
+    "MyApp.BS.RestEntry",
+    "MyApp.Bootstrap",
     "MyApp.DAT.Address",
     "MyApp.DT.AL1Subtransform",
     "MyApp.MSG.MenuRequest",
@@ -11,21 +15,22 @@
     "MyApp.MSG.PatientCensusRequest",
     "MyApp.MSG.PersonReq",
     "MyApp.MSG.PersonReqCascade",
+    "MyApp.MSG.SomeRequest",
     "MyApp.Productions.MainProduction",
     "MyApp.RecordMap.Censo",
-    "MyApp.Search.HL7",
+    "MyApp.RecordMap.Invoice",
+    "MyApp.Search.Hl7Adt",
     "MyApp.Tests.BO.Menus2Cocina",
     "MyApp.Tests.BPL.MyProcess",
     "MyApp.Tests.DT.Censo2Menus",
     "MyApp.Tests.DTL.PatientCensusToHL7",
     "MyApp.Tests.Lookup.GeneroPlanta",
     "MyApp.Tests.Rule.RoutingCenso",
-    "MyApp.UTL.AlertFilterFunctions",
-    "MyApp.UTL.FunctionSet",
-    "REDSA.RecordMap.Ifa"
+    "MyApp.UTL.CodeLookup",
+    "MyApp.UTL.FunctionSet"
   ],
   "ungated": {
-    "bare_members": 20,
-    "loose_fragments": 34
+    "bare_members": 19,
+    "loose_fragments": 33
   }
 }

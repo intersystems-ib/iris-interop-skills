@@ -32,11 +32,26 @@
 | ✅ | tier-1 **C9**: ratchets the ungated-fence counts, after the prose figure in `CLAUDE.md` was found stale (said 33, was 34) | v1.14.2 |
 | ✅ | `update_snippet_baseline()` was dead code that would have clobbered any other baseline key — now merges | v1.14.2 |
 | ⬜ | **NEW (not in any wave below): the Foundation-namespace recipe in `fhir/SKILL.md` is the fence C9 caught — loose statements, so no tier compiles it.** Its class names (`HS.Util.Installer.Foundation.Install`, `HS.FHIRServer.Installer.InstallNamespace` / `InstallInstance`) were verified live against IRIS for Health 2026.1 on 2026-09-18 and are all real — but only a `.cls` in the bank would keep them that way. | — |
+| ✅ | **N1** — the stale "No BPL, DTL or routing-rule example yet" paragraph. Every clause was false (1 BPL, 1 DTL, **5** rules) and issue #91 is closed | v1.15.0 |
+| ✅ | **N3** — `alerting`'s inline function set was a defective fork of the gated file (bare `%Ensemble("SessionId")`, `kill …(day-1)`); replaced by a pointer + both traps named | v1.15.0 |
+| ✅ | **N4** — `transformations`' `$ZSTRIP` mask. **Re-measured:** `"*-CWE"` raises `<FUNCTION>`; `"*CWE"`/`"*E"` return `""` for every input; `"*WC"` also strips **internal** whitespace (that last one was in neither skill) | v1.15.0 |
+| ✅ | **N5** — `MyApp.Msg.` → `MyApp.MSG.`, **10 sites not 1**. `bpl`'s rule constraint and `business-operations`' `MessageMap` both named a class that did not exist, which matches nothing silently. Took tier 3 from 23/26 to 26/27 clean | v1.15.0 |
+| ✅ | **N6** — `dicom`'s `NewStudy()` was `Quit $$$OK`: the endpoint 200s every POST and discards every study. Implemented, plus the `DICOM.MSG.StowRsReq` it needs, both now compiled | v1.15.0 |
+| ✅ | **N7** — bare `[SqlProc]` wrapped in `MyApp.Bootstrap`; bare members 20 → 19 | v1.15.0 |
+| ✅ | **N8** — `MyApp.Search.HL7` → `MyApp.Search.Hl7Adt` (C5 rejects a Tipo-last name; C5 never ran over snippets) | v1.15.0 |
+| ✅ | **N9** — customer package name removed (5 sites) **and** the "verbatim from a running production" provenance line, per the vendor-neutral rule | v1.15.0 |
+| ✅ | **N12** — all three cross-skill contradictions, each settled against the running instance: `GetValue` **does not exist** (it is `%GetValue`, 3rd arg is by-ref `pExists`, not a default); `bpl` taught the package-**qualified** rule call that cannot parse (`#5490`) and omitted `Document.`; `MessageSchemaCategory="2.5:ADT_A01"` **errors** — the category is concatenated with MSH-9, giving `2.5:ADT_A01:ADT_A01` | v1.15.0 |
+| ✅ | `business-operations`' typed-SQL sketch was a loose fragment naming an unverified `$$$SqlDate`; replaced by a pointer at the gated bank file, whose `$$$Sql*` macros tier 2 does compile | v1.15.0 |
+| ✅ | **N13** — the three indexed-but-uncompiled artefacts (`.xml`, `.cls.xml`, `.sh`) now carry ⚠️ on their own README rows | v1.15.0 |
+| ✅ | 4 gate defects found while doing the above: a `///` prefix was split off its class and dropped; an `Include` was **always** orphaned (so `$$$Str2MsgTyp`/`$$$Sql*` fences compiled without it); an **indented** class fence was silently counted as a fragment; tier 3 left `Ens_Config.SearchTableProp` rows behind, so any SearchTable **rename** failed with `PropCollision` naming a deleted class | v1.15.0 |
+| ⬜ | **N15** — extend tier 2 over `BestPractices/external/**` (21 classes / 1738 lines, compiled by nothing) | — |
+| ⬜ | **N16** — move the `report-issue` helpers to `scripts/` + a pytest | — |
 | ⬜ | everything else below | — |
 
-**Bank at time of writing: 47 compile-gated classes, 50 artefacts. Tier 1: 9 checks. Tier 3: 26
-fences staged, 23 clean, plus 20 bare members and 34 loose fragments that no tier compiles —
-the last two are now ratcheted by C9 rather than described in prose.**
+**Bank as of v1.15.0: 47 compile-gated classes, 50 artefacts. Tier 1: 9 checks. Tier 3: 29 fences
+staged, 28 clean (1 illustrative placeholder), plus 19 bare members and 33 loose fragments that no
+tier compiles — the last two ratcheted by C9 rather than described in prose.** Wave 0 is complete
+except N15 and N16.
 
 ## Two systemic caveats — read before planning from any wave
 

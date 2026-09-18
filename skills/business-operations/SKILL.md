@@ -47,13 +47,13 @@ Property Adapter As EnsLib.SQL.OutboundAdapter;
 XData MessageMap
 {
 <MapItems>
-  <MapItem MessageType="MyApp.Msg.PatientCensusRequest">
+  <MapItem MessageType="MyApp.MSG.PatientCensusRequest">
     <Method>InsertCensus</Method>
   </MapItem>
 </MapItems>
 }
 
-Method InsertCensus(pRequest As MyApp.Msg.PatientCensusRequest, Output pResponse As Ens.Response) As %Status
+Method InsertCensus(pRequest As MyApp.MSG.PatientCensusRequest, Output pResponse As Ens.Response) As %Status
 {
     Set tSQL = "INSERT INTO Menus (PatientId, AdmissionDate, Department) VALUES (?, ?, ?)"
     Set tSC = ..Adapter.ExecuteUpdate(.tRows, tSQL, pRequest.PatientId, pRequest.AdmissionDate, pRequest.Department)
@@ -450,16 +450,22 @@ value binds as an empty VARCHAR instead of a typed NULL, and a `%Date` binds as 
 count. The workaround people reach for — concatenating values into the statement text with `NULL`
 spliced in by hand — is an injection surface and is exactly what these methods remove.
 
-```objectscript
-Include EnsSQLTypes       // REQUIRED — the $$$Sql* macros are not automatic in a BO
+The worked, **compile-gated** version is
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/sql-bo-typed-parmarray.cls`
+(`Example.Adapters.BO.SqlTypedParmArray`) — use it rather than the sketch that used to sit here. That
+file carries `Include EnsSQLTypes` and uses `$$$SqlInteger`, `$$$SqlVarchar`, `$$$SqlJDate` and
+`$$$SqlDouble` in real code, so tier 2 **compiles the macro names** on every release. The sketch here
+was a loose fragment that no tier could compile, and it named `$$$SqlDate` — a spelling nothing had
+ever checked. For a macro, "it compiles" is the whole question, so prefer the gated file.
 
-    Kill parms                                             // ALWAYS, before every call
-    Set parms(1) = pId,     parms(1, "SqlType") = $$$SqlInteger
-    Set parms(2) = pName,   parms(2, "SqlType") = $$$SqlVarchar
-    Set parms(3) = pBirth,  parms(3, "SqlType") = $$$SqlDate       // "" -> typed NULL
-    Set parms = 3                                          // TOP LEVEL = PARAMETER COUNT
-    Set tSC = ..Adapter.ExecuteUpdateParmArray(.tRows, sql, .parms)
-```
+The four things that decide whether the call binds anything, all of them silent when wrong:
+
+| | |
+|---|---|
+| `Kill parms` | **Before every call.** A subscript left from the previous message binds silently. |
+| `parms(1,"SqlType")` | Parameter **1** must carry a type, or none of the other descriptors are honoured. |
+| `Set parms = <n>` | The **top level is the parameter count**. Omit it and the call binds nothing. |
+| `Include EnsSQLTypes` | The `$$$Sql*` macros are not automatic in a BO. `%occODBC` offers the same values under UPPERCASE names. |
 
 Three rules, each of which silently does nothing when broken:
 
@@ -578,7 +584,7 @@ See `alerting` for the full picture; this is the per-BO subset.
 When you need to call a SOAP service but **don't have access** to the IRIS SOAP Wizard (MCP-only workflow, headless deployment, version mismatch), skip the Wizard and use `EnsLib.HTTP.OutboundAdapter` + a hand-crafted envelope:
 
 ```objectscript
-Method CallRemote(pReq As MyApp.Msg.MyRequest, Output pResp As Ens.Response) As %Status
+Method CallRemote(pReq As MyApp.MSG.MyRequest, Output pResp As Ens.Response) As %Status
 {
     Set pResp = ##class(Ens.Response).%New()
     Set xml = "<?xml version=""1.0"" encoding=""UTF-8""?>"

@@ -90,12 +90,12 @@ its siblings.
 | §6.7 | Custom BS with a bare adapter — the case where you DO write the class | `ch06_adapters/bs-file-bare-adapter.cls` |
 | §6.8 | REST inbound: `EnsLib.REST.Service`, UrlMap dispatch, CreateBusinessService | `ch06_adapters/bs-rest-inbound.cls` |
 | §6.9 | SQL inbound: GenericService poll + the mandatory JGService item + KeyFieldName | `ch06_adapters/production-sql-poll.cls` |
-| §7.1 | Canonical Ens.Alert routing circuit — class export carrying the production **and** its alert rule | `ch07_alerting/alert-circuit-production.xml` |
+| §7.1 | Canonical Ens.Alert routing circuit — class export carrying the production **and** its alert rule ⚠️ | `ch07_alerting/alert-circuit-production.xml` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |
 | §11.3 | Sibling: request message the SOAP BO's MessageMap keys on (`Demo.SAML.MSG.InvokeReq`) | `ch11_security/saml2-invoke-request.cls` |
-| §11.5 | OAuth 2.0 + LDAP server-side broker | `ch11_security/oauth2-server-validate-ldap.cls.xml` |
-| §11.7 | SSL/TLS trusted CA chain build (`openssl s_client -servername`) | `ch11_security/ssl-trusted-ca-chain.sh` |
+| §11.5 | OAuth 2.0 + LDAP server-side broker ⚠️ | `ch11_security/oauth2-server-validate-ldap.cls.xml` |
+| §11.7 | SSL/TLS trusted CA chain build (`openssl s_client -servername`) ⚠️ | `ch11_security/ssl-trusted-ca-chain.sh` |
 | §13.7 | Credentials migration — walk `Ens.Config.Credentials`, export, re-import | `ch13_migration/credentials-export-reimport.cls` |
 
 ## Rules with public-repo canonical sources
@@ -111,6 +111,25 @@ maintained version — no local copy here. See `external-repos.md` for URLs.
 | §7.1 | Alert routing rule — the link that makes the Ens.Alert circuit actually fire | `ch07_alerting/alert-routing-rule.cls` |
 | §9.1 Deployment tool | Canonical: `PYDuquesnoy/IRIS-Interop-Deployment` |
 
+## ⚠️ Rows that are indexed but NOT compiled
+
+**Three artefacts in this index are checked by no tier, and the ⚠️ on their rows says so at the point
+of the claim rather than in a footnote nobody reaches.** Tier 2 stages `.cls` files only, and
+`examples_baseline.json` holds class names — so an `.xml` export and a `.sh` script are indexed,
+counted in the artefact total, and compiled by nothing:
+
+| artefact | why no tier sees it |
+|---|---|
+| `ch07_alerting/alert-circuit-production.xml` | an XML production export, not a class file |
+| `ch11_security/oauth2-server-validate-ldap.cls.xml` | an XML **class export** — the `.cls.xml` suffix is not `.cls` |
+| `ch11_security/ssl-trusted-ca-chain.sh` | a shell script; there is no shell tier |
+
+This matters because these are not small: the two security/alerting artefacts are the largest
+non-`.cls` items in the bank. Tier-1 **C8** does reach the `.xml` files (it is why the alert
+circuit's dangling rule name was caught), so they are not *entirely* unchecked — but nothing
+compiles them, and a green run must not be read as saying otherwise. Tracked in
+`../COVERAGE-MAP.md` (wave items S2 and S14 convert the first two into gated `.cls`).
+
 ## Rules without code (process / architecture / version-specific)
 
 Several deliverable rules are pure guidance with no code component:
@@ -120,10 +139,17 @@ version-specific notes (§14.*), etc. They are not represented here; read the de
 
 ## What's explicitly NOT here (and why)
 
-- **No BPL, DTL or routing-rule example yet.** The bank has no BPL, no `XData DTL`,
-  and no standalone routing-rule class — the only rule shipped is the one inside
-  `ch07_alerting/alert-circuit-production.xml`. The `bpl`, `transformations` and
-  `component-map` skills therefore point at patterns this directory does not yet
-  demonstrate; go to those skills for the canonical shapes. Known gap, tracked in
-  issue #91.
+- ~~No BPL, DTL or routing-rule example.~~ **Closed — issue #91 is closed and this bullet was
+  stale.** Every clause of it had become false: the bank ships one BPL
+  (`ch05_bpl_dtl/bpl-order-process.cls`), one DTL (`ch05_bpl_dtl/dtl-order-to-vendor.cls`) and
+  **five** standalone routing-rule classes (`ch01_production/routing-rule-censo.cls`,
+  `ch02_hl7v2/routing-rule-hl7-adt.cls`, `ch04_fhir/routing-rule-fhir.cls`,
+  `ch05_bpl_dtl/routing-rule-fanout.cls`, `ch07_alerting/alert-routing-rule.cls`) — not "only the
+  one inside `alert-circuit-production.xml`". It is called out rather than deleted because a
+  *stale* "NOT here" entry is the worst kind: a reader checking whether a sample exists is told it
+  does not, and stops looking 40 lines above the row that indexes it.
+  The narrower gaps that remain here are tracked per-item in `../COVERAGE-MAP.md`: the only DTL is
+  object→object, so nothing demonstrates **symbolic HL7 field paths** (map item S5), and of these
+  seven artefacts only the DTL has a `%UnitTest` — `ch05_bpl_dtl/tdd-testproduction-dtl.cls`, the
+  one test in the bank that has been *run and mutation-checked* rather than merely compiled.
 - **Non-interop chapters removed on 2026-05-13.** The deliverable's original §8 (Performance & sizing), §10 (Mirroring/HA/backups), and most of §13 (generic IRIS migration) were trimmed. The corresponding `examples/ch08_performance/`, `ch10_mirror_backup/`, and parts of `ch13_migration/` were deleted in the same pass. This directory now focuses on **IRIS Interoperability** patterns only.
