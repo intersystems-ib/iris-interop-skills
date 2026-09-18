@@ -98,6 +98,8 @@ its siblings.
 | §5.13 | Sibling: the test — EXECUTED; two of the three wrong call forms are invisible to every tier (`Example.Tests.DtlFunctionForms`) | `ch05_bpl_dtl/tdd-dtl-function-forms.cls` |
 | §5.13 | Sibling: the lookup proof — loads a real table and shows the normalised key HITS while the raw one returns the default (`Example.Tests.LookupNormalize`) | `ch05_bpl_dtl/tdd-lookup-normalize.cls` |
 | §5.14 | Reading a `%UnitTest` verdict from a SqlProc — `TestMethod.Status`, not assert-scanning, which reports `passed=2 failed=0` for a FAILED case (`Example.UTL.UnitTestResult`) | `ch05_bpl_dtl/unittest-sqlproc-result-reader.cls` |
+| §5.15 | Message `%String` boundaries — bare (50), sized, and `MAXLEN=""` | `ch05_bpl_dtl/msg-maxlen-boundaries.cls` |
+| §5.15 | Sibling: the run that settles reject-vs-truncate, and the second ceiling | `ch05_bpl_dtl/tdd-maxlen-truncation.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |

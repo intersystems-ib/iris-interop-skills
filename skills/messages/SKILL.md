@@ -328,6 +328,15 @@ is an unrelated mechanism — see `business-services` on a RecordMap separator d
 - Give every text-ish property an explicit length: `As %String(MAXLEN=200)` (size it to the source).
 - For "as large as a string can be", use **`As %String(MAXLEN="")`** — unbounded, capped at the IRIS string ceiling of **~3.6 MB** (3,641,144 chars). No penalty for declaring it.
 - Past ~3.6 MB, or for genuinely large/streamed payloads, switch the property to **`%Stream.GlobalCharacter`** (see the XML-projection and SOAP-envelope patterns above).
+- **`MAXLEN=""` has a second ceiling, below the string ceiling.** Measured: 3,600,000 chars save and
+  read back intact, but at exactly `$$$MaxStringLength` (3,641,144) `%ValidateObject()` returns **OK**
+  while `%Save()` fails `#5002 <MAXSTRING>` from inside generated `%SaveData` code — an error that
+  names a routine, not your property. The validator and the saver disagree, so "it validates" is not
+  "it stores". Switch to a stream well before the ceiling rather than at it.
+
+Worked examples (compiled, and the test is run and mutation-checked):
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/msg-maxlen-boundaries.cls` and
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-maxlen-truncation.cls`.
 
 > **SOAP Wizard / WSDL caveat.** When a WSDL declares a string **without a length facet**, the message class the SOAP wizard auto-generates can come out with a **bounded `%String` (the 50 default)** for that property — so a longer value fails validation the moment the message is saved. After running the wizard, **review the generated payload classes and widen** the affected properties to `%String(MAXLEN="")` (or `%Stream.GlobalCharacter` for large content). See `soap-bo`. Whether the SOAP *deserializer* rejects or quietly shortens before any save is a separate path and is unmeasured — widen the property and the question does not arise.
 
