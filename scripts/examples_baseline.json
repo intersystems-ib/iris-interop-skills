@@ -24,6 +24,7 @@
     "Example.Alerting.Production",
     "Example.Alerting.RUL.AlertRouter",
     "Example.BO.ArchiveStream",
+    "Example.BO.RestOutbound",
     "Example.BP.OrderFulfil",
     "Example.BP.OrderProcess",
     "Example.BS.CensoWithWarmup",

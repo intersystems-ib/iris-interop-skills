@@ -1238,6 +1238,49 @@ And the protection exists only for **prebuilt** hosts: a 2-arg `OnProcessInput` 
 - **Severity.** High — the `##super()` omission is silent, and so is a dropped `pHint`.
 - **Example.** `examples/ch06_adapters/bs-recordmap-service-subclass.cls`
 
+### 6.12 REST outbound — there is no REST adapter, and `Post` takes no URL
+
+Four things this plugin said about calling a REST endpoint were wrong. All four measured on 2026.1.
+
+**There is no `EnsLib.REST.OutboundAdapter`.** It does not exist. The `EnsLib.REST` package holds
+`Operation`, `GenericOperation`, `Service`, `GenericService`, `GenericMessage` — and no outbound
+adapter. Every REST outbound host declares the HTTP one:
+
+| host | `ADAPTER` |
+|---|---|
+| `EnsLib.REST.Operation` | `EnsLib.HTTP.OutboundAdapter` |
+| `EnsLib.REST.GenericOperation` | `EnsLib.HTTP.OutboundAdapter` |
+| `EnsLib.HTTP.GenericOperation` | `EnsLib.HTTP.OutboundAdapter` |
+
+So the decision is never *which adapter*; it is always that one. The decision is whether to write a
+custom BO or configure the prebuilt `EnsLib.REST.Operation`.
+
+**`Post` takes no URL.** The signature is `Post(*pHttpResponse, pFormVarNames, pData...)` — the URL
+is the adapter's `URL` **setting**. The URL-taking variant is a different method,
+`PostURL(pURL, *pHttpResponse, pFormVarNames, pData...)`, with the URL **first**. The form this
+plugin prescribed, `Post(.resp, url, body)`, passes the URL as form-var names and posts to whatever
+the setting holds.
+
+**Narrowing the `Adapter` property buys nothing at compile time.** `..Adapter` is declared
+`As Ens.Adapter` on `Ens.Host`, so member access is late-bound. Measured all four combinations —
+with and without `Property Adapter As EnsLib.HTTP.OutboundAdapter`, both a real call and
+`..Adapter.NoSuchMethodAtAll(…)` **compile**. Narrow it for readability and editor help; do not
+treat it as a check.
+
+**A non-2xx does fail the `%Status`.** Measured inside a running production against a missing path
+on IRIS's own web server: `httpCode=404` and the returned status is an **error**. The adapter has no
+property that makes a non-2xx acceptable. So the danger is not a lenient adapter — it is a caller
+that **discards the status**: `Do ..Adapter.Post(…)` throws it away, the operation returns `$$$OK`,
+and the message is marked Completed while the far end rejected it.
+
+One more, from `component-map` and worth keeping: `resp.StatusCode` is multidimensional, so guard
+`$IsObject` before reading it, inside the `Try`.
+
+- **Source.** Bank audit 2026-09-18. The row proposing this sample asserted the `Post(.resp,url,body)` arity, a compile-time benefit from narrowing, and a silent non-2xx; measured, all three were wrong, and a fourth error — the nonexistent adapter class — was named in three skills.
+- **Validity.** Verified against IRIS for Health 2026.1; the 404 path was executed in a running production.
+- **Severity.** High — a prescribed class that does not exist, and a call form that posts to the wrong place.
+- **Example.** `examples/ch06_adapters/bo-rest-outbound.cls`
+
 ## 7. Error handling, retries & alerting
 
 ### 7.1 Alert circuit — the canonical pattern

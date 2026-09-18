@@ -322,7 +322,7 @@ When you're on the **other side** — exposing a SOAP service that an external c
 
 ## When NOT to use this skill — fall back to docs
 
-- REST endpoints (`EnsLib.REST.OutboundAdapter`) → see `business-operations`.
+- REST endpoints (`EnsLib.HTTP.OutboundAdapter` — there is no `EnsLib.REST.OutboundAdapter`) → see `business-operations`.
 - WS-Security / WS-Addressing customization beyond what the wizard supports → docs.
 - WCF / `.NET`-specific SOAP quirks → not workshop-validated.
 

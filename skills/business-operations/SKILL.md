@@ -21,7 +21,7 @@ What's the destination?
 ├── HL7 v2.x over TCP/MLLP → EnsLib.HL7.Operation.TCPOperation
 ├── HL7 v2.x to file → EnsLib.HL7.Operation.FileOperation
 ├── SOAP web service → use the soap-bo skill (SOAP wizard from WSDL)
-├── REST endpoint → custom BO + EnsLib.REST.OutboundAdapter (or HTTP.OutboundAdapter)
+├── REST endpoint → custom BO + EnsLib.HTTP.OutboundAdapter (there is NO REST outbound adapter)
 ├── Plain file → EnsLib.File.OutboundAdapter
 └── Custom protocol → custom BO extending Ens.BusinessOperation
 ```
