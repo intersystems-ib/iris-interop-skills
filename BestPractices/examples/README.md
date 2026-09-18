@@ -71,6 +71,8 @@ its siblings.
 | §2.11 | Sibling: the HL7 fixture test — EXECUTED; its control shows `""` cannot tell a bad path from an empty field (`Example.Tests.Hl7SymbolicPaths`) | `ch02_hl7v2/tdd-hl7-fixture-test.cls` |
 | §2.12 | HL7 search table with **symbolic** paths, and the assignment that makes it index | `ch02_hl7v2/searchtable-hl7-adt.cls` |
 | §2.12 | Sibling: the run — four join shapes, and the DocType-less silent miss | `ch02_hl7v2/tdd-searchtable-rows-landed.cls` |
+| §2.13 | Headless HL7 schema bootstrap — grammar in `XData`, and the two-global removal | `ch02_hl7v2/schema-bootstrap-sqlproc.cls` |
+| §2.13 | Sibling: the run — resolution arities, and the base-fallback that looks like success | `ch02_hl7v2/tdd-hl7-schema-registration.cls` |
 | §3.1 | CDA-from-XSD: Persistent + no Relationships + OnDelete Cascade | `ch03_cda/cda-from-xsd-persistence-pattern.cls` |
 | §3.1 | Sibling: the `<component>` child class the §3.1 template cascades to (`Example.CDA.Component`) | `ch03_cda/cda-from-xsd-component.cls` |
 | §3.2 | Comanda/Resposta inheritance for one-of-N subtypes — the abstract envelope | `ch03_cda/comanda-resposta-inheritance.cls` |
