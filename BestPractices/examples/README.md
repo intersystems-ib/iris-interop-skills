@@ -50,6 +50,7 @@ its siblings.
 |---|---|---|
 | §1.11 | RecordMap definition for a delimited CSV intake (the only class you author) | `ch01_production/recordmap-censo.cls` |
 | §1.12 | Complete production: prebuilt RecordMap FileService → router → outbound, with Host/Adapter targets | `ch01_production/production-censo-intake.cls` |
+| §1.14 | Drift check, disk vs namespace — the `#1012` postconditional trap, and the two ways the report lies (`Example.UTL.DriftReport`) | `ch01_production/drift-report-disk-vs-namespace.cls` |
 | §2.3 | HL7 v2 escape special characters when building messages manually | `ch02_hl7v2/hl7v2-escape-functionset.cls` |
 | §1.11 | Routing rule for the RecordMap intake — where the DTL belongs instead of a BS subclass | `ch01_production/routing-rule-censo.cls` |
 | §2.10 | HL7 v2 file intake: prebuilt HL7 FileService + the HL7-SPECIFIC router (CR-6) | `ch02_hl7v2/production-hl7-intake.cls` |
