@@ -162,6 +162,10 @@ its siblings.
 | §11.3 | Sibling: request message the SOAP BO's MessageMap keys on (`Demo.SAML.MSG.InvokeReq`) | `ch11_security/saml2-invoke-request.cls` |
 | §11.5 | OAuth 2.0 + LDAP server-side broker — a **subclass** of `%OAuth2.Server.Validate` | `ch11_security/oauth2-server-validate-ldap.cls` |
 | §11.7 | SSL/TLS trusted CA chain build (`openssl s_client -servername`) ⚠️ | `ch11_security/ssl-trusted-ca-chain.sh` |
+| §12.6 | Resend vs edit-and-resend — clone the body first, or the original message is rewritten | `ch12_monitoring/resend-edit-and-resend.cls` |
+| §12.6 | Oracle: two headers over one body row, and an edit visible through the original | `ch12_monitoring/tdd-resend-edit-and-resend.cls` |
+| §12.6 | Fixture: two queued sinks, no adapters, for the resend tests | `ch12_monitoring/production-resend-fixture.cls` |
+| §12.6 | Fixture: a terminal BO that keeps a receipt, so delivery can be asserted | `ch12_monitoring/bo-message-sink.cls` |
 | §13.7 | Credentials migration — walk `Ens.Config.Credentials`, export, re-import | `ch13_migration/credentials-export-reimport.cls` |
 | §15.4 | DICOM MWL date FunctionSet — `$ZDATEH` format 5 and the ninth-slot error trap | `ch15_dicom/dicom-mwl-date-functionset.cls` |
 | §15.5 | DICOM association registrar — verify the presentation-context COUNT, and repair a context that saves clean with none | `ch15_dicom/utl-dicom-association-registrar.cls` |

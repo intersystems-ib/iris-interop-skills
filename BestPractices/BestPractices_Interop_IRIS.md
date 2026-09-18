@@ -2883,6 +2883,71 @@ See §6.2.
 
 See §7.2.
 
+### 12.6 Resend and edit-and-resend: two APIs, and the shared body row that rewrites history
+
+**The two calls do different things, and their names do not say so.** Measured on IRIS for Health
+Community 2026.1 against a live production:
+
+| call | what it does |
+|---|---|
+| `Ens.MessageHeader::ResendMessage(pHeaderId)` | **re-queues the original header.** No new header row. Measured: header 125 resent, the sink received its payload a second time, and the newest header id was still 125. One header, delivered twice — there is no second row in the Message Viewer to compare against. |
+| `Ens.MessageHeader::ResendDuplicatedMessage(pOriginalHeaderId, *pNewHeaderId, pNewTarget, pNewBody, pNewSource, pHeadOfQueue)` | **creates a new header**, by default over the **same body row**. Measured: original header 123 / body 18 → new header 124 / body **18**. |
+| `Ens.MessageHeader::NewDuplicatedMessage(*pNewHeader, pOriginalHeaderId, pNewTarget, pNewBody, pNewSource)` | the same duplication without queueing it — use when the header needs adjusting before it goes. |
+
+`EnsPortal.MessageResendEdit::PerformResend(pHeader, pNewBody, *pNewHeaderId, *pText)` is what the
+Management Portal's edit-and-resend page calls. It is an **instance method on a Zen page**, not an API:
+read it to see the order of operations, and call `ResendDuplicatedMessage` from code.
+
+**Both refuse to work without a running production**, and loudly:
+`<Ens>ErrProductionNotRunning: No production is running` from `ResendDuplicatedMessage`, and
+`<Ens>ErrGeneral: ProductionNotRunning; not resubmitting message '<id>'` from `ResendMessage`. Worth
+knowing so this loud failure is not mistaken for the quiet one below.
+
+**The quiet one.** `Ens.MessageHeader` references its body by `MessageBodyId` +
+`MessageBodyClassName` — an id, not an object. So after a plain resend two headers point at one row,
+and "fixing" that row rewrites what the **original** message says:
+
+```
+resend header 123  ->  new header 124, both on body 18
+open body 18, set StringValue = "EDITED AFTER A PLAIN RESEND", %Save()
+header 123 (the original) now reads   EDITED AFTER A PLAIN RESEND
+header 124 (the resend)   now reads   EDITED AFTER A PLAIN RESEND
+```
+
+Nothing is corrupt and nothing errors. The Visual Trace stays perfectly coherent — it faithfully
+renders the body each header points at, and they point at the same one. The audit trail now records
+that the original message contained something it never contained, and there is no way to tell from
+inside IRIS that it ever said anything else. This is the same shape as the FHIR QuickStream in §4.11:
+a message that carries a reference, copied by a call that looks like it copies a payload.
+
+**So: clone before editing.** And the order that matters is clone-then-edit, not save-then-resend —
+`pNewBody` does **not** have to be saved first. Measured: an unsaved `%ConstructClone()` produced body
+id 12 and the sink received its edited text, so `ResendDuplicatedMessage` persists it for you.
+
+```objectscript
+ Set tHeader = ##class(Ens.MessageHeader).%OpenId(pHeaderId)
+ Set tBody   = $classmethod(tHeader.MessageBodyClassName, "%OpenId", tHeader.MessageBodyId)
+ Set tClone  = tBody.%ConstructClone()          // no id yet, so an edit cannot reach the original
+ Set tClone.StringValue = <the correction>      // edit the CLONE
+ Set tSC = ##class(Ens.MessageHeader).ResendDuplicatedMessage(pHeaderId, .tNewId, pNewTarget, tClone)
+```
+
+**What links the pair is a string, and it is only on the new header.** Measured on headers 123/124:
+the new header's `Description` is `"Resent 123"`; `SessionId` is the same on both (123);
+`CorrespondingMessageId` is **empty** on both. And `Ens.MessageHeader.Resent` stayed **empty on both
+headers after either API** — so despite the name, it is not what records a resend on these two paths,
+and nothing at all marks the original as having been resent. A report that finds resends by filtering
+on `Resent` returns nothing, and returning nothing looks exactly like "no resends happened".
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-18: signatures from
+  `%Dictionary.CompiledMethod`, behaviour by probe against a started production.
+- **Validity.** Still valid.
+- **Severity.** High — the failure mode is a rewritten audit trail with no error and a coherent trace.
+- **Example.** `examples/ch12_monitoring/resend-edit-and-resend.cls`,
+  `examples/ch12_monitoring/tdd-resend-edit-and-resend.cls`,
+  `examples/ch12_monitoring/production-resend-fixture.cls`,
+  `examples/ch12_monitoring/bo-message-sink.cls`
+
 ---
 
 ## 13. Migration of Interop productions
