@@ -1257,6 +1257,52 @@ not in the date function, which does not do it.
 - **Severity.** High (both failure modes are silent, and one of them produces something that looks like a date).
 - **Example.** `examples/ch05_bpl_dtl/tdd-convertdatetime-cheatsheet.cls`
 
+### 5.17 Loading a lookup table: embedded `&sql` is NOT compile-verified, and a reload without a transaction leaves a partial table
+
+**Embedded `&sql` does not check table or column names when the class compiles.** Measured on IRIS
+for Health 2026.1, with forced fresh compiles and a positive control proving the detector reports
+real compile errors (`#1054`):
+
+| statement | compile | runtime |
+|---|---|---|
+| correct | clean | `SQLCODE = 0` |
+| `(TableName, KeyNam, DataValue)` — column typo | **clean** | `SQLCODE = -29` *Field 'ENS_UTIL.LOOKUPTABLE.KEYNAM' not found* |
+| `INSERT INTO Ens_Util.LookupTabl` — table typo | **clean** | `SQLCODE = -30` *Table not found **compiling embedded cached query*** |
+
+The platform says why in its own message: an embedded query is compiled on its **first execution**.
+So `&sql` buys nothing over dynamic SQL for name checking, and a loader's only real protection is to
+check `SQLCODE` after every statement and then **count the rows it actually loaded**.
+
+(`&sql` still earns its place for the reason `lookup-tables` gives: inside a compiled `[SqlProc]` the
+macro sets the bare `SQLCODE` the idiom expects, whereas the MCP's `iris_execute` rewrite binds it to
+a generated local, so `If SQLCODE<0` is `<UNDEFINED>` — *after* the write has gone through.)
+
+**A reload that fails midway, without a transaction, leaves the table in a state that is neither old
+nor new.** Measured:
+
+```
+seeded with 2 rows
+non-transactional reload (DELETE, good INSERT, bad INSERT) fails at SQLCODE=-29
+    -> the table holds 1 row. Permanently.
+the same sequence inside TSTART … TROLLBACK
+    -> mid-transaction it holds 1; after TROLLBACK it holds 2 — the old content, intact.
+```
+
+One row is the worst of the three outcomes. Every key that happened to load still resolves, and
+every key that did not returns `""` with `exists = 0` — which is exactly what a key that was never
+meant to exist returns. No reading of the table distinguishes them. `DELETE` + bulk `INSERT` inside
+one transaction is the fix, and the `lookup-tables` skill already prescribes it under
+"Canonical worked-example shapes" — a few lines from the snippet that omitted it.
+
+A loader should therefore: bracket the whole load, check `SQLCODE` after every statement, count
+rows before committing, and **return the count rather than a bare `"OK"`** — a verdict that cannot
+establish what it claims is the same defect as a test that grades itself.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (a half-loaded table returns plausible values and raises nothing).
+- **Example.** `examples/ch05_bpl_dtl/lookup-bootstrap-sqlproc.cls`,
+  `examples/ch05_bpl_dtl/tdd-lookup-bootstrap.cls`
+
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 
 When you import a vendor WSDL in Ensemble/IRIS, the generated SOAP client classes nearly always need at least one of these patches.

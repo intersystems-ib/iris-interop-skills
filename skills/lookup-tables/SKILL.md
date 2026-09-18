@@ -200,14 +200,40 @@ direct SQL into `Ens_Util.LookupTable` from a `[SqlProc]` is still the most comp
 ```objectscript
 ClassMethod ImportLookups() As %String [ SqlProc ]
 {
+    TSTART                       // atomic: a mid-load failure must not leave a partial table
     &sql(DELETE FROM Ens_Util.LookupTable WHERE TableName IN ('GeneroSOAP','PlantaSOAP'))
+    If SQLCODE<0 { TROLLBACK  Quit "FAILED at DELETE: "_SQLCODE }
     &sql(INSERT INTO Ens_Util.LookupTable (TableName, KeyName, DataValue) VALUES ('GeneroSOAP','M','1'))
+    If SQLCODE<0 { TROLLBACK  Quit "FAILED at M: "_SQLCODE }
     &sql(INSERT INTO Ens_Util.LookupTable (TableName, KeyName, DataValue) VALUES ('GeneroSOAP','F','2'))
-    &sql(INSERT INTO Ens_Util.LookupTable (TableName, KeyName, DataValue) VALUES ('PlantaSOAP','1','P1'))
-    // ... more rows ...
-    Quit "OK"
+    If SQLCODE<0 { TROLLBACK  Quit "FAILED at F: "_SQLCODE }
+    // ... more rows, each checked ...
+    &sql(SELECT COUNT(*) INTO :n FROM Ens_Util.LookupTable WHERE TableName IN ('GeneroSOAP','PlantaSOAP'))
+    TCOMMIT
+    Quit "OK: "_n_" rows"   // carry the count -- a bare "OK" establishes nothing
 }
 ```
+
+**Three things in that shape are load-bearing, and the version this replaced had none of them.**
+
+- **`TSTART` / `TROLLBACK`.** Measured on 2026.1: a non-transactional reload that fails part-way
+  (`DELETE`, good `INSERT`, bad `INSERT`) leaves the table holding **1** of its original 2 rows,
+  permanently — neither old nor new. The same sequence bracketed rolls back to the old content
+  intact. A half-loaded table is the worst outcome, because a missing key returns `""` with
+  `exists = 0`, exactly like a key that was never meant to be there.
+- **`If SQLCODE<0` after every statement.** Nothing else notices the failure.
+- **Return the count, not `"OK"`.** A verdict that cannot establish what it claims is the same
+  defect as a test that grades itself.
+
+**Embedded `&sql` is NOT compile-verified** — do not reach for it expecting that. Measured, with
+forced fresh compiles: `(TableName, KeyNam, DataValue)` and `INSERT INTO Ens_Util.LookupTabl` both
+**compile clean**, and fail at runtime with `SQLCODE -29` and `-30`. The error text says why —
+*"compiling embedded cached query"* — an embedded query is compiled on first execution. Checking
+`SQLCODE` and counting rows is the only protection.
+
+Worked example, run and mutation-checked:
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/lookup-bootstrap-sqlproc.cls` and
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-lookup-bootstrap.cls`.
 
 Invoke from MCP: `SELECT MyApp.Bootstrap_ImportLookups()` — schema `MyApp`, function
 `Bootstrap_ImportLookups`; the all-underscores form resolves to `SQLUSER` and returns `-359`.
