@@ -85,6 +85,14 @@ way to find a name — though it returns **empty for repeating fields** (`PID:3`
 which is when the Schema Editor is the answer. Full table in `transformations` §"Name the field, do
 not number it" and deliverable §2.11.
 
+> **It is a floor, not a ceiling — and the first argument is a CATEGORY.** Measured on 2026.1:
+> `GetFieldNameFromNumber("2.5","PID",n)` returns a name for 1, 2, 7, 8, 18 and **empty** for 3, 5
+> and 11 — the repeating fields. Empty does **not** mean the field has no usable name:
+> `[PID:PatientName().FamilyName]` and `[PID:PatientIdentifierList().IDNumber]` both resolve, and the
+> function reports neither. So when it returns empty, try a path before falling back to a number.
+> Also: pass `"2.5"`, **not** the DocType `"2.5:ADT_A01"` — a DocType returns empty for *every* field,
+> which looks exactly like the repeating-field case.
+
 ## Cookbook — MCP-friendly import via XML + SqlProc
 
 When the Portal UI isn't available (working entirely via MCP, headless CI, scripted environment

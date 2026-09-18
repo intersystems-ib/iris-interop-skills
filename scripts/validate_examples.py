@@ -719,6 +719,48 @@ def parse_failures(result: dict, known: set[str]) -> dict[str, str]:
     return failed
 
 
+def deregister_search_tables(iris, staged, sources, label: str = "") -> None:
+    """Drop Ens_Config.SearchTableProp rows left by staged SearchTable classes.
+
+    Deleting the CLASS does not deregister a SearchTable's properties: a row survives in
+    Ens_Config.SearchTableProp keyed `<Class>~<ExtentSuperclass>`. Re-staging the same name is
+    fine, so a repeated run stays green and the leak is invisible -- but RENAME a SearchTable and
+    the next run fails with
+
+        <EnsSearchTable>PropCollision: Property 'X' in class 'New' cannot override the
+        definition from class 'Old'
+
+    naming a class that no longer exists anywhere. Measured on 2026-09-18: that is exactly what N8
+    (MyApp.Search.HL7 -> MyApp.Search.Hl7Adt) hit. CI never sees it -- a fresh container has no
+    prior row -- which is precisely why it is cleaned here rather than left to be rediscovered.
+
+    THIS LIVED ONLY IN TIER 3 UNTIL v1.41.0, and the reason is worth keeping: the bank had no
+    SearchTable, so tier 2 leaking was unobservable. S19 added the first one
+    (`Example.Search.Hl7Adt`), and the leak was immediately real -- 4 props surviving a clean run.
+    Shared by both tiers now so the pair cannot drift apart again.
+    """
+    # THE TWO TIERS HOLD `sources` IN DIFFERENT SHAPES, and the first version of this helper was
+    # silently a no-op in tier 2 because of it: tier 2 maps name -> text (a str), tier 3 maps
+    # name -> (text, skill) (a tuple). `sources.get(cn, ("", ""))[0]` therefore took the FIRST
+    # CHARACTER of tier 2's source, so `"SearchTable" in "/"` was always False. It ran, printed
+    # nothing, cleaned nothing, and the props it was written to remove were still there afterwards
+    # -- caught only by counting the rows before and after. Normalise, and never index blind.
+    def _text(cn: str) -> str:
+        v = sources.get(cn, "")
+        return v[0] if isinstance(v, tuple) else v
+
+    registered = [cn for cn in staged if "SearchTable" in _text(cn)]
+    if not registered:
+        return
+    where = " OR ".join(f"ClassDerivation LIKE '{cn}~%'" for cn in registered)
+    try:
+        iris.query(f"DELETE FROM Ens_Config.SearchTableProp WHERE {where}")
+        print(f"  deregistered{label}: {len(registered)} SearchTable prop set(s)")
+    except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+        print(f"  SearchTable props LEFT REGISTERED ({exc}) -- a later rename will "
+              f"fail with PropCollision naming a class that no longer exists")
+
+
 def tier2() -> bool:
     print("Tier 2 -- compile against live IRIS\n")
     sources: dict[str, str] = {}
@@ -783,6 +825,7 @@ def tier2() -> bool:
                 iris.delete(f"{cn}.cls")
             except (urllib.error.HTTPError, urllib.error.URLError):
                 left.append(cn)
+        deregister_search_tables(iris, staged, sources, "   ")
         msg = f"  cleanup        : {len(staged) - len(left)} deleted"
         if left:
             msg += f", {len(left)} LEFT BEHIND: {left}"
@@ -1071,15 +1114,7 @@ def tier3() -> bool:
         # what N8 (MyApp.Search.HL7 -> MyApp.Search.Hl7Adt) hit, and renaming is a Wave 0 activity,
         # so it would have recurred. CI never sees it -- a fresh container has no prior row -- which
         # is precisely why it has to be cleaned here rather than left to be rediscovered.
-        registered = [cn for cn in staged if "SearchTable" in sources.get(cn, ("", ""))[0]]
-        if registered:
-            where = " OR ".join(f"ClassDerivation LIKE '{cn}~%'" for cn in registered)
-            try:
-                iris.query(f"DELETE FROM Ens_Config.SearchTableProp WHERE {where}")
-                print(f"  deregistered            : {len(registered)} SearchTable prop set(s)")
-            except (urllib.error.HTTPError, urllib.error.URLError) as exc:
-                print(f"  SearchTable props LEFT REGISTERED ({exc}) -- a later rename will "
-                      f"fail with PropCollision naming a class that no longer exists")
+        deregister_search_tables(iris, staged, sources, "            ")
 
         msg = f"  cleanup                 : {len(staged) - len(left)} deleted"
         if left:

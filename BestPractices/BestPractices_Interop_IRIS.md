@@ -589,6 +589,82 @@ you did not explicitly assign.
 
 ## 3. HL7 v3 / CDA
 
+### 2.12 A search table indexes nothing until it is assigned — and its props live in the BASE extent
+
+Every failure in this area returns an **empty result set**, so the work is separating "nothing
+matched" from "nothing was indexed" from "the query could never have matched".
+
+**The four join shapes.** Measured on one indexed message — identical data, four different answers:
+
+| join | rows |
+|---|---|
+| `p.PropId = st.PropId AND p.ClassExtent = 'EnsLib.HL7.SearchTable'` | **8** — correct |
+| `p.ID = st.PropId` | **0** — silent zero |
+| `p.PropId = st.PropId AND p.ClassExtent = '<your subclass>'` | **0** — silent zero |
+| `p.PropId = st.PropId` (no `ClassExtent`) | **12** — over-counts |
+
+`Ens_Config.SearchTableProp.ID` is composite (`EnsLib.HL7.SearchTable||MSHControlID`), so comparing
+it to an integer `PropId` can never match. The subclass form fails because **a subclass gets no
+extent of its own**: every HL7 search table registers into the shared base extent, so the
+`ClassExtent` to join on is the base class name, never the class you wrote. And omitting
+`ClassExtent` joins across every search table in the namespace — `PropId 1` exists in six extents
+(ASTM, EDIFACT, X12, EDI.XML, HL7, XML) — so the count inflates and `Name` comes from whichever
+extent won. Two silent zeros and one over-count; none of them raises anything.
+
+**Three consequences of that shared extent**, all measured:
+
+- **Prop names are namespace-global.** Two search tables declaring the same `PropName` with
+  different paths fail at compile with `<EnsSearchTable>PropCollision`. Loud, and therefore fine —
+  but prop names need a prefix if more than one search table will ever exist.
+- **A name matching a vendor prop is silently reused.** Declaring `PropName="PatientID"` binds to the
+  vendor's `PropId 4` and your path is ignored. No error.
+- **PropIds are assigned namespace-wide** and are not stable across environments. Resolve by `Name`.
+
+**Symbolic paths work here, and both halves must be right.** Measured on a DocType'd ADT^A01:
+
+```
+[PID:PatientIdentifierList().IDNumber]   '12345'    <- correct
+[PID:PatientIdentifierList().ID]         INVALID    <- field right, COMPONENT wrong
+[PID:PatientIDInternalID().ID]           INVALID    <- that is the 2.3 field name
+[PID:PatientName().FamilyName]           'DOE'
+[MSH:MessageType.MessageCode]            'ADT'
+```
+
+A bad path does not fail the compile. `IndexDoc` indexes the props that resolve, returns an error
+naming the bad `PropertyPath`, and omits that one prop — so the table looks populated and one column
+is quietly always empty. **Check `IndexDoc`'s `%Status`.**
+
+**And a symbolic search table indexes none of its own props for a message with no DocType.** Same
+message, both ways:
+
+```
+DocType = '2.5:ADT_A01'   IndexDoc = OK       8 rows   all four declared props present
+DocType = (none)          IndexDoc = ERROR    4 rows   NONE of them; only the vendor props
+```
+
+Four rows is the cruel part: the table is not empty, so nothing looks broken, and a search on your
+own prop returns nothing while the message sits there indexed. `DocType` is empty after
+`ImportFromString` and must be set with `DocTypeSet()` — see §2.11.
+
+**A limit on the name-first rule.** `GetFieldNameFromNumber("2.5", "PID", n)` returns a name for 1,
+2, 7, 8 and 18, and **empty** for 3, 5 and 11 — the repeating fields. Empty does not mean there is no
+usable name: `PatientName` resolves for PID-5 and `PatientIdentifierList` for PID-3, both of which
+the function declines to report. The lookup is a floor, not a ceiling. (Note the category argument is
+`"2.5"`, **not** the DocType `"2.5:ADT_A01"` — passing a DocType returns empty for everything, which
+looks exactly like the repeating-field case.)
+
+**Where to assign it.** `SearchTableClass` is a `Target="Host"` setting on services and operations
+(origin `EnsLib.HL7.Service.Standard` / `.Operation.Standard`) and does **not exist** on
+`EnsLib.HL7.MsgRouter.RoutingEngine` — there is no third place. Assign it on the inbound service to
+record what arrived and on the operation to record what was actually sent; the outbound half is the
+one you need when a receiver says it never got the message.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (every defect here reads as missing data).
+- **Example.** `examples/ch02_hl7v2/searchtable-hl7-adt.cls`,
+  `examples/ch02_hl7v2/tdd-searchtable-rows-landed.cls`, and the two `SearchTableClass` settings in
+  `examples/ch02_hl7v2/production-hl7-intake.cls`
+
 ### 3.1 CDA-from-XSD class generation: Persistent + no Relationships + OnDelete Cascade
 
 When importing CDA into ObjectScript classes from the XSD via the XML Schema Wizard, the only working combination is:
