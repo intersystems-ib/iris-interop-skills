@@ -337,10 +337,17 @@ a generator that resolves `sourceClass`/`targetClass` at generation time, so a D
 same batch as its own message classes can fail with `#5001 <CLASS DOES NOT EXIST>` wrapped in
 `#5490`. Compile the messages first, or just compile twice.
 
-**`expected entity name for reference` always means an unescaped `&`.** The parser reports a line and
-offset **into the XData stream**, not into your source file, so the numbers will not match your editor
-— go looking for the `&`, not for line 10. Measured over a workshop cohort: **16 of 18 students** hit
-`#6301`.
+**`expected entity name for reference` means the parser hit a bare `&` — in XData, almost always yours.**
+The parser reports a line and offset **into the XData stream**, not into your source file, so the numbers
+will not match your editor — go looking for the `&`, not for line 10. Measured over a workshop cohort:
+**16 of 18 students** hit `#6301`.
+
+It is not *always* your XData, though, and the exception matters because it sends you hunting in the
+wrong file: **the same `#6301` comes back when something fetched HTML instead of XML.** Measured on
+2026.1, an unauthenticated `%SOAP.WSDL.Reader.Process()` against a password-protected CSP app returns
+HTTP **200** with a `<title>Login IRIS</title>` page — whose four bare `&` produce exactly this error at
+line 10. So when `#6301` names a stream you did not write, check what was actually fetched before you
+start escaping ampersands; see `soap-bo` §"Headless WSDL→client generation", Trap 1.
 
 The same rule governs routing-rule XData and any hand-written `XData ProductionDefinition` — see `bpl`.
 

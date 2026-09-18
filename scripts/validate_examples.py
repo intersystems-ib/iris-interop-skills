@@ -1085,7 +1085,7 @@ def tier2_external() -> bool:
     return ok
 
 
-def tier3() -> bool:
+def tier3(record: bool = False) -> bool:
     print("Tier 3 -- compile the INLINE snippets in skills/*/SKILL.md\n")
     sources, members, fragments, dupes = snippets()
     if dupes:
@@ -1148,6 +1148,15 @@ def tier3() -> bool:
         newly_clean = sorted(set(clean) - expected)
         if newly_clean and expected:
             print(f"  new since baseline: {', '.join(newly_clean)}")
+
+        # `expected_clean` for snippets can ONLY be computed from a live compile, and this is the one
+        # place that has one. Before this, --update-baseline called update_snippet_baseline() with no
+        # argument, which preserves the recorded list -- so the gate would print "new since baseline"
+        # for a newly gated fence and then be unable to record it, for ever. The cost was a mislabel,
+        # not a miss: a later break in such a class printed "not in baseline" instead of
+        # "REGRESSION vs baseline", which is the weaker of the two signals and the wrong one.
+        if record:
+            update_snippet_baseline(clean)
 
         ok = not real
     finally:
@@ -1233,7 +1242,15 @@ def main() -> int:
 
     if args.update_baseline:
         update_baseline()
-        update_snippet_baseline()
+        # tier3(record=True) rather than update_snippet_baseline(): the snippet expected_clean needs a
+        # live compile, and tier 3 already stages, compiles and cleans up. Without a usable target the
+        # ungated counts are still refreshed offline, and the recorded class list is preserved rather
+        # than silently emptied.
+        if preflight():
+            tier3(record=True)
+        else:
+            print("  no usable IRIS target: refreshing the offline snippet counts only")
+            update_snippet_baseline()
         update_external_baseline()
         return 0
 
