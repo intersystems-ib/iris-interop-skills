@@ -73,6 +73,7 @@
 | ✅ | Wave 1 **S16** — `tdd-destination-assert.cls`, the API that makes **CR-13 performable**. The row said `interop` and `bpl` contradicted each other about `Ens_Config.Item` and "nothing compiles either"; V2 settled it (the table IS queryable) and this ships the read. Both routes asserted to agree. Three distinctions pinned, all executed: `Target` is half the destination (Host vs Adapter, silent when wrong); an **absent** setting reads identically to an empty one, so found/not-found is the signal; and the read needs a REGISTERED production, so zero items means "I read nothing". `NameDestination()` is public so a reviewer can perform CR-13 in one call | v1.34.0 |
 | ✅ | Wave 1 **S14** — `oauth2-server-validate-ldap.cls`, a **subclass** of `%OAuth2.Server.Validate`, replacing the 207-line `.cls.xml` copy that no tier compiled. The row's `%syLDAP` worry is void: `Include %syLDAP` **alone** resolves in an application namespace (`$$$LDAPSUCCESS`=**0** — so `If tErr` is the error test — `$$$LDAPSCOPESUBTREE`=2, `$$$LDAPPORT`=389, `$$$LDAPOPTXTLSCACERTFILE`=24578), and all **13** `%SYS.LDAP` methods called exist with the arities used. The copy's real cost, measured: it overrode `SupportedClaims` with `quit ""` — **6 claims → 0** — and declared a **five**-formal `ValidateUser` against the vendor's six. That stale signature compiles clean as a subclass, raises nothing when the server calls it with six arguments, and returns a plausible boolean; `use2fa` can then only ever read 0, with a positive control (a 6-formal override setting it to 1) proving the flag CAN carry. Also found by reading the vendor source: `password=""` means "already authenticated, skip the check" upstream and "**bind anonymously and succeed**" against LDAP, so the same convention inverts. **The bank's last `.cls.xml` is gone — C8 has no XML left to inspect** | v1.35.0 |
 | ✅ | **Wave 1 COMPLETE** (v1.35.0) | — |
+| ✅ | **Wave 2 premise verification pass** — all **13** rows measured before building any. Found **3 needing correction** (S17's `SaveToClass` is on `EnsLib.RecordMap.Model.Record` with arity 0, not on the RecordMap class, and `GenerateObject` is on a third class; S29's "silently truncates" is **wrong on both halves** — a bare `%String` REJECTS with `#7201` on `%Save`, `%ValidateObject` and SQL `INSERT`, and keeps the full value in memory; S24 confirmed but worse — `ConvertDateTime` reformats `29/02/2023` into `2023-02-29`, an invalid date made to look well-formed) and **10 confirmed exact**, with the measured names recorded so no row is re-derived. Recorded as §"Wave 2 follow-on" with a dependency-ordered list. **The S29 correction was applied in the same release**, at `messages` (2 sites) and `soap-bo` (1) — and deliberately NOT at `business-services:368`, which describes a different mechanism (a RecordMap separator defaulting to `$char(32)`) and is right as written | v1.36.0 |
 | ✅ | **Custom inbound adapter** (the corrections' "belongs in wave 1" item, proposed by no wave row) — `adp-scheduler-inbound-adapter.cls` + `bs-scheduled-cron.cls` + `tdd-inbound-adapter-dispatch.cls` under §5.2. Confirmed first: `Ens.InboundAdapter` had **0 hits** in `skills/` and 0 in the bank. Adapter executed and mutation-checked — dispatch removed → `dispatched=0` with `sc=OK`; schedule check removed → fires always. Found on the way: an `Ens.BusinessService` subclass **cannot be `%New()`d** (returns `""`, silently), and `BusinessHost` accepts a non-BS stand-in, which is what makes the adapter testable at all | v1.18.0 |
 | ⬜ | everything else below | — |
 
@@ -322,6 +323,55 @@ Dependency- and cost-ordered, cheapest verified win first:
 8. **S13** — `%UnitTest` result reader (re-scoped per V5; the reader is *more* needed now that `DebugRunTestCase` is known to produce no rows).
 9. **S8** and **S16** — both now buildable as originally written (V2), using `Ens_Config.Item`.
 10. **S14** — last: the OAuth/LDAP artefact, and per §"Review corrections" ship the **subclass**, never a copy of vendor source.
+
+
+## Wave 2 follow-on — premises VERIFIED against a live instance, 2026-09-18
+
+Wave 1's pass paid for itself (3 wrong, 1 stale, 1 mis-stated arity out of 8 rows), so the same was
+done for all **13** Wave 2 rows before building any of them. **Where this section and a wave row
+disagree, this section wins.** Three rows need correcting; the other ten are buildable as written,
+with the measured names below so nobody re-derives them.
+
+### Corrections
+
+| # | Claim as written | Measured |
+|---|---|---|
+| **W1** | S17: "`SaveToClass`+`GenerateObject` **atomic in one method**", implying both sit on the RecordMap class | **Right about the pairing, wrong about where they live — and they are on two DIFFERENT classes.** `EnsLib.RecordMap.RecordMap` has neither. Measured: `EnsLib.RecordMap.Model.Record::SaveToClass()` — **arity 0**, on the *Model* class — and `EnsLib.RecordMap.Generator::GenerateObject(pRecordMap, &pTargetClassname, &pStructure=1)`. So the bootstrap method really does have to reach into two places, which strengthens the row's point rather than weakening it. `SaveToClass` also exists on `Ens.Config.Production` and `EnsLib.RecordMap.Model.ComplexBatch` with different signatures — do not pattern-match the name. |
+| **W2** | S29: "settles whether a bare `%String` **silently truncates** on `%Save` or rejects with `#7201`" | **It rejects, on every path measured, and NOTHING is silent.** 50 chars saves and reads back 50; 51 gives `ERROR #7201`. Also measured, same property: `%ValidateObject()` alone → `#7201`; SQL `INSERT` → `SQLCODE=-104 Field 'Bare' … failed validation`; and the in-memory value after `Set` is the **full 100 chars**, not truncated. `MAXLEN=""` given 5000 chars saves all 5000. So the mitigation the skills teach is right and the failure mode they describe is wrong, at three sites: `messages:314` ("silently truncated on `%Save` (no error, the data is just gone)"), `messages:320`, `soap-bo:53`. **Two things deliberately NOT swept in.** `business-services:368` ("`Alergias = "Frutos secos\|Marisco"` is silently truncated at `Frutos`") is a **different mechanism** — a RecordMap separator defaulting to `$char(32)`, so the value splits at a space — and stands exactly as written. And the SOAP/XML **import** path was not measured, so whether a wizard-generated property truncates on deserialization is still open; the correction must not claim it. |
+| **W3** | S24: a value that does not match `informat` is **returned unchanged**, so `31/02/1958` becomes `1958-02-31` | **Confirmed, and worse than stated — there is no validation at any point.** `ConvertDateTime(value, informat="%Q", outformat="%Q", outf)`, 4 args, on `Ens.Util.FunctionSet` (and ~10 other FunctionSets). Measured: `31/02/1958` → `1958-02-31`; `29/02/2023` → `2023-02-29` (**2023 is not a leap year**); `not a date` → unchanged; an already-ISO `1958-02-31` → unchanged. So a malformed date is not merely passed through, it is *reformatted into a well-formed-looking invalid date*, which is harder to spot downstream than free text. `ConvertDateTimeToUTC` confirmed absent (0 matches) — `transformations:131` already says so, correctly. |
+
+### Premises confirmed (build as written, using these names)
+
+| # | Row | Confirmed |
+|---|---|---|
+| **W4** | S20 | Exact. `FailureTimeout` InitialExpression = **-1**, origin `EnsLib.HL7.Operation.Standard`; `ReplyCodeActions` = **""**, origin `EnsLib.HL7.Operation.ReplyStandard`. One refinement the row does not state and should use: `ResponseTimeout` = **30** lives on the **adapter** (`EnsLib.HL7.Adapter.TCPOutboundAdapter`) while `FailureTimeout` lives on the **host** — the Host/Adapter split the row wants to teach, sitting right there in the two timeouts it already names. |
+| **W5** | S25 | Exact. `Ens.Util.LookupTable` properties are `TableName`, `KeyName`, `DataValue`, and `Ens_Util.LookupTable` is queryable (30 rows present in the gate namespace). |
+| **W6** | S23 | Exact. `Ens.Config.DefaultSettings` = `ProductionName`, `ItemName`, `HostClassName`, `SettingName`, `SettingValue`, `Deployable`, `Description`. |
+| **W7** | S22 | The whole ladder exists on `Ens.Director`: `RecoverProduction`, `CleanProduction`, `RestartProduction`, `StopProduction`, `GetProductionStatus`, `UpdateProduction`, `IsProductionRunning`. |
+| **W8** | S27 | `OnBeforeAllTests` / `OnAfterAllTests` are on `%UnitTest.TestCase` with **no formal parameters** (Origin `%UnitTest.TestCase`, inherited unchanged by `%UnitTest.TestProduction`). The row's "names **and signatures**" is therefore a real hazard: there is no argument to get wrong, so the only way to break it is the spelling. |
+| **W9** | S28 | `GetEventLog(type="all", name="", baseId, &v, *New)` — **5** parameters, on `%UnitTest.TestProduction`. |
+| **W10** | S19 | Both halves. `SearchTableClass` is a real setting on **29** `EnsLib.HL7.*` classes (services and operations, InitialExpression `""` throughout), and the bank contains **zero** occurrences of it. |
+| **W11** | S26 | A `Ens.BusinessOperation` subclass with **no** `Parameter ADAPTER` compiles clean — the adapter-less shape the row wants is legal, as `business-operations` claims. |
+| **W12** | S18 | `GetObject` is defined on `EnsLib.RecordMap.RecordMap` and on all seven `EnsLib.RecordMap.Service.*` classes, and **not** on `EnsLib.RecordMap.Base` — which is what the generated `.Record` class extends. So "call it on the map class, not `.Record`" is correct about where it lives. |
+| **W13** | S21 | `Ens.BPL.Flow` and `Ens.BPL.Sync` both exist as `Ens.BPL.Activity` subclasses. The attributes to write the sample against: `Ens.BPL.Call` carries `Async` (%Boolean), `Name`, `Target`; `Ens.BPL.Sync` carries `Calls` (the named calls awaited), `Type` (default **"all"**), `Timeout`, `AllowResync` (default 0). The silent failure the row describes is exactly a `<call async="1">` whose name appears in no `<sync calls="…">`. |
+
+### Suggested order for Wave 2
+
+Corrections first where they are cheap, and the two rows that change a skill early, so the skill text
+is right before anything is built on it:
+
+1. **S29** — settles a failure mode asserted at three skill sites (W2). Cheapest measurement already
+   done; the work is the artefact plus the three corrections.
+2. **S24** — same shape, one skill, and the oracle is a table of measured conversions (W3).
+3. **S25** — lookup bootstrap; names confirmed exact (W5).
+4. **S23** — SDS orphan report; names confirmed exact (W6).
+5. **S19** — search table assignment + the positive control separating "no data" from "not indexed".
+6. **S26** — the adapter-less BO (W11), which no bank artefact demonstrates.
+7. **S27** + **S28** — the two `%UnitTest` lifecycle/verdict rows; the row itself suggests folding them.
+8. **S21** — BPL `<flow>`/`<sync>` (W13).
+9. **S17** + **S18** — the RecordMap pair, S17 rewritten against the two real classes (W1, W12).
+10. **S22** — lifecycle helper (W7).
+11. **S20** — MLLP, last: it is the largest, and W4 gives it a second teaching point to fold in.
 
 
 ## Review corrections — apply these before building a ⚠ row

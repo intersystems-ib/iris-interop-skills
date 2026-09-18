@@ -50,7 +50,7 @@ namespace. See `production-lifecycle` for the `DriftReport` check.
 
 ## Review the generated payloads — the `MAXLEN=50` truncation trap
 
-When the WSDL declares a string type **without a length facet**, the wizard-generated property comes out as a **bounded `%String` with the default `MAXLEN=50`** — longer values are then **silently truncated** on save (no error). Always audit the generated payload classes after running the wizard and **widen** affected string properties to `%String(MAXLEN="")` (unbounded, ~3.6 MB ceiling) or `%Stream.GlobalCharacter` for large content. Same trap, longer treatment in `messages` (`%String` length section).
+When the WSDL declares a string type **without a length facet**, the wizard-generated property comes out as a **bounded `%String` with the default `MAXLEN=50`** — and a longer value is **rejected on save with `ERROR #7201`**, not silently truncated (measured on 2026.1 across `%Save`, `%ValidateObject` and SQL `INSERT`; the in-memory value is never shortened). Always audit the generated payload classes after running the wizard and **widen** affected string properties to `%String(MAXLEN="")` (unbounded, ~3.6 MB ceiling) or `%Stream.GlobalCharacter` for large content. Same trap, longer treatment in `messages` (`%String` length section), including what the measurement does and does not cover.
 
 ## Storage decision: %SerialObject vs %Persistent for payloads
 
