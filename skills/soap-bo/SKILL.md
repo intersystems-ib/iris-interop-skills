@@ -246,27 +246,99 @@ Sync vs Async: SOAP calls are usually synchronous (you want the response). But i
 
 ## Headless WSDL→client generation (no Portal UI)
 
+> **There is no `%SOAP.WSDL.Client` class. The class is `%SOAP.WSDL.Reader`.**
+> `##class(%SOAP.WSDL.Client)` **compiles clean** and dies at the first call with
+> `<CLASS DOES NOT EXIST> … *%SOAP.WSDL.Client`, so a clean compile is not evidence you named it right.
+
 The Portal's SOAP Wizard is just a UI over **`%SOAP.WSDL.Reader`**, and that class **is invocable headless via `iris_execute`** — there is no Portal-only restriction on the generation itself (only the REST API has no dedicated "wizard" endpoint). So in an MCP-only / headless workflow you do **not** have to hand-roll SOAP: drive the Reader directly when the WSDL is reachable at build time.
 
 ```objectscript
 // Generate the SOAP client + payload classes from a WSDL — runs fine through iris_execute.
 Set reader = ##class(%SOAP.WSDL.Reader).%New()
+// MakeBusinessOperation defaults to 0: you get the proxy client and nothing else. Set it to 1 and the
+// Reader also generates a Business Operation plus an Ens.Request/Ens.Response pair per operation —
+// which is the point of doing this inside an interop project at all.
+Set reader.MakeBusinessOperation = 1
 Set sc = reader.Process("http://host/path/Service.cls?WSDL", "Pkg.WSC.MyService")
 If $$$ISERR(sc) { /* $System.Status.GetErrorText(sc) */ }
-// -> compiles the client + request/response classes into package Pkg.WSC.MyService.
-// Read the generated source with iris_doc(get); wrap the client in an Ens BO using
-// EnsLib.SOAP.OutboundAdapter.
+// Read the generated source with iris_doc(get) and commit it — these are generated classes, and the
+// filesystem is still the source of truth.
 ```
 
 Verified on IRIS-for-Health 2026.1: `Process` is an **instance** method with signature
 `Process(pLocationURL As %String, pPackage As %String = "", pTest As %Boolean = 0, schemaReader = "")`,
 and there is also `GenerateService(pService, pNamespace, pPort, PackageName, ClientClassName, ServiceClassName)`
-for the service-class variant. (Note: there is **no** `%SOAP.WSDL.Client` class — use `%SOAP.WSDL.Reader`.)
+for the service-class variant.
+
+**What `MakeBusinessOperation = 1` adds, with the DEFAULT packages** — measured property defaults on
+2026.1, not a promise about names you can also change:
+
+| Reader property | default | what it controls |
+|---|---|---|
+| `MakeClient` | `1` | the proxy client class |
+| `MakeBusinessOperation` | **`0`** | the BO + request/response pair |
+| `BusinessOperationPackage` | `"BusOp"` | where the BO lands |
+| `RequestPackage` / `ResponsePackage` | `"Request"` / `"Response"` | where the message classes land |
+| `MakeService` / `MakeEnsembleClasses` | `0` / `0` | server-side and Ensemble extras, both off |
+| `HttpRequest` | `""` | the `%Net.HttpRequest` used to FETCH the WSDL — see Trap 1 below |
+
+So with `Pkg.WSC.MyService` as the package you get `Pkg.WSC.MyService.BusOp.*`, `…Request.*` and
+`…Response.*` unless you set those three properties. Because the packages are settable, treat the names
+as defaults rather than as the contract.
 
 Caveats that make this genuinely fiddly (so it isn't always the easy win): the URL must be a real WSDL
 **reachable from the IRIS server** (a non-WSDL response yields `ERROR #6411: Element 'definitions' or 'schema' is missing`), it usually needs Basic auth baked into the URL or a configured credential, the generated
 classes carry the same vendor patches documented above (re-apply on regeneration), and `%SOAP.WebClient`
 runtime faults surface as opaque `<ZSOAP> 64`.
+
+**Trap 1 — an unauthenticated fetch of a CSP-hosted WSDL returns HTTP 200, not 401.** A
+password-protected CSP app answers **200 with the login page** and no `WWW-Authenticate` header, so the
+Reader parses HTML and you get `ERROR #6301: SAX XML Parser Error: expected entity name for reference`
+— which reads as a malformed WSDL and is not one. Measured on 2026.1 against a real WSDL behind
+`/csp/healthshare/fhirtest` (`AutheEnabled` 8224, no unauthenticated bit): `code=200`,
+`ctype=text/html`, `wwwauth=""`, a `<title>Login IRIS</title>` body carrying four bare `&`, and
+`Process` failing `#6301` at line 10. Read the two errors as the different things they are:
+
+| error | means |
+|---|---|
+| `#6301 … expected entity name for reference` | the body is **not XML at all** — almost always a login page |
+| `#6411 Element 'definitions' or 'schema' is missing` | the body **is** XML, but it is not a WSDL |
+
+The fix is to hand the Reader a request that carries credentials:
+
+```objectscript
+Class MyApp.UTL.WsdlFetch Extends %RegisteredObject
+{
+
+/// Generate from a WSDL that sits behind Basic auth. Credentials go on the HttpRequest the Reader
+/// uses to FETCH the WSDL -- never in the URL (see below).
+ClassMethod Generate(pUrl As %String, pPackage As %String, pUser As %String, pPwd As %String) As %Status
+{
+    Set tReq = ##class(%Net.HttpRequest).%New()
+    Set tReq.Username = pUser
+    Set tReq.Password = pPwd
+
+    Set tReader = ##class(%SOAP.WSDL.Reader).%New()
+    Set tReader.HttpRequest = tReq              // the Reader fetches the WSDL through THIS request
+    Set tReader.MakeBusinessOperation = 1
+    Quit tReader.Process(pUrl, pPackage)
+}
+
+}
+```
+
+Measured: that returns the WSDL and `Process` succeeds. `%Net.HttpRequest` sends the Basic header on
+the **first** request whenever `Username` is set, so there is no need to set `InitiateAuthentication`
+yourself. **Do not put credentials in the URL** — `&IRISUsername=…&IRISPassword=…` measures as *still*
+returning the login page and *still* failing `#6301`: those are the login form's field names, not a GET
+credential channel. Note the scope — this is **build-time WSDL retrieval**, not the runtime SOAP call;
+the anti-pattern further down about credentials on the call itself still stands.
+
+**Trap 2 — a disabled or password-expired account fails identically**, because the login page is what
+comes back either way. Check the account, not the URL: `##class(Security.Users).Get(user, .info)` then
+`info("Enabled")`. Re-enable with `Set props("Enabled") = 1` and
+`##class(Security.Users).Modify(user, .props)`. `ChangePassword` is a **property**, not a method, and
+assigning `usr.Password` raises `<CANNOT SET THIS PROPERTY>`.
 
 ### When to fall back to HTTP-manual envelope instead
 

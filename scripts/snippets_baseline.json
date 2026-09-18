@@ -26,7 +26,8 @@
     "MyApp.Tests.Lookup.GeneroPlanta",
     "MyApp.Tests.Rule.RoutingCenso",
     "MyApp.UTL.CodeLookup",
-    "MyApp.UTL.FunctionSet"
+    "MyApp.UTL.FunctionSet",
+    "MyApp.UTL.WsdlFetch"
   ],
   "ungated": {
     "bare_members": 18,
