@@ -54,6 +54,8 @@ its siblings.
 | §1.11 | Routing rule for the RecordMap intake — where the DTL belongs instead of a BS subclass | `ch01_production/routing-rule-censo.cls` |
 | §2.10 | HL7 v2 file intake: prebuilt HL7 FileService + the HL7-SPECIFIC router (CR-6) | `ch02_hl7v2/production-hl7-intake.cls` |
 | §2.10 | HL7 routing rule: the HL7 assist class + docCategory/docName constraints (CR-5, CR-6) | `ch02_hl7v2/routing-rule-hl7-adt.cls` |
+| §2.11 | HL7 DTL with **symbolic** field paths — a mistyped path compiles clean and resolves to nothing (`Example.DT.AdtNormalise`) | `ch02_hl7v2/dtl-hl7-symbolic-paths.cls` |
+| §2.11 | Sibling: the HL7 fixture test — EXECUTED; its control shows `""` cannot tell a bad path from an empty field (`Example.Tests.Hl7SymbolicPaths`) | `ch02_hl7v2/tdd-hl7-fixture-test.cls` |
 | §3.1 | CDA-from-XSD: Persistent + no Relationships + OnDelete Cascade | `ch03_cda/cda-from-xsd-persistence-pattern.cls` |
 | §3.1 | Sibling: the `<component>` child class the §3.1 template cascades to (`Example.CDA.Component`) | `ch03_cda/cda-from-xsd-component.cls` |
 | §3.2 | Comanda/Resposta inheritance for one-of-N subtypes — the abstract envelope | `ch03_cda/comanda-resposta-inheritance.cls` |

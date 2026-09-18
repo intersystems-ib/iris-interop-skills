@@ -319,7 +319,22 @@ Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Ru
 
 ## HL7-specific patterns — fields, segments, paths
 
-When the BS that produced the HL7.Message assigned `MessageSchemaCategory="<Version>:<MessageType>"` (e.g. `2.5:ADT_A01`) — and you set `sourceDocType='2.5:ADT_A01'` on the DTL `<transform>` element — IRIS resolves **symbolic field names** at message level. Without that pairing the DTL has no schema to resolve names against and only numeric paths work. See `business-services` for the BS-side setup; for Ad-hoc messages (Z-segments, custom structures) see `hl7-schemas`.
+When the BS that produced the HL7.Message assigned `MessageSchemaCategory="2.5"` — the **category
+alone**, which combines with MSH-9 to produce the DocType — and you set `sourceDocType='2.5:ADT_A01'`
+on the DTL `<transform>` element, IRIS resolves **symbolic field names** at message level. Without
+that pairing the DTL has no schema to resolve names against and only numeric paths work.
+
+The two are written differently and it matters: the **setting** takes a category (`2.5`), the
+**`sourceDocType`** takes a full DocType (`2.5:ADT_A01`). Putting a DocType in the setting errors —
+`<Ens>ErrGeneral: DocType not found for message type 2.5:ADT_A01:ADT_A01`, because the value is
+concatenated with MSH-9. See `business-services` §"HL7 Business Service" for the measurement, and
+`hl7-schemas` for Ad-hoc messages (Z-segments, custom structures).
+
+**Gated, executed example:**
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_hl7v2/dtl-hl7-symbolic-paths.cls` with its
+fixture test `tdd-hl7-fixture-test.cls`. Measured, and the reason that test exists: a DTL compiles
+**identically** whether the symbolic path is right or nonsense, so tier 2 is green on both — only
+running the transform and asserting an output field separates them.
 
 ### Discovering symbolic field names — never guess them
 
