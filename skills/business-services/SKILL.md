@@ -796,9 +796,45 @@ When you create a CSP/REST web app to front a BS (or to expose a SOAP service th
 
 | Setting | Value | Why |
 |---|---|---|
-| `AutheEnabled` | **96** or **97** | Bitmask. **`96` = Password + Kerberos prompt** — accepts HTTP Basic Auth on `Authorization: Basic ...` headers. `97` = `96 + 1` adds tolerance for unauthenticated. The IRIS 2026.1 doc value `4=Password` does **NOT** accept Basic — the request gets a login form back. Use the same value as `/csp/user` (96) for confidence. |
+| `AutheEnabled` | **32** — or **96** only when anonymous access is intended | Bitmask, not a menu index. `32` = password (Instance Authentication), and it is the bit HTTP Basic exercises, so `Authorization: Basic ...` is honoured with `32` alone. `96` = `64 + 32` = password **plus unauthenticated**: with bit `64` set, IRIS first runs the request as `UnknownUser` and only challenges if that user lacks the privileges the endpoint needs — so at `96` whether an anonymous caller gets in depends on `UnknownUser`'s roles, not on this setting. `97` = `96 + 1` does not make it stricter: bit `1` is `AutheK5CCache` (a Kerberos credential cache) and is not among the bits `Security.Applications` lists for a web app. |
 | `DispatchClass` | Your `%CSP.REST` impl | For REST web apps |
 | `NameSpace` | Target namespace | Where the dispatch class lives |
+
+**The bits, from `%sySecurityMacros.inc` and `Security.Applications`' own class reference:**
+
+| Bit value | Method |
+|---|---|
+| 1 | `AutheK5CCache` (Kerberos credential cache) |
+| 2 | `AutheK5Prompt` (Kerberos, prompt) |
+| **4** | `AutheK5API` — **Kerberos**, not password |
+| 8 | `AutheK5KeyTab` |
+| 16 | `AutheOS` |
+| **32** | `AuthePassword` — Instance Authentication, the bit Basic uses |
+| **64** | `AutheUnauthenticated` |
+| 2048 | `AutheLDAP` |
+| 8192 | `AutheDelegated` |
+
+*General Installation Details* §5.2.4 publishes three of them — "commonly used values are 4=`Kerberos`,
+32=`password`, and 64=`unauthenticated`" — and `Security.Applications` documents which bits are legal on
+a web app (2, 5, 6, 11, 13, 14, 20, 21 → 4, 32, 64, 2048, 8192, 16384, 1048576, 2097152). Its
+`AutheEnabled` **InitialExpression is 64**, i.e. a web app created with defaults is unauthenticated.
+
+**What each value actually does to an unauthenticated request**, measured on 2026.1:
+
+| `AutheEnabled` | unauthenticated GET |
+|---|---|
+| `32` | **401**, always |
+| `96` / `97` | **401 only while `UnknownUser` lacks the privilege** the endpoint needs. Grant that user a role and the same URL answers 200 — so `96` cannot be relied on to protect anything. A CSP *page* returns the HTML login form at status 200 rather than a 401; a `%CSP.REST` dispatch class returns a real 401 (with `OPTIONS` still 200, which is `%CSP.REST.Login`'s documented shape). |
+
+Read it back rather than trusting the Portal:
+`##class(Security.Applications).Get(path, .props)`.
+
+A guard like `If $USERNAME = "UnknownUser"` inside the dispatch class is not a substitute — it is lost
+the moment `%REST.API.CreateApplication` regenerates `disp.cls`.
+
+**The observation that `4` gets you a login form instead of honouring Basic is real** — but the reason
+is that `4` is Kerberos (`AutheK5API`), which answers `Negotiate`, not `Basic`. It was never the
+"documented password value".
 | `Path` | `<InstallDir>csp\<webappname>\` | CSP routing filesystem mapping |
 
 **Smoke test pattern**: `curl -u user:pwd <URL>` must return **data** (JSON / XML payload), not an HTML login form. If you get the login form, the web app's `AutheEnabled` is wrong (or the user lacks resources on the target namespace).

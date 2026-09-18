@@ -286,8 +286,8 @@ Respond `HTTP 202 Accepted` (async forwarding). Reference:
 
 The web app for the REST endpoint must be registered separately (CSP web
 application + dispatch class). See `business-services` for the
-`/csp/<app>/` registration and the `AutheEnabled` bitmask (96/97 values
-verified on 2026.1).
+`/csp/<app>/` registration and the `AutheEnabled` bit table (`4`=Kerberos,
+`32`=password, `64`=unauthenticated; use `32` for a protected endpoint).
 
 ## Pattern 5 — DICOM ↔ HL7 / FHIR gateway
 
