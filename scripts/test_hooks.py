@@ -791,6 +791,68 @@ finally:
     _sh.rmtree(_d, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------- #243
+# interop_route.py had NO tests. Three things are asserted, because the router's failures are all
+# silent: a prompt that routes to nothing looks the same as a prompt with no interop content.
+_ROUTE = os.path.join(ROOT, "hooks", "interop_route.py")
+
+
+def _route(prompt):
+    """The skills this prompt routes to, in order, or 'NOTHING'."""
+    pr = subprocess.run([sys.executable, _ROUTE], input=json.dumps({"prompt": prompt}),
+                        capture_output=True, text=True)
+    if pr.returncode != 0 or pr.stderr.strip():
+        return "CRASH"
+    if not pr.stdout.strip():
+        return "NOTHING"
+    try:
+        ctx = json.loads(pr.stdout)["hookSpecificOutput"]["additionalContext"]
+    except Exception:
+        return "UNPARSEABLE"
+    return ",".join(_re.findall(r"iris-interop-skills:([a-z-]+)", ctx))
+
+
+print("\n#243 interop_route coverage")
+
+# (a) every topic name must be a real skill, or it can never route no matter what matches.
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location("_ir", _ROUTE)
+_ir = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_ir)
+_missing = [n for n, _ in _ir.TOPICS
+            if not os.path.isdir(os.path.join(ROOT, "skills", n))]
+check("every topic is a real skill", "[]", str(_missing))
+
+# (b) the routes this issue was filed about. Each was measured before the fix:
+#     "Comprueba ..." routed to tdd (via the unanchored `prueba` inside `comprueba`) and a SOAP
+#     prompt routed to nothing at all, because there was no soap-bo entry.
+for _label, _prompt, _want in [
+        ("verification prompt routes", "Comprueba que ha funcionado el envio", "message-search-debug"),
+        ("SOAP prompt reaches soap-bo", "genera el cliente SOAP desde el WSDL", "soap-bo"),
+        ("EN verification routes", "did it arrive? check the visual trace and the event log", "message-search-debug"),
+        ("a real test prompt still routes to tdd", "escribe un test con %UnitTest", "tdd"),
+        ("PKCE routes to security", "configura OAuth con PKCE", "security"),
+]:
+    check(_label, True, _want in _route(_prompt).split(","))
+
+# (b2) and the OTHER half of that fix, which (b) does not detect on its own: `prueba` was
+#      unanchored, so "Comprueba" matched it and a verification prompt was routed to tdd. Asserting
+#      only that message-search-debug appears passes even with the old pattern, because both matched.
+#      This asserts the absence, which is the only thing the anchor changed.
+check("comprueba does not route to tdd", False,
+      "tdd" in _route("Comprueba que ha funcionado el envio").split(","))
+
+# (c) ranking, not declaration order, decides which topics survive MAX. message-search-debug is
+#     declared 10th; a prompt that matches it three times must outrank a single incidental match on
+#     an earlier topic. Without this, widening a late pattern is inert -- which is why fixes 2 and 5
+#     of #243 had to land together.
+_ranked = _route("visual trace, event log and message viewer for the production").split(",")
+check("rank beats declaration order", True,
+      bool(_ranked) and _ranked[0] == "message-search-debug")
+
+# (d) a prompt with no interop content must stay silent rather than guess.
+check("no interop content is silent", "NOTHING", _route("what is the weather like today"))
+
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)
