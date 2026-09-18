@@ -2297,6 +2297,50 @@ with an explicit string test at the point of use.
   `examples/ch06_adapters/msg-forecast-response.cls`,
   `examples/ch06_adapters/tdd-soap-bo-adapter-wiring.cls`
 
+### 6.17 A SOAP inbound service has two deployment modes, and `EnableStandardRequests` only exists in one of them
+
+`EnsLib.SOAP.Service` ships with an adapter, and blanking it is a deliberate mode change rather than
+tidying. Measured on compiled classes:
+
+| class | `ADAPTER` `_Default` | has `EnableStandardRequests` |
+|---|---|---|
+| `EnsLib.SOAP.Service` | `EnsLib.SOAP.InboundAdapter` | no |
+| a service that keeps it | `EnsLib.SOAP.InboundAdapter` | no |
+| a service declaring `Parameter ADAPTER;` | **empty** | no |
+| `EnsLib.SOAP.InboundAdapter` | — | **yes, init 0** |
+| `EnsLib.HTTP.Service` | `EnsLib.HTTP.InboundAdapter` | yes, init **1** — a different family |
+
+So `Parameter ADAPTER;` with no value is not a no-op: it records an **empty** default, overriding the
+inherited one. (The dictionary column is `_Default`. `Default` is a reserved word, and a query using it
+returns zero rows with the reason only in the status.)
+
+**No service has `EnableStandardRequests` — it is the adapter's property.** `Target="Adapter"` is what
+routes the setting to the adapter instance. Which gives the two modes:
+
+- **Adapter mode** (the default): the adapter exists, so `Target="Adapter" EnableStandardRequests` has
+  somewhere to land. Its default is **0**, so leaving it unset fails the **first** call with
+  `<Ens>ErrSOAPNotEnabled: Adapter Setting EnableStandardRequests is not set`.
+- **Direct / CSP mode** (`Parameter ADAPTER;` blank): there is no adapter instance, so the setting
+  cannot be applied at all — and the production item's **Name must equal the FQCN of the web-service
+  class**, or URL dispatch cannot resolve the WSDL. That is the one documented exception to the
+  `Tipo.Name` item convention, and the cost of getting it wrong is an endpoint that 404s with nothing
+  in the Event Log.
+
+`EnsLib.SOAP.Service` extends `Ens.Helper.Service.SyncResponseHandler.HTTP, Ens.BusinessService,
+%SOAP.WebService` — **not** `EnsLib.HTTP.Service` — so it inherits no Host copy of the setting. For
+SOAP the target is unambiguous; the Host variant belongs to the HTTP/REST family and is a different
+decision, not an alternative placement.
+
+**The failure is loud but misdirecting, not silent.** `<Ens>ErrSOAPNotEnabled` names the **setting**
+and not the **target**, so the natural next move is to set the same thing again on the Host — which the
+Portal accepts without complaint and which changes nothing. The cost is the round trip.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled, both modes measured.
+- **Severity.** High (mandatory in one mode, unsettable in the other, and the error points at the wrong half).
+- **Example.** `examples/ch06_adapters/soap-inbound-adapter-service.cls`,
+  `examples/ch06_adapters/production-soap-inbound.cls`,
+  `examples/ch06_adapters/tdd-soap-inbound-targets.cls`
+
 ### 7.1 Alert circuit — the canonical pattern
 
 In every Business Host of the production, enable “Send Alert on Error” (the setting is `AlertOnError`). The exception (always) is the Ens.Alert circuit itself: **Ens.Alert and the BO that sends the alert must have this checkbox DISABLED** to avoid infinite loops.

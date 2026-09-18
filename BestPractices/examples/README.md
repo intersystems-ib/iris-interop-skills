@@ -146,6 +146,9 @@ its siblings.
 | §6.16 | Sibling: the request the MessageMap keys on | `ch06_adapters/msg-forecast-request.cls` |
 | §6.16 | Sibling: the response, whose boolean stays a `%String` on purpose | `ch06_adapters/msg-forecast-response.cls` |
 | §6.16 | Sibling: the run — closes the last placeholder-dependency exemption | `ch06_adapters/tdd-soap-bo-adapter-wiring.cls` |
+| §6.17 | SOAP inbound service in **adapter mode** (keeps the inherited adapter) | `ch06_adapters/soap-inbound-adapter-service.cls` |
+| §6.17 | The production wiring both modes, with the FQCN item-name exception | `ch06_adapters/production-soap-inbound.cls` |
+| §6.17 | Sibling: the run — which target the setting belongs on, and why | `ch06_adapters/tdd-soap-inbound-targets.cls` |
 | §7.1 | Canonical `Ens.Alert` circuit, **compiled** — replaces the former `.xml`, whose rule could not compile (`Example.Alerting.Production`) | `ch07_alerting/production-alert-circuit.cls` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |
