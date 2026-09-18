@@ -2557,6 +2557,100 @@ Watch for hardcoded port references in client code and firewall rules during mig
 
 ---
 
+## 15. DICOM
+
+DICOM on IRIS for Health is wiring and configuration, not parsing: `EnsLib.DICOM.*` handles the
+protocol. The complete worked production is the vendored MIT snapshot under
+`examples/external/workshop-iris-dicom-interop/` — 19 classes, compiled by the gate's tier 2b — and
+this chapter is deliberately **not** a duplicate of it. It records the things that cost the most
+attempts, each measured on IRIS for Health 2026.1 in an Interoperability-enabled application
+namespace (45 `EnsLib.DICOM.*` classes are visible there, so none of this needs `%SYS`).
+
+### 15.1 Three different methods are called `CreateAssociation`
+
+This is the first thing to get straight, because the three have different arities and different
+meanings, and an example copied from the wrong one fails in a way that names neither:
+
+| call | arity | what it is |
+|---|---|---|
+| `EnsLib.DICOM.Util.AssociationContext.CreateAssociation(pCallingAET, pCalledAET, pTransferSyntaxes)` | 3 | the platform API: registers an AE pair with its presentation contexts |
+| `EnsLib.DICOM.Adapter.TCP.CreateAssociation(&pREQUEST, &pACCEPT)` | 2, by reference | unrelated — the adapter negotiating a live association |
+| `DICOM.Util.CreateAssociation(pCallingAET, pCalledAET, pTransferSyntaxes, pTypeList)` | 4 | the **vendored sample's own wrapper**, which adds `pTypeList` so a simulator is not offered every SOP class in the dictionary |
+
+The `dicom` skill's `OnStart` example calls the **wrapper**, so its four arguments are right there and
+wrong against the platform method. Check which one you are looking at before copying.
+
+**Argument order is `(Calling, Called)`** on both of the AET-taking forms — the **initiator** first,
+the **responder** second. Wire direction, not alphabetical and not IRIS-first: for an inbound C-STORE
+where IRIS is the SCP, the remote modality is the *calling* AE and IRIS is the *called* one. AE-title
+mismatch is the standard first-day failure, and it presents as an association that is refused with no
+indication which side's title is wrong.
+
+### 15.2 `AETExists` takes two arguments, and the class dictionary will tell you it takes none
+
+`EnsLib.DICOM.Util.AssociationContext` carries an index named `AET`. That index generates eight
+methods — `AETExists`, `AETDelete`, `AETOpen`, `AETCheck`, `AETSQLExists`, and three more — and
+**every one of them reports `FormalSpec = ''` and `ClassMethod = False`** in
+`%Dictionary.CompiledMethod`. Both are wrong. Measured:
+
+```
+##class(EnsLib.DICOM.Util.AssociationContext).AETExists("a","b")  ->  0     (two args accepted)
+##class(EnsLib.DICOM.Util.AssociationContext).AETExists()         ->  <UNDEFINED>
+```
+
+So the usual "check it against the class dictionary rather than memory" rule has a blind spot, and
+this is it: for an index-generated method the dictionary **understates** both arity and callability.
+When a name looks like `<IndexName><Verb>`, look for that index in `%Dictionary.CompiledIndex` and
+call the method instead of trusting its signature.
+
+The `OnStart` guard that matters is therefore:
+
+```objectscript
+If '##class(EnsLib.DICOM.Util.AssociationContext).AETExists(tCalling, tCalled) {
+    Set tSC = ##class(EnsLib.DICOM.Util.AssociationContext).CreateAssociation(tCalling, tCalled)
+    If $$$ISERR(tSC) Quit tSC
+}
+```
+
+### 15.3 An association context with zero presentation contexts saves clean
+
+`CreateAssociation` walks `^EnsDICOM.Dictionary("as","u",…)` and inserts a presentation context for
+every SOP class whose entry matches the type list. A friendly name that matches **nothing** — a typo,
+or a name from a different IRIS version — inserts nothing, and the context still `%Save()`s and
+returns `$$$OK`. `AETExists` is then true, so an `OnStart` guard written as above never retries, and
+every association is refused at negotiation because the two sides share no presentation context.
+There is no error at configuration time and nothing in the Event Log.
+
+The check is therefore not "did `CreateAssociation` succeed" but "does the saved context have
+presentation contexts": `EnsLib.DICOM.Util.AssociationContext` has a `PresentationContexts`
+collection, and a count of zero is the finding.
+
+### 15.4 Modality Worklist date parsing — `$ZDATEH(value, 5)` and the error trap
+
+A C-FIND for a worklist arrives with `DataSet.StudyDate` in DICOM's `YYYYMMDD`, which is `$ZDATEH`
+**format 5**. Measured:
+
+| input | `$ZDATEH(v, 5)` | with the error-trap argument |
+|---|---|---|
+| `20260918` | `67831` | `67831` |
+| `2026-09-18` | `67831` | `67831` |
+| `notadate` | **`<ILLEGAL VALUE>`** | `-1` |
+| `20261332` | **`<ILLEGAL VALUE>`** | `-1` |
+
+The trap is the **ninth** positional argument: `$ZDATEH(v, 5, , , , , , , -1)`. Without it, a malformed
+or absent date throws inside the worklist process — and the failure mode that matters is not the
+throw. It is that a modality asking for a worklist gets **no C-FIND response at all**, or an empty
+one, while IRIS shows a green production with the query sitting in the trace. Nothing looks wrong
+from the IRIS side; the modality's screen is simply blank.
+
+Format 5 also accepts the dashed form, which is worth knowing because it means a `2026-09-18` slipping
+in from a non-DICOM source parses rather than failing loudly.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (every failure mode here is a green production and a blank modality).
+- **Example.** `examples/ch15_dicom/dicom-mwl-date-functionset.cls`, and the complete production under
+  `examples/external/workshop-iris-dicom-interop/`.
+
 ## Appendix B — References
 
 ### Public InterSystems / community repos cited
