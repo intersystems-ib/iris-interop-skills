@@ -58,11 +58,14 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="FilePath">/data/relay/out/</Setting>
   </Item>
 
-  <!-- The alert circuit must not alert on its own errors, or a failing alert loops (§7.1). -->
-  <Item Name="Ens.Alert" Category="Example" ClassName="EnsLib.MsgRouter.RoutingEngine"
-        PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
-    <Setting Target="Host" Name="AlertOnError">0</Setting>
-  </Item>
+  <!-- NO Ens.Alert ITEM HERE, DELIBERATELY. This production carried one until v1.33.0, with
+       AlertOnError=0 and no BusinessRuleName — and an Ens.Alert router with no rule is WORSE than
+       no Ens.Alert item at all: the framework routes every Ens.AlertRequest to it and the rule that
+       would forward them does not exist, so the alerts are captured and dropped in silence. Found
+       by Example.UTL.PreflightValidator on its first real run (§1.15).
+       The alert circuit is a production of its own — see ch07_alerting/production-alert-circuit.cls
+       (§7.1), which wires Ens.Alert to a rule and a sink. The AlertOnError=1 settings on the items
+       above are what FEED that circuit; they do not need a local router to be correct. -->
 
 </Production>
 }

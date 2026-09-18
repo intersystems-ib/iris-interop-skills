@@ -462,6 +462,33 @@ def tier1() -> bool:
                 f"{rel(f)} -> OnInit overrides a prebuilt EnsLib host without calling ##super()")
     r.check("C14", "an OnInit override on a prebuilt EnsLib host calls ##super()", missing_super)
 
+    # ── C15 ───────────────────────────────────────────────────────────────────────────────
+    # An `Ens.Alert` item with no BusinessRuleName is WORSE than no Ens.Alert item at all: the
+    # framework routes every Ens.AlertRequest to that name, the rule that would forward them does
+    # not exist, and the alerts are captured and dropped in silence.
+    #
+    # Found by Example.UTL.PreflightValidator on its first real run: FIVE of the six gated
+    # productions carried exactly that -- an Ens.Alert item with AlertOnError=0 and no rule, added
+    # to look like an alert circuit. AlertOnError=1 on ordinary items feeds the real circuit
+    # (ch07_alerting), which is a production of its own and needs no local router.
+    alert_norule = []
+    for f in files:
+        if f.suffix not in (".cls", ".xml"):
+            continue
+        text = read(f)
+        if "<Production " not in text:
+            continue
+        for block in re.findall(r"<Item\s[^>]*>.*?</Item>", text, re.S):
+            m_name = re.search(r'(?<![A-Za-z])Name="([^"]+)"', block)
+            if not m_name or m_name.group(1) != "Ens.Alert":
+                continue
+            if "BusinessRuleName" not in block:
+                alert_norule.append(
+                    f"{rel(f)} -> Ens.Alert item has no BusinessRuleName: it captures every "
+                    f"Ens.AlertRequest and drops it. Wire it, or omit the item entirely.")
+    r.check("C15", "an Ens.Alert item carries a BusinessRuleName (or is not there at all)",
+            alert_norule)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by

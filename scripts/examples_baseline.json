@@ -66,6 +66,7 @@
     "Example.UTL.AsyncLogger",
     "Example.UTL.DriftReport",
     "Example.UTL.FunctionSet",
+    "Example.UTL.PreflightValidator",
     "Example.UTL.TryCatchIdiom",
     "Example.UTL.UnitTestResult",
     "Example.Vendor.WSC.SAPClient",
