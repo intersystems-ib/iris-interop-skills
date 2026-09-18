@@ -32,7 +32,7 @@
     "MyApp.UTL.WsdlFetch"
   ],
   "ungated": {
-    "bare_members": 19,
+    "bare_members": 18,
     "loose_fragments": 33
   }
 }

@@ -408,6 +408,16 @@ Method TestEmptyAlergiasToNull()
     Do ..ExpectInsertLogged(baseId, tKey, "INSERT OK logged for " _ tKey)
 }
 
+/// Clean up exactly THIS run's rows. The DELETE names a table, so it lives in the suite that owns
+/// that table -- not in the shared base every suite inherits. Scoped by this run's prefix, so it
+/// cannot take another run's data even if two runs overlap.
+Method OnAfterAllTests() As %Status
+{
+    Set tPattern = "TST-" _ ..RunId _ "-%"
+    &sql(DELETE FROM Cocina.Menus WHERE paciente_id LIKE :tPattern)
+    Quit $$$OK
+}
+
 }
 ```
 
@@ -685,17 +695,8 @@ Method Key(pTag As %String) As %String [ CodeMode = expression ]
 ```
 
 Each suite then cleans **its own** destination — the `DELETE` names a table, so it belongs in the suite
-that owns that table, not in a shared parent every suite inherits:
-
-```objectscript
-/// In MyApp.Tests.BO.Menus2Cocina. Scoped by this run's prefix, so it cannot take another run's rows.
-Method OnAfterAllTests() As %Status
-{
-    Set tPattern = "TST-" _ ..RunId _ "-%"
-    &sql(DELETE FROM Cocina.Menus WHERE paciente_id LIKE :tPattern)
-    Quit $$$OK
-}
-```
+that owns that table, not in a shared parent every suite inherits. See the `OnAfterAllTests` in the
+BO skeleton above, which is compiled by the gate rather than quoted here.
 
 ## See also
 
