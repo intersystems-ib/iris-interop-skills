@@ -85,6 +85,29 @@ re-plan from scratch and it never rewrites silently.
    names. If the review cannot name it, that is a CR-13 finding, not a pass. A destination the
    session **created** during this build is a CR-13 finding regardless of the test result. Skip this
    step only when the tests touch no external system at all.
+
+   **Read it with the gated helper rather than by hand** —
+   `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-destination-assert.cls`:
+
+   ```
+   SELECT Example_Tests.DestinationAssert_NameDestination('<Pkg>.Production','BO.AdtOut','FilePath')
+   -> BO.AdtOut.FilePath = /data/hl7/out/  (Target=Adapter, class=EnsLib.HL7.Operation.FileOperation)
+   ```
+
+   Three things that make the difference between performing CR-13 and appearing to:
+
+   - **`Target` is half the destination.** A setting is `Host` or `Adapter`, the Portal shows both in
+     one panel, and a value on the wrong target is accepted and never read. "FilePath = /data/hl7/out/"
+     is not an answer; "FilePath on the **Adapter**" is.
+   - **Absent and empty read identically.** A setting that is not configured returns `""`, exactly like
+     one configured to empty. The helper reports `NOT CONFIGURED: … a CR-13 finding, not an empty
+     destination`, because CR-13 says an unnameable destination is a finding rather than a pass.
+   - **The read needs a REGISTERED production.** `%OpenId` and `Ens_Config.Item` both read the
+     registered definition, not the class file's XData, so a production that merely compiles reads as
+     **zero items**. Zero items is not "no destinations configured" — it is "I read nothing".
+
+   And `Ens_Config.Item` **is** a queryable table: `interop` said otherwise until v1.24.0, and that
+   claim is why this step had no worked example for as long as it did.
 5. **Emit the report** (severity-tagged) → **a scoped remediation plan** → offer to **apply the safe
    fixes** (P0/P1 with an unambiguous canonical fix) only after the user confirms. Leave defensible
    choices as notes, not edits.
