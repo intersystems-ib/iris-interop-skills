@@ -836,6 +836,66 @@ one you need when a receiver says it never got the message.
   `examples/ch02_hl7v2/tdd-searchtable-rows-landed.cls`, and the two `SearchTableClass` settings in
   `examples/ch02_hl7v2/production-hl7-intake.cls`
 
+### 2.13 Headless HL7 schema bootstrap — a dropped override falls back to the base, it does not linger
+
+**The only headless path** is `EnsLib.HL7.SchemaXML`: `Import(pFile, *pCategoryImported,
+pForceCategory = "")`, `Export(pCategory, pFile)`, and an often-missed
+`GetImportCategory(pFilename)` which reads a file's category name without importing it. `Import`
+takes a **file**, so a grammar carried in `XData` has to be written out first. The plausible
+neighbour `EnsLib.HL7.Util.SchemaDocument` **does not exist** — subclassing it is an anti-pattern
+because the class is not there.
+
+**There is no platform `RemoveSchema`.** Searching the whole class dictionary for that name returns
+nothing. Removal is a two-global kill — `^EnsHL7.Schema(cat)` **and** `^EnsHL7.Description(cat)` —
+and both matter: `CategoryExists` reads the first, so killing only the second leaves the category
+registered while its descriptions vanish.
+
+**A re-import cleans; it does not leave the old definitions behind.** Measured three ways:
+
+```
+import a category defining ZAL                      ZAL  -> 'Cat:ZAL'
+re-import the SAME category with ZAL renamed,        ZAL  -> (empty)      gone, not lingering
+  with NO removal in between                         ZAL2 -> 'Cat:ZAL2'
+drop a MessageType override and re-import            ^EnsHL7.Schema(cat,"MT","ADT_A04") absent
+```
+
+**But the silent failure is real — it is inheritance, not staleness.** A category declared
+`base='2.5'` inherits, so a dropped override does not resolve to empty; it falls through:
+
+| resolution on a category `Example_2.5` with `base='2.5'` | result |
+|---|---|
+| `ResolveSegNameToStructure(cat, "", "ZAL", .sc)` — overridden | `Example_2.5:ZAL` |
+| … `"PID"` — inherited | `2.5:PID` |
+| … `"ZZZ"` — unknown | *(empty)* |
+| `ResolveSchemaTypeToDocType(cat, "ADT_A01", .sc)` — overridden | `Example_2.5:ADT_A01` |
+| … `"ADT_A04"` — **not** overridden | **`2.5:ADT_A01`** |
+| … `"NOSUCHTYPE"` | *(empty)* |
+
+`ADT_A04 → '2.5:ADT_A01'` is the line to remember. Not empty, not an error: a DTL bound to
+`Example_2.5:ADT_A04` silently gets the **base's** structure, and **the prefix is the only signal**.
+So after a re-import, verify the things you **overrode**, not just the things you added — an addition
+that failed to import resolves to empty and fails loudly, while a lost override answers plausibly
+from the base.
+
+Removing before importing is still worth doing, for a different reason than "avoiding stale
+definitions": it makes the result **deterministic**. A re-import over an existing category is an
+overwrite whose outcome depends on what was there; killing first means the category is exactly the
+XData and nothing else.
+
+**Two arities**, and the first one's second parameter is genuinely named `pDummy`:
+
+```
+ResolveSegNameToStructure(pSchemaCategory, pDummy As %String = "", pSegName, *pStatus)
+ResolveSchemaTypeToDocType(pSchemaCategory, pTypeName, *pStatus, pDocTypeResolution = "")
+```
+
+Assume three arguments on the first and the segment name lands in the dummy slot.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed end to end.
+- **Severity.** High (a category answering from the base looks correctly imported).
+- **Example.** `examples/ch02_hl7v2/schema-bootstrap-sqlproc.cls`,
+  `examples/ch02_hl7v2/tdd-hl7-schema-registration.cls`
+
 ### 3.1 CDA-from-XSD class generation: Persistent + no Relationships + OnDelete Cascade
 
 When importing CDA into ObjectScript classes from the XSD via the XML Schema Wizard, the only working combination is:
