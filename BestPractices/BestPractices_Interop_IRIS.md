@@ -359,10 +359,46 @@ message reaches the `BadMessageHandler` instead of flowing on.
 
 ### 2.11 Symbolic HL7 field paths — and why an empty result proves nothing
 
-With a DocType assigned, HL7 field paths can be written by **name** — `{PID:PatientName(1).GivenName}`
-rather than `{PID:5(1).2}`. That is worth having: HL7 transforms are reviewed by eye, and numeric
-paths are unreadable exactly where review happens. But the mechanism has two traps, and both are
-silent.
+**Address segments and fields BY NAME, not by position.** `MSH:MessageType.MessageCode` rather than
+`MSH:9.1`; `PV1:PatientClass` rather than `PV1:2`. A positional path is correct and unreadable, and
+HL7 work is reviewed by eye — the reviewer who has to decide whether `PV1:3` is the right field is
+the person the name is for. Names also survive a schema revision that renumbers nothing but tells
+you, at the point of use, what you are reading.
+
+Measured on the stock 2.5 schema:
+
+| positional | named |
+|---|---|
+| `MSH:9.1` | `MSH:MessageType.MessageCode` |
+| `MSH:9.2` | `MSH:MessageType.TriggerEvent` |
+| `MSH:10` | `MSH:MessageControlID` |
+| `MSH:6` | `MSH:ReceivingFacility` |
+| `PV1:2` | `PV1:PatientClass` |
+| `PV1:3` | `PV1:AssignedPatientLocation` |
+| `PID:3.1` | `PID:PatientIdentifierList(1).IDNumber` |
+| `PID:5.2` | `PID:PatientName(1).GivenName` |
+
+Three rules that come with it, all measured:
+
+1. **You cannot mix.** `MSH:MessageType.1` is **invalid** — naming the field obliges you to name the
+   component too. Name the whole path or none of it.
+2. **Names are case-insensitive.** `MSH:messagetype` and `MSH:MessageType` both resolve; the schema
+   stores the lowercase form, and CamelCase is what reads well in a transform.
+3. **A DocType must be assigned**, or only positional paths resolve — see the fixture rules below.
+
+**Discovering a name — do not guess it.** `##class(EnsLib.HL7.Schema).GetFieldNameFromNumber(category,
+segment, number)` is authoritative: `("2.5","PV1",2)` returns `patientclass`. Note the gap, measured:
+it returns **empty for repeating fields** (`PID:3`, `PID:5`, `OBX:5`), so for those read the name off
+the Schema Editor or confirm a candidate with `GetValueAt` and check the status. `GetFieldNumberFromName`
+does the reverse when you are reading someone else's positional code.
+
+**Where a name is not the answer at all: a routing rule's match.** Constrain on `docCategory` /
+`docName` rather than comparing any MSH field, named or numbered — that is conformance criterion
+CR-5, and it is a stronger statement than this section: the named form is better than the numbered
+one, and not matching on MSH at all is better than both.
+
+
+The mechanism has two traps, and both are silent.
 
 **The compiler cannot check a path.** Measured on 2026.1: a DTL compiles identically with
 `{PID:PatientName(1).FamilyName.Surname}` and with `{PID:PatientNameXX(1).FamilyName.Surname}`,

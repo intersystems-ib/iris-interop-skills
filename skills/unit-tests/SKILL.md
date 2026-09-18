@@ -240,8 +240,8 @@ Method TestHappyPath()
 
     Set tSC = ##class(MyApp.DT.PatientCensusToADT).Transform(tSrc, .tTarget)
     Do $$$AssertStatusOK(tSC, "Transform should succeed")
-    Do $$$AssertEquals(tTarget.GetValueAt("PID:3"), "P12345", "PID:3 should be PatientId")
-    Do $$$AssertEquals(tTarget.GetValueAt("PV1:3"), "ICU", "PV1:3 should be Department")
+    Do $$$AssertEquals(tTarget.GetValueAt("PID:PatientIdentifierList(1).IDNumber"), "P12345", "identifier should be PatientId")
+    Do $$$AssertEquals(tTarget.GetValueAt("PV1:AssignedPatientLocation"), "ICU", "assigned location should be Department")
 }
 
 Method TestEmptyDepartment()
@@ -250,7 +250,7 @@ Method TestEmptyDepartment()
     Set tSrc.PatientId = "P12345"
     Set tSC = ##class(MyApp.DT.PatientCensusToADT).Transform(tSrc, .tTarget)
     Do $$$AssertStatusOK(tSC)
-    Do $$$AssertEquals(tTarget.GetValueAt("PV1:3"), "", "Empty department should map to empty PV1:3")
+    Do $$$AssertEquals(tTarget.GetValueAt("PV1:AssignedPatientLocation"), "", "empty department maps to an empty assigned location")
 }
 
 /// One boundary method is the MINIMUM, not the target — add one Test* per spec clause.

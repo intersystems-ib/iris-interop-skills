@@ -80,9 +80,15 @@ Method TestSymbolicPathsResolve()
     Do $$$AssertEquals(tDoc.GetValueAt("PID:PatientName(1).GivenName"), "JOHN", "symbolic given name")
     Do $$$AssertEquals(tDoc.GetValueAt("PID:PatientIdentifierList(1).IDNumber"), "12345", "component is IDNumber, not ID")
 
-    // The numeric equivalents, to show they address the same data.
-    Do $$$AssertEquals(tDoc.GetValueAt("PID:5.1"), "DOE", "numeric path reaches the same field")
-    Do $$$AssertEquals(tDoc.GetValueAt("PID:5.2"), "JOHN", "numeric path reaches the same component")
+    // The positional equivalents. They address the same data and are the form to AVOID: correct,
+    // and unreadable at the review where HL7 work is actually checked. Asserted here only so the
+    // equivalence is demonstrated rather than claimed.
+    Do $$$AssertEquals(tDoc.GetValueAt("PID:5.1"), "DOE", "positional path reaches the same field")
+    Do $$$AssertEquals(tDoc.GetValueAt("PID:5.2"), "JOHN", "positional path reaches the same component")
+
+    // You cannot MIX the two: naming the field obliges you to name the component.
+    Set tMixed = tDoc.GetValueAt("PID:PatientName(1).2", , .tMixedStatus)
+    Do $$$AssertStatusNotOK(tMixedStatus, "a named field with a numbered component is invalid")
 }
 
 /// The negative control, and the argument of §2.11 in one method: "" does not tell you which

@@ -42,7 +42,7 @@ A rule for an **HL7** router sets `RuleAssistClass = "EnsLib.HL7.MsgRouter.RuleA
   <constraint name="msgClass"     value="EnsLib.HL7.Message"/>
   <constraint name="docCategory"  value="2.5"/>
   <constraint name="docName"      value="ADT_A01"/>
-  <when condition='Document.{MSH:9.2}="A01"'>
+  <when condition='Document.{MSH:MessageType.TriggerEvent}="A01"'>
     <send transform="MyApp.DT.AdtToCanon" target="BO.Target"/><return/>
   </when>
 </rule>
@@ -55,7 +55,13 @@ the "one router, two inputs" shape — and it becomes wrong, without anyone edit
 it, and re-run the conformance pass.** Nothing else will catch it: it compiles, and an end-to-end
 test asserting the message reached its target passes, because the generic engine transports
 `EnsLib.HL7.Message` perfectly well. What you lose is silent — schema validation in the rule
-editor and the `{MSH:9.1}` paths. If the router genuinely must serve both shapes, split it.
+editor and the `{MSH:…}` paths. If the router genuinely must serve both shapes, split it.
+
+**Name the field rather than numbering it.** `{MSH:MessageType.TriggerEvent}`, not `{MSH:9.2}` —
+same field, and the next reader does not have to count. Measured: you cannot mix the two,
+`{MSH:MessageType.1}` is invalid. Better still, for a *match*, constrain on `docCategory`/`docName`
+and do not compare an MSH field at all (CR-5) — the constraints above already do the work this
+condition is duplicating.
 
 (The conformance reviewer flags this as **CR-6**, and the `conformance-prescan` hook now reads the
 production wiring for it; this section is the build-time guidance so you avoid it in the first
