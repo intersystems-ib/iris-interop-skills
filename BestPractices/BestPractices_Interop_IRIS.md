@@ -471,6 +471,62 @@ decoded.)
 - **Example.** `examples/ch01_production/recordmap-generate-bootstrap.cls`,
   `examples/ch01_production/tdd-recordmap-getobject-encoding.cls`
 
+### 1.18 `RecoverProduction()` returns `$$$OK` having done nothing — verify the STATE, not the status
+
+**State codes**, from the `$$$eProductionState*` macros: **1 Running, 2 Stopped, 3 Suspended,
+4 Troubled**. State 3 is the one that blocks every subsequent `StartProduction` in the namespace.
+
+**`RecoverProduction()` returns `$$$OK` from any state.** Measured on IRIS for Health 2026.1:
+
+| before | `RecoverProduction()` | after |
+|---|---|---|
+| Stopped (2) | `$$$OK` | still **Stopped (2)** |
+| Running (1) | `$$$OK` | still Running (1) |
+
+It takes **no arguments** — there is nothing to get wrong and nothing to check. So a helper that
+reports from the status alone emits
+
+```
+{"state":"2","success":true}
+```
+
+for a production that is not running: `success` is true because the API said so, and the state is the
+one nobody read. A clean status is the API's word for what it *attempted*, never evidence of the
+outcome — read the state back.
+
+**And `RecoverProduction` does not clear a Suspended production.** Only `CleanProduction` does. That
+matters because state 3 blocks every start, so "recover" is precisely the wrong reflex for the one
+state that most looks like it needs recovering.
+
+**The ladder**, in the order that makes each answer usable:
+
+1. **Ask first** — `GetProductionStatus(.name, .state)`. Three of the four states need different
+   treatment, so the action depends on the answer.
+2. **Classify the refusal.** Already-running, running-a-different-one, Suspended and missing-class are
+   four different problems; one "could not start" for all four sends the reader to the wrong fix.
+3. **Suspended needs `CleanProduction`, not `Recover`.**
+4. **Verify, then report** — every verdict ends with a state read back from the instance.
+
+**Two API shapes worth knowing**, both measured:
+
+- `StartProduction(pProductionName = {$GET(^Ens.Configuration("csp","LastProduction"))})` **defaults
+  to whatever was started last**. Called with no argument it starts the previous production, which on
+  a shared instance is somebody else's. Always pass the name.
+- `RecoverProduction()` takes none, `CleanProduction(pKillAppDataToo)` one,
+  `StopProduction(pTimeout=10, pForce=0)` and `RestartProduction(pTimeout=10, pForce=0)` two. Easy to
+  transpose, and none of it is compile-checked.
+
+**One claim did not reproduce**, recorded so it is not carried forward. A wait-for-Running loop is
+usually justified with "`StartProduction` returns before Running". Measured on a four-item production:
+`StartProduction` returned `$$$OK` and the state read **1 (Running)** immediately, with no settle
+time. It may return early for a large production or one with slow hosts — unmeasured — so a bounded
+wait is reasonable, but it is defensive rather than demonstrated.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed against live productions.
+- **Severity.** High (a recovery helper reports success while the production is still down).
+- **Example.** `examples/ch01_production/production-lifecycle-helper.cls`,
+  `examples/ch01_production/tdd-production-lifecycle.cls`
+
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
 
 When a partner emits ER7 messages that deviate from the published HL7 standard (e.g., `SQM_S25` / `SRM_S25` missing `RGS` segment), define a custom HL7 schema based on v2.5 in the Portal, redefine just the affected messages, and set the BS's `MessageSchemaCategory` setting (Portal: “Message Schema Category”) to that schema name.
