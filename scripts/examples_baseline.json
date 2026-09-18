@@ -1,7 +1,9 @@
 {
   "_comment": "Classes expected to compile clean. Any of these failing is a regression and fails the build. Update only with a verified run.",
   "expected_clean": [
+    "Demo.ADP.SchedulerAdapter",
     "Demo.BS.ComandaReceiver",
+    "Demo.BS.NightlyExtract",
     "Demo.FilterAlerts.FunctionSet",
     "Demo.MSG.Comanda",
     "Demo.MSG.ComandaHeader",
@@ -11,6 +13,7 @@
     "Demo.MSG.SC2Content",
     "Demo.SAML.BO.SoapClient",
     "Demo.SAML.MSG.InvokeReq",
+    "Demo.Tests.InboundAdapterDispatch",
     "Demo.UTL.FunctionSet",
     "Demo.Vendor.BO.AcceptMessage",
     "Demo.Vendor.WSC.AcceptMessageProxy",

@@ -70,6 +70,9 @@ its siblings.
 | §5.1 | BS that exposes a SOAP service | `ch05_bpl_dtl/soap-business-service.cls` |
 | §5.1 | Sibling: request message of that BS (`Example.MSG.AcceptOrderReq`) | `ch05_bpl_dtl/msg-acceptorder-req.cls` |
 | §5.1 | Sibling: response message of that BS (`Example.MSG.AcceptOrderRsp`) | `ch05_bpl_dtl/msg-acceptorder-rsp.cls` |
+| §5.2 | Custom inbound adapter for wall-clock schedules — the `..BusinessHost.ProcessInput()` dispatch is the whole point (`Demo.ADP.SchedulerAdapter`) | `ch05_bpl_dtl/adp-scheduler-inbound-adapter.cls` |
+| §5.2 | Sibling: the scheduled BS the adapter dispatches into; `pInput` is always null here (`Demo.BS.NightlyExtract`) | `ch05_bpl_dtl/bs-scheduled-cron.cls` |
+| §5.2 | Sibling: the dispatch test — RUN, and the control proves the `%Status` cannot be the signal (`Demo.Tests.InboundAdapterDispatch`) | `ch05_bpl_dtl/tdd-inbound-adapter-dispatch.cls` |
 | §5.3 | XML projection settings — `XMLIGNORENULL` / `CONTENT` / `OUTPUTTYPEATTRIBUTE` | `ch05_bpl_dtl/xml-projection-settings.cls` |
 | §5.4 | ObjectScript try/catch + %Status idiom | `ch05_bpl_dtl/objectscript-trycatch.cls` |
 | §5.5 | Async logging via `^IRISTemp.*` + `%SYSTEM.Semaphore` | `ch05_bpl_dtl/async-logger-iristemp-semaphore.cls` |
