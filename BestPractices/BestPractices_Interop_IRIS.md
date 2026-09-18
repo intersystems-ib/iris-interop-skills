@@ -1120,6 +1120,101 @@ storage. Same wiring either way.
 - **Severity.** High — the namespace prerequisite is invisible until nothing resolves.
 - **Example.** `examples/ch04_fhir/production-fhir-facade.cls`
 
+### 4.11 The FHIR payload is a stream id, and every way of touching it fails quietly
+
+§4.10 ends on one clause — "a DTL over a FHIR payload works on the Request's `QuickStreamId`, not on
+properties". That clause is correct and it is not enough, because *acting* on it runs into four
+separate silent failures. All of the following is measured against IRIS for Health Community 2026.1.
+
+**1. There is no payload property, so there is nothing for `<assign>` to map.** The whole public
+surface of the message is four properties:
+
+| property | type | |
+|---|---|---|
+| `QuickStreamId` | `%String` | the payload, by reference |
+| `Request` | `HS.FHIRServer.API.Data.Request` | serial: `RequestMethod`, `RequestPath`, `Type`, `Interaction`, `Id`, `QueryString`, `Prefer`, … |
+| `HSCoreVersion`, `HSMinVersion` | `%String` | inherited bookkeeping from `HS.Util.EnsRequest` |
+
+A DTL can therefore route and rewrite **metadata** with `<assign>`, and can do nothing to the body
+without a `<code>` block that opens the stream by id.
+
+**2. `<assign>`ing the id is a reference copy, not a payload copy.** `QuickStreamId` is a `%String`,
+so `<assign value='source.QuickStreamId' property='target.QuickStreamId'/>` compiles, runs, returns
+`$$$OK`, and yields two message headers over **one** body. Measured: two saved
+`HS.FHIRServer.Interop.Request` rows (41 and 42) with the same id, one stream. For read-only
+fan-out that is fine and cheap. It is not a transform, and the Visual Trace will show the same
+payload on both hops whichever one you later modify.
+
+**3. Nothing deletes the stream, and `%ExistsId` cannot tell you whether it is there.** Deleting the
+message leaves the payload behind — measured, `$D(^HS.Stream("18"))` is `11` before **and** after
+`%DeleteId`, and the stream still opens and reads. There is no `%OnDelete` anywhere on
+`HS.FHIRServer.Interop.Request` → `HS.Util.EnsRequest` → `Ens.Request` → `Ens.MessageBody`, so a
+message purge does not reclaim `^HS.Stream`; budget for it the way §1.16 budgets for orphaned SDS
+streams.
+
+The guard the reflex reaches for does not work either:
+
+```objectscript
+ // WRONG -- this rejects every payload that has ever existed.
+ If '##class(HS.SDA3.QuickStream).%ExistsId(tRequest.QuickStreamId) { Quit $$$ERROR(...) }
+```
+
+`%ExistsId` returns **0 for a stream that plainly exists**. Positive control, on a freshly created
+stream nobody had deleted: `%ExistsId` = 0, `%OpenId` returns an object, the full body reads back,
+`$D(^HS.Stream("16"))` = 11. The reason is structural rather than a bug to wait out —
+`%Dictionary.CompiledStorage` has **zero rows** for `HS.SDA3.QuickStream` and `HS_SDA3.QuickStream`
+is not a table (`SQLCODE -30`). The class keeps its data in `^HS.Stream` and has no SQL extent for
+existence to be looked up in. **Test `$IsObject(%OpenId(...))`, never `%ExistsId`.**
+
+**4. Writing the outgoing stream is where the payload is actually lost.** Three traps, in the order
+you meet them:
+
+- **`%New()` gives you a *temporary* stream.** The signature is `%OnNew(pID="", pTemp=1)` — the
+  default is temp, and the data goes to `^CacheTemp.HS.Stream` with an id like `T7`. Anything that
+  will be read by another process, or after a restart, needs `%New("", 0)`.
+- **`%Save()` does not write the buffer.** Measured: after `Write("ORIGINAL")` and `%Save()` — both
+  returning `$$$OK` — `^HS.Stream(8)` is *empty*. `Flush()` writes it; so does letting the OREF go
+  out of scope, which is `%OnClose` doing the flush you did not ask for. A reader that opens the id
+  before either happens gets `Size` 0 and reads `""`, with no error anywhere. Past
+  `BUFFERLEN` (32000) it is worse: the overflow chunks were auto-flushed, so the reader gets a
+  **partial** body, which reads as a truncation bug rather than a missing flush.
+- **`Clear()` destroys the object.** It is the obvious way to rewrite a payload in place, and it
+  empties `GRef` **and** `Id`; the following `Write()` still returns `$$$OK`, and `Flush()` throws
+  `<SYNTAX>Flush+4^HS.SDA3.QuickStream.1` — a `<SYNTAX>` from inside deployed platform code, not a
+  `%Status` you can check. Catching it is not enough: the broken object throws **again** when it is
+  destroyed, after your method has already returned its value, so the caller gets `SQLCODE -400`
+  from a frame that looks fine. Measured both ways — releasing the object inside its own `Try`
+  ("RELEASE THREW `<SYNTAX>`") is what makes the caller see a clean return.
+
+So: **do not rewrite a QuickStream; build a new one.** `CopyFromAndSave(source)` is the paired
+method that persists in one step, and it writes the size node (`^HS.Stream(id,0)`) that
+`Write`+`Flush` leaves out:
+
+```objectscript
+ Set tIn = ##class(HS.SDA3.QuickStream).%OpenId(pRequest.QuickStreamId)
+ If '$IsObject(tIn) { Quit $$$ERROR($$$GeneralError, "payload stream is gone") }
+ Do tIn.Rewind()
+ Set tBody = ""
+ While 'tIn.AtEnd { Set tBody = tBody _ tIn.Read(32000) }   // Read defaults to 32000, not "all"
+
+ Set tTmp = ##class(%Stream.GlobalCharacter).%New()
+ Do tTmp.Write(<the edited body>)
+ Set tOut = ##class(HS.SDA3.QuickStream).%New("", 0)        // 0 = NOT temporary
+ Set tSC  = tOut.CopyFromAndSave(tTmp)
+ Set tTarget.QuickStreamId = tOut.Id                        // a NEW id, so the inbound survives
+```
+
+Measured end to end: inbound `…"family":"DOE"…` unchanged, outbound `…"family":"REDACTED"…`,
+different ids.
+
+- **Source.** Verified against IRIS for Health Community 2026.1 in a Foundation namespace,
+  2026-09-18, every claim above by probe rather than by document.
+- **Validity.** Still valid.
+- **Severity.** High — four independent paths here return `$$$OK` while losing or sharing the payload.
+- **Example.** `examples/ch04_fhir/dtl-fhir-redact-quickstream.cls`,
+  `examples/ch04_fhir/bp-fhir-request-quickstream.cls`,
+  `examples/ch04_fhir/tdd-fhir-quickstream-payload.cls`
+
 ## 5. BPL & DTL patterns
 
 ### 5.1 BS that exposes a SOAP service: how to wire it
@@ -1824,6 +1919,55 @@ That is what decides where the aggregation step can live at all.
 - **Example.** `examples/ch05_bpl_dtl/bpl-flow-sync-aggregate.cls`,
   `examples/ch05_bpl_dtl/utl-bpl-sync-audit.cls`,
   `examples/ch05_bpl_dtl/tdd-bpl-sync-audit.cls`
+
+### 5.20 A DTL `<code>` block lives inside a `Try`, so `Quit <expr>` will not compile
+
+Writing the obvious early return in a DTL `<code>` block
+
+```objectscript
+ if '$isobject(tIn) { quit $$$ERROR($$$GeneralError, "...") }
+```
+
+fails with
+
+```
+#1043: QUIT argument not allowed : '"..."' : Offset:90
+```
+
+which names the `Quit` and gives no hint of what made it illegal. The reason is in the generated
+`.INT` routine, not in the DTL you wrote: the `<code>` block is spliced **inside a `Try`**, and
+inside a `Try` block `Quit` may not take an argument. The generator's own failure idiom, two lines
+above where yours lands, is a `Set` followed by a **bare** `Quit`:
+
+```objectscript
+Transform(source,target,aux="") [ process,context ] methodimpl {
+        Set (tSC,tSCTrans,tSCGet)=1,$ZE=""
+        Try {
+                Set target = ##class(Ens.StringContainer).%New()
+                If '$IsObject(target) Set tSC=%objlasterror Quit     ; <-- the idiom
+                ...
+ ; ====== Start Code Block ======
+ <your code goes here>
+ ; ======= End Code Block =======
+        } Catch thrownErr { ... Set tSC=thrownErr.AsStatus() ... }
+        ...
+        Quit tSC }
+```
+
+So in a `<code>` block: **`Set tSC = $$$ERROR(...)` then a bare `Quit`.** `tSC` is the variable the
+method returns, a bare `Quit` leaves the `Try`, and the trailing trace still runs. `$$$ThrowStatus`
+also works — the `Catch` converts a thrown error into `tSC` and logs it — but `Return <expr>` skips
+the trace block, so prefer the idiom the generator already uses.
+
+The same rule bites outside DTLs, which is why it is worth knowing as an ObjectScript fact rather
+than a DTL quirk: **any** `Quit <expr>` inside a `Try { }` is `#1043`, and `Return <expr>` is the
+spelling that works there.
+
+- **Source.** Read out of the generated `.INT` for a two-line DTL, 2026-09-18, after `#1043` cost a
+  compile on `dtl-fhir-redact-quickstream.cls`.
+- **Validity.** Verified against IRIS for Health Community 2026.1.
+- **Severity.** Medium — a compile error, so it cannot ship; but the message points away from the cause.
+- **Example.** `examples/ch04_fhir/dtl-fhir-redact-quickstream.cls`
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 
