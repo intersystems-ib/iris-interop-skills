@@ -343,6 +343,68 @@ def tier1() -> bool:
     r.check("C10", "a routing rule's <send target> resolves to an item in the production it names",
             rule_targets)
 
+    # ── C11 ───────────────────────────────────────────────────────────────────────────────
+    # A router's BadMessageHandler must not be an item the rule also <send>s to. If they are the
+    # same, a rejected message lands exactly where an accepted one does -- measured on 2026.1 by
+    # feeding three messages through a running production: valid, unknown-type and
+    # malformed-structure ALL arrived at BO.AdtOut, because BadMessageHandler named it. A malformed
+    # message is then written to the normal output beside the valid ones, and no test can tell the
+    # paths apart, so "validation is on" becomes unfalsifiable.
+    collide_bad = []
+    for f in files:
+        if f.suffix not in (".cls", ".xml"):
+            continue
+        text = read(f)
+        if "<Production " not in text:
+            continue
+        prods = class_names(text) or re.findall(r'<Production\s+Name="([^"]+)"', text)
+        bad = {}
+        for name, value in re.findall(r'Name="([^"]+)">([^<]+)</Setting>', text):
+            if name == "BadMessageHandler":
+                bad[value.strip()] = True
+        rules = {}
+        for name, value in re.findall(r'Name="([^"]+)">([^<]+)</Setting>', text):
+            if name == "BusinessRuleName":
+                rules[value.strip()] = True
+        if not bad or not rules:
+            continue
+        # find the rule artefact(s) this production names, and read their send targets
+        sends = set()
+        for other in files:
+            if other.suffix != ".cls":
+                continue
+            otext = read(other)
+            if not any(rn in class_names(otext) for rn in rules):
+                continue
+            sends |= {t.strip() for t in re.findall(r'<send\b[^>]*\starget="([^"]*)"', otext)}
+        for b in bad:
+            if b in sends:
+                collide_bad.append(
+                    f'{rel(f)} -> BadMessageHandler="{b}" is also a <send target> of its rule: '
+                    f'a rejected message lands where an accepted one does')
+    r.check("C11", "a router's BadMessageHandler is not also one of its rule's send targets",
+            collide_bad)
+
+    # ── C12 ───────────────────────────────────────────────────────────────────────────────
+    # `--` inside an XML comment is illegal and fails the XData parse:
+    #   ERROR #6301: SAX XML Parser Error: '--' sequence is illegal in comment
+    # `hl7-schemas` documents this trap, and it still cost a full tier-2 round trip when I wrote
+    # a production comment with an em-dash-as-double-hyphen. Worse, it does not present as itself:
+    # the projection error aborted the batch, so the visible failure was
+    # `<CLASS DOES NOT EXIST> ... Ens.DTL.Transform` on an unrelated DTL whose message class had
+    # not been reached yet, and the class-level attribution still reported every class clean --
+    # only the unattributed-error detector caught the run at all. One second here beats that.
+    bad_comments = []
+    for f in files:
+        if f.suffix not in (".cls", ".xml"):
+            continue
+        for block in re.findall(r"<!--.*?-->", read(f), re.S):
+            inner = block[4:-3]
+            if "--" in inner:
+                snippet = " ".join(inner.split())[:70]
+                bad_comments.append(f"{rel(f)} -> '--' inside an XML comment (#6301): \"{snippet}…\"")
+    r.check("C12", "no '--' inside an XML comment (#6301 kills the whole XData parse)", bad_comments)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by

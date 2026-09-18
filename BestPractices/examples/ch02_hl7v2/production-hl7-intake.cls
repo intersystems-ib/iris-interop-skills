@@ -48,7 +48,7 @@ XData ProductionDefinition
     <Setting Target="Host" Name="BusinessRuleName">Example.RUL.AdtRouting</Setting>
     <Setting Target="Host" Name="Validation">dm</Setting>
     <Setting Target="Host" Name="AlertOnBadMessage">1</Setting>
-    <Setting Target="Host" Name="BadMessageHandler">BO.AdtOut</Setting>
+    <Setting Target="Host" Name="BadMessageHandler">BO.AdtBad</Setting>
     <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
 
@@ -56,6 +56,22 @@ XData ProductionDefinition
         PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
     <Setting Target="Host" Name="AlertOnError">1</Setting>
     <Setting Target="Adapter" Name="FilePath">/data/hl7/out/</Setting>
+  </Item>
+
+  <!-- THE BAD-MESSAGE SINK, AND IT MUST NOT BE BO.AdtOut. Until v1.25.0 BadMessageHandler above
+       named BO.AdtOut — the same operation the routing rule sends valid messages to. Measured by
+       feeding three messages through a running production and reading Ens.MessageHeader:
+         valid ADT^A01            Router.Adt -> BO.AdtOut
+         unknown type XYZ^Q99     Router.Adt -> BO.AdtOut
+         ADT^A01 missing PID      Router.Adt -> BO.AdtOut
+       All three converged on the same target, so a rejected message was written to the NORMAL
+       output directory beside the valid ones, and no test could tell the two paths apart.
+       A separate sink is what makes validation observable — and tier-1 C11 now refuses the
+       collision. -->
+  <Item Name="BO.AdtBad" Category="Example" ClassName="EnsLib.HL7.Operation.FileOperation"
+        PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
+    <Setting Target="Adapter" Name="FilePath">/data/hl7/bad/</Setting>
   </Item>
 
   <Item Name="Ens.Alert" Category="Example" ClassName="EnsLib.MsgRouter.RoutingEngine"

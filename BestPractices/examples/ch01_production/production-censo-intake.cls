@@ -59,7 +59,7 @@ XData ProductionDefinition
         PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
     <Setting Target="Host" Name="BusinessRuleName">Example.RUL.CensoRouting</Setting>
     <Setting Target="Host" Name="AlertOnBadMessage">1</Setting>
-    <Setting Target="Host" Name="BadMessageHandler">BO.Census</Setting>
+    <Setting Target="Host" Name="BadMessageHandler">BO.CensoBad</Setting>
     <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
 
@@ -67,6 +67,17 @@ XData ProductionDefinition
         PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
     <Setting Target="Host" Name="AlertOnError">1</Setting>
     <Setting Target="Adapter" Name="FilePath">/data/censo/out/</Setting>
+  </Item>
+
+  <!-- The bad-message sink, and it must be a DIFFERENT item from the rule's target. Until
+       v1.25.0 BadMessageHandler above named BO.Census, which is exactly where the routing rule
+       sends accepted records, so a rejected one was written to the normal output directory
+       beside the good ones and nothing could tell them apart. Found by tier-1 C11, which was
+       written for the same collision in the §2.10 HL7 production and caught this one too. -->
+  <Item Name="BO.CensoBad" Category="Example" ClassName="EnsLib.File.PassthroughOperation"
+        PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
+    <Setting Target="Adapter" Name="FilePath">/data/censo/bad/</Setting>
   </Item>
 
   <!-- The alert circuit itself must NOT alert on its own errors, or a failing alert loops. -->

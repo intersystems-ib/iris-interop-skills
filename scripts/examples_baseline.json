@@ -52,6 +52,7 @@
     "Example.RUL.OrderRouting",
     "Example.RecordMap.Censo",
     "Example.Tests.DeleteCascade",
+    "Example.Tests.Hl7RouterValidation",
     "Example.Tests.Hl7SymbolicPaths",
     "Example.Tests.MessageOwnExtent",
     "Example.Tests.OrderToVendor",
