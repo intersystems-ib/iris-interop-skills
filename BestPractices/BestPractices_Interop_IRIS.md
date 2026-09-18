@@ -2250,6 +2250,53 @@ Compare to the string, case-insensitively, and accept the numeric forms another 
 - **Example.** `examples/ch06_adapters/http-manual-envelope-bo.cls`,
   `examples/ch06_adapters/tdd-http-response-reading.cls`
 
+### 6.16 The typed SOAP BO: the client class belongs in configuration, and what that costs
+
+`Parameter ADAPTER = "EnsLib.SOAP.OutboundAdapter"` is the line that makes a Business Operation a SOAP
+one. Extending the adapter instead yields an empty, non-functional component — CR-2, and a blocked
+convention.
+
+**There are two ways to reach the generated client, and they trade the same thing in opposite
+directions.** Measured on `EnsLib.SOAP.OutboundAdapter`:
+
+| property | type / default | |
+|---|---|---|
+| `WebServiceClientClass` | `%String` | a **setting** — the generated client's class name |
+| `%Client` | `%SOAP.WebClient` | the instance the adapter holds — the **generic base** |
+| `WebServiceURL` | `%String`, init **`"<default>"`** | the endpoint |
+| `SSLCheckServerIdentity` | init `1` | on by default |
+| `ResponseTimeout` | init `30` | |
+
+1. **Hardcode it** — `##class(Pkg.WSC.Service).%New()`. You get the generated class's **typed
+   methods**, checked at compile time; you also put its name in code, so the client becomes a
+   deployment artefact rather than a setting.
+2. **Configure it** — set `WebServiceClientClass` on the item and use `..Adapter.%Client`. The name
+   lives in the production. But `%Client` is typed `%SOAP.WebClient`, so the generated operations are
+   invisible to the compiler and must be reached late-bound via `$METHOD` — a misspelled operation is a
+   runtime `<METHOD DOES NOT EXIST>`.
+
+Neither is wrong; what is wrong is not knowing which you chose. `security` already documents form (2)
+(`Set ..Adapter.WebServiceClientClass = "<pkg>.<GeneratedClient>"`), and `soap-bo` shows form (1)
+without mentioning that the setting exists.
+
+**`WebServiceURL` defaults to the literal string `"<default>"`.** Not empty. A guard written as
+`If ..Adapter.WebServiceURL = ""` never fires.
+
+**Narrowing `Property Adapter` buys documentation, not a check** — §6.12 measured that all four
+declaration variants compile and a misspelled adapter method is a runtime error either way.
+
+**And keep a SOAP boolean in a `%String`.** §6.15 established that `"true"` fails `= 1` and `"false"`
+fails `= 0`. Typing the property `%Boolean` is worse than either: the datatype **coerces `"true"` to 0
+on assignment**, so the answer is gone before any comparison runs. Keep the wire value and convert
+with an explicit string test at the point of use.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled, every property measured.
+- **Severity.** High (the wrong superclass yields an empty component; the `%Boolean` property loses the answer).
+- **Example.** `examples/ch06_adapters/soap-bo-typed-adapter.cls`,
+  `examples/ch06_adapters/msg-forecast-request.cls`,
+  `examples/ch06_adapters/msg-forecast-response.cls`,
+  `examples/ch06_adapters/tdd-soap-bo-adapter-wiring.cls`
+
 ### 7.1 Alert circuit — the canonical pattern
 
 In every Business Host of the production, enable “Send Alert on Error” (the setting is `AlertOnError`). The exception (always) is the Ens.Alert circuit itself: **Ens.Alert and the BO that sends the alert must have this checkbox DISABLED** to avoid infinite loops.

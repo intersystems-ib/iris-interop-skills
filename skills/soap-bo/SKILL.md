@@ -196,6 +196,16 @@ XData MessageMap
 }
 ```
 
+> **Compiled example, and the alternative this fence does not show.** The snippet above hardcodes the
+> generated client (`##class(MyApp.WSC.WeatherService).%New()`), which gives you its **typed methods**
+> but puts the class name in code. The adapter also carries a `WebServiceClientClass` **setting** —
+> see `security` — which puts the name in the production instead, at the cost that `..Adapter.%Client`
+> is typed `%SOAP.WebClient` and the generated operations go late-bound through `$METHOD`. Neither is
+> wrong; know which you picked. The configuration form is compiled and tested at
+> `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/soap-bo-typed-adapter.cls`, with its two
+> message siblings and §6.16. Also measured there: `WebServiceURL` defaults to the **literal string**
+> `"<default>"`, so a `= ""` guard never fires.
+
 **`Parameter ADAPTER = "EnsLib.SOAP.OutboundAdapter";` is the line that makes this a SOAP BO.**
 Extending the adapter directly instead yields an empty, non-functional component — and a
 PreToolUse gate blocks that put (see `component-map` for the task→component map). Take the
