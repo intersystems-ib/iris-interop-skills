@@ -32,7 +32,14 @@
 ///   OrderId="",      PatientId=""       ->  VendorRef=""       Priority="LOW"
 ///                                           Note="ref="
 /// The second case is what proves the escaped `&amp;&amp;` really evaluates rather than merely parsing.
-Class Example.DT.OrderToVendor Extends Ens.DataTransformDTL
+/// `DependsOn` added in v1.26.0, and it is not cosmetic. Measured: a DTL compiled in the SAME
+/// batch as its source/target classes FAILS without it and succeeds with it, because the generated
+/// Transform method needs those classes already compiled. This file had none, and when an
+/// unrelated projection error aborted a batch it failed with
+/// `<CLASS DOES NOT EXIST> Example.MSG.AcceptOrderReq … Ens.DTL.Transform` -- a message that names
+/// neither the real cause nor this file's omission. It compiled for releases only while the batch
+/// happened to reach its dependencies first.
+Class Example.DT.OrderToVendor Extends Ens.DataTransformDTL [ DependsOn = (Example.MSG.AcceptOrderReq, Example.MSG.VendorOrder) ]
 {
 
 Parameter IGNOREMISSINGSOURCE = 1;
