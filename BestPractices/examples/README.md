@@ -125,6 +125,9 @@ its siblings.
 | §5.17 | Sibling: the run proving a non-transactional reload leaves a partial table | `ch05_bpl_dtl/tdd-lookup-bootstrap.cls` |
 | §5.18 | %UnitTest fixture lifecycle + the `GetEventLog` window floor (S27+S28 folded) | `ch05_bpl_dtl/tdd-lifecycle-and-eventlog.cls` |
 | §5.19 | BPL `<flow>`/`<sync>` fan-out template — the shape `bpl` forbids improvising | `ch05_bpl_dtl/bpl-flow-sync-aggregate.cls` |
+| §5.21 | BPL `<scope>`/`<catchall>` — a handler that logs and falls through completes the process GREEN | `ch05_bpl_dtl/bpl-scope-catchall-compensation.cls` |
+| §5.21 | Oracle: the BP's own header is 8 (Error) only because the catchall sets `status` | `ch05_bpl_dtl/tdd-bpl-scope-catchall.cls` |
+| §5.21 | Fixture: the BPL plus a target that fails on demand, reusing `Example.BO.FailOnDemand` | `ch05_bpl_dtl/production-bpl-scope.cls` |
 | §5.19 | The audit that makes an un-awaited async call loud | `ch05_bpl_dtl/utl-bpl-sync-audit.cls` |
 | §5.19 | Sibling: the run, incl. the false clean a line-based scan produced | `ch05_bpl_dtl/tdd-bpl-sync-audit.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
