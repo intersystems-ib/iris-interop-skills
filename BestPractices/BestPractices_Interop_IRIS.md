@@ -1501,6 +1501,54 @@ non-empty first.
 - **Severity.** High (a cleanup that never runs makes the *next* run pass over stale data).
 - **Example.** `examples/ch05_bpl_dtl/tdd-lifecycle-and-eventlog.cls`
 
+### 5.19 `<flow>`/`<sync>` fan-out: an async `<call>` that no `<sync>` awaits completes the process green
+
+`bpl` recommends this shape for parallel work and then says, correctly, **"do not generate a wall of
+`<call>`/`<sync>`/`<reply>` BPL XML from a vague description — it'll be wrong in ways that are subtle
+to debug."** Until v1.44.0 there was no template to copy instead, so the options were improvising the
+thing the skill forbids, or opening the graphical editor — which on some IRIS versions strips
+`XData BPL` on first open (§5.7).
+
+**The three elements**, with attribute names taken from `Ens.BPL.Flow` / `Ens.BPL.Sync` /
+`Ens.BPL.Call` rather than guessed:
+
+| element | what it does | attributes that matter |
+|---|---|---|
+| `<flow>` | container; each child `<sequence>` is one parallel branch | `Name` |
+| `<call async='1'>` | starts a branch without waiting | `Async`, `Name`, `Target` |
+| `<sync calls='A,B'>` | waits | `Calls`, `Type` (default `all`), `Timeout`, `AllowResync` |
+
+`calls` is a comma-separated list of `<call>` **names** — not targets, not branch names. That join is
+made by string matching, so a typo in it is a silent miss.
+
+**The silent defect.** Measured on 2026.1 — both of these compile clean:
+
+```
+<sync calls='AskVendor,AskLab'/>    correct
+<sync calls='AskVendor'/>           AskLab is never awaited — COMPILES CLEAN
+```
+
+Omitting the `<sync>` entirely is equally clean. The process then reaches its end activity with a
+call outstanding and **completes**. The Visual Trace shows a completed process; the response the
+un-awaited call would have contributed is simply absent from the aggregate, and nothing is logged,
+because nothing went wrong — the process did what its definition said.
+
+There is no compile-time check that every async call is awaited, so the fix is an audit that reads
+the definition back: `%Dictionary.XDataDefinition.%OpenId("<class>||BPL")`, whose `Data` is a stream.
+Scan it **element by element** (split on `<`), not line by line — a line-based scan reports
+`OK: 1 async call(s), all awaited` for a two-call process written on one line, which is a clean bill
+of health it has not earned.
+
+**Aggregate in `context`, not locals.** Context properties survive the calls; a local set inside a
+`<code>` activity does not, because the process is saved and resumed around each async boundary.
+That is what decides where the aggregation step can live at all.
+
+- **Validity.** Verified against IRIS for Health 2026.1 — the template compiled, the audit executed.
+- **Severity.** High (the process completes successfully with responses unprocessed).
+- **Example.** `examples/ch05_bpl_dtl/bpl-flow-sync-aggregate.cls`,
+  `examples/ch05_bpl_dtl/utl-bpl-sync-audit.cls`,
+  `examples/ch05_bpl_dtl/tdd-bpl-sync-audit.cls`
+
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 
 When you import a vendor WSDL in Ensemble/IRIS, the generated SOAP client classes nearly always need at least one of these patches.

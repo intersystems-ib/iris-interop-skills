@@ -108,6 +108,9 @@ its siblings.
 | §5.17 | Lookup bootstrap — transaction-bracketed, `SQLCODE`-checked, row-count asserted | `ch05_bpl_dtl/lookup-bootstrap-sqlproc.cls` |
 | §5.17 | Sibling: the run proving a non-transactional reload leaves a partial table | `ch05_bpl_dtl/tdd-lookup-bootstrap.cls` |
 | §5.18 | %UnitTest fixture lifecycle + the `GetEventLog` window floor (S27+S28 folded) | `ch05_bpl_dtl/tdd-lifecycle-and-eventlog.cls` |
+| §5.19 | BPL `<flow>`/`<sync>` fan-out template — the shape `bpl` forbids improvising | `ch05_bpl_dtl/bpl-flow-sync-aggregate.cls` |
+| §5.19 | The audit that makes an un-awaited async call loud | `ch05_bpl_dtl/utl-bpl-sync-audit.cls` |
+| §5.19 | Sibling: the run, incl. the false clean a line-based scan produced | `ch05_bpl_dtl/tdd-bpl-sync-audit.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |
