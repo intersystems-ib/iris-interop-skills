@@ -13,10 +13,20 @@ Class Demo.Vendor.BO.AcceptMessage Extends EnsLib.HL7.Operation.SOAPOperation
 {
 
 /// Point the adapter at the patched proxy.
+///
+/// `##super()` FIRST, and it was missing here until v1.27.0. Measured:
+/// `EnsLib.HL7.Operation.SOAPOperation` defines its OWN OnInit (Origin = itself in
+/// %Dictionary.CompiledMethod), so returning `$$$OK` without calling it silently skipped the
+/// operation's own initialisation. It compiled, the production started, and nothing said otherwise
+/// — which is why tier-1 C14 now checks for it. The order matters too: the base sets the adapter
+/// up, so the client-class override has to come after it, not before.
 Method OnInit() As %Status
 {
-    set ..Adapter.WebServiceClientClass = "Demo.Vendor.WSC.AcceptMessageProxy"
-    quit $$$OK
+    Set tSC = ##super()
+    Quit:$$$ISERR(tSC) tSC
+
+    Set ..Adapter.WebServiceClientClass = "Demo.Vendor.WSC.AcceptMessageProxy"
+    Quit $$$OK
 }
 
 /// Override the operation method - default would call Send().

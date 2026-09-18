@@ -26,6 +26,7 @@
     "Example.BO.ArchiveStream",
     "Example.BP.OrderFulfil",
     "Example.BP.OrderProcess",
+    "Example.BS.CensoWithWarmup",
     "Example.BS.CensusFileReader",
     "Example.BS.MyService",
     "Example.BS.PreauthRest",

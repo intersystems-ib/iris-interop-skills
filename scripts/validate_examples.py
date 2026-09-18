@@ -437,6 +437,31 @@ def tier1() -> bool:
             dtl_deps.append(f"{rel(f)} -> DependsOn omits {missing} (its generator needs them compiled first)")
     r.check("C13", "a DTL declares DependsOn for the project classes it transforms", dtl_deps)
 
+    # ── C14 ───────────────────────────────────────────────────────────────────────────────
+    # A class that extends a PREBUILT Ens host and overrides OnInit must call ##super(). Measured
+    # on 2026.1 via %Dictionary.CompiledMethod.Origin: EnsLib.RecordMap.Service.Standard and
+    # EnsLib.HL7.Service.FileService define their OWN OnInit, so an override that omits ##super()
+    # silently replaces real setup. It compiles, the production starts, and the failure surfaces
+    # later as records that do not parse.
+    #
+    # Scope: only subclasses of EnsLib.* hosts, because a custom Ens.BusinessService subclass has
+    # nothing but Ens.Host's no-op to call and requiring it there would be noise (the calibration
+    # note at the top of this file). CR-14 is the conformance criterion this mirrors.
+    missing_super = []
+    for f in files:
+        if f.suffix != ".cls":
+            continue
+        text = read(f)
+        if not re.search(r"^Class\s+[\w.]+\s+Extends\s+EnsLib\.", text, re.M):
+            continue
+        m_init = re.search(r"^Method\s+OnInit\s*\([^)]*\)[^\n]*\n\{(.*?)^\}", text, re.S | re.M)
+        if not m_init:
+            continue
+        if "##super" not in m_init.group(1):
+            missing_super.append(
+                f"{rel(f)} -> OnInit overrides a prebuilt EnsLib host without calling ##super()")
+    r.check("C14", "an OnInit override on a prebuilt EnsLib host calls ##super()", missing_super)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
