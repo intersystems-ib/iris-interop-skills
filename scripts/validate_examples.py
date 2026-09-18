@@ -292,6 +292,57 @@ def tier1() -> bool:
 
     r.check("C7", "every 'Example.' pointer in the deliverable resolves", broken_links)
 
+    # ── C10 ───────────────────────────────────────────────────────────────────────────────
+    # C8 checks the settings INSIDE a production. It cannot see the other direction: a routing
+    # rule names a production and `<send target="X">` an item in it, and X is just a string. A
+    # rule sending to an item that does not exist matches, fires, routes nowhere and reports
+    # nothing -- the same silent shape as the dangling BusinessRuleName C8 was added for, arriving
+    # from the opposite side.
+    #
+    # Motivated by §7.1: the alert circuit's entire failure mode is "the rule matched and the
+    # message went nowhere", and until v1.21.0 the shipped circuit was an .xml that no tier
+    # compiled at all.
+    rule_targets = []
+    prod_items: dict[str, set[str]] = {}
+    for f in files:
+        if f.suffix not in (".cls", ".xml"):
+            continue
+        text = read(f)
+        if "<Production " not in text:
+            continue
+        for cn in class_names(text) or re.findall(r'<Production\s+Name="([^"]+)"', text):
+            items = set()
+            for attrs in re.findall(r"<Item\s+([^>]*)>", text):
+                mm = re.search(r'(?<![A-Za-z])Name="([^"]+)"', attrs)
+                if mm:
+                    items.add(mm.group(1))
+            prod_items[cn] = items
+    for f in files:
+        if f.suffix not in (".cls", ".xml"):
+            continue
+        text = read(f)
+        m_prod = re.search(r'<ruleDefinition[^>]*\sproduction="([^"]*)"', text)
+        if not m_prod or not m_prod.group(1):
+            continue                      # a rule naming no production cannot be checked
+        prod = m_prod.group(1)
+        if prod not in prod_items:
+            # A NON-EMPTY name that is not shipped is itself the defect, and skipping it was how
+            # this check first missed one: routing-rule-fanout named "Example.Production" while
+            # every shipped production is "Example.Productions.*" (plural). It compiles -- the
+            # attribute is a string in XData -- and C8 does not look here. Use production="" for a
+            # rule that is deliberately standalone; the empty case is skipped above.
+            rule_targets.append(
+                f'{rel(f)} -> <ruleDefinition production="{prod}"> names no shipped production '
+                f'(use production="" if the rule is standalone)')
+            continue
+        for target in re.findall(r'<send\b[^>]*\starget="([^"]*)"', text):
+            for one in [t.strip() for t in target.split(",") if t.strip()]:
+                if one not in prod_items[prod]:
+                    rule_targets.append(
+                        f'{rel(f)} -> <send target="{one}"> names no item in {prod}')
+    r.check("C10", "a routing rule's <send target> resolves to an item in the production it names",
+            rule_targets)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by

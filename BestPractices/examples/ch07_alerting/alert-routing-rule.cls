@@ -18,6 +18,24 @@
 ///
 /// The context is the generic RoutingEngine: an Ens.AlertRequest is not an HL7 message, so the
 /// HL7 assist would be the wrong pairing here (the mirror image of CR-6).
+///
+/// THE FUNCTIONSET CALLS ARE BARE, AND THAT IS NOT A STYLE CHOICE. Compiled both ways on 2026.1
+/// in this exact context:
+///     AlreadyReportedPerSession()=1                             -> COMPILES
+///     ##class(Demo.FilterAlerts.FunctionSet).AlreadyReported...  -> FAILS
+///         ERROR <Ens>ErrParsingExpression ... <Ens>ErrInvalidToken
+/// The rule expression parser resolves methods across every `Ens.Rule.FunctionSet` subclass in the
+/// namespace — that is the whole point of the FunctionSet pattern — and qualifying the call defeats
+/// it. The superseded `alert-circuit-production.xml` carried the qualified form in both conditions
+/// and was therefore unloadable, which no tier could see because it was `.xml`.
+///
+/// ORDER IS THE LOGIC. The two dedup rules `<return/>` with no `<send>`, which consumes the alert;
+/// the forward rule is last and unconditional. Put the forward rule first and the dedup rules can
+/// never run — the rule set stops at the first match, so a mis-ordered set is a dedup that silently
+/// does nothing.
+///
+/// The functions come from `alert-dedup-functionset.cls` in this directory
+/// (`Demo.FilterAlerts.FunctionSet`); this rule is what actually exercises them.
 Class Example.Alerting.RUL.AlertRouter Extends Ens.Rule.Definition
 {
 
@@ -27,6 +45,18 @@ XData RuleDefinition [ XMLNamespace = "http://www.intersystems.com/rule" ]
 {
 <ruleDefinition alias="" context="EnsLib.MsgRouter.RoutingEngine" production="Example.Alerting.Production">
 <ruleSet name="" effectiveBegin="" effectiveEnd="">
+<rule name="DedupBySession" disabled="false">
+<constraint name="msgClass" value="Ens.AlertRequest"/>
+<when condition="AlreadyReportedPerSession()=1">
+<return/>
+</when>
+</rule>
+<rule name="DedupByErrorText" disabled="false">
+<constraint name="msgClass" value="Ens.AlertRequest"/>
+<when condition="AlreadyReportedErr(Document.SourceConfigName,Document.AlertText,60)=1">
+<return/>
+</when>
+</rule>
 <rule name="AllAlertsToEmail" disabled="false">
 <constraint name="msgClass" value="Ens.AlertRequest"/>
 <when condition="1">

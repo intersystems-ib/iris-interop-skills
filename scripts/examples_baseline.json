@@ -21,6 +21,7 @@
     "Example.Adapters.BO.JavaGateway",
     "Example.Adapters.BO.SOAPClient",
     "Example.Adapters.BO.SqlTypedParmArray",
+    "Example.Alerting.Production",
     "Example.Alerting.RUL.AlertRouter",
     "Example.BO.ArchiveStream",
     "Example.BP.OrderFulfil",

@@ -28,6 +28,13 @@
 /// and fails at runtime with `<CLASS DOES NOT EXIST>` or `target 'X' not an item`. That gap is
 /// exactly why the pre-flight `ValidateProduction()` validator in the `bpl` skill exists — run
 /// it before every production start.
+/// `production=""` IS DELIBERATE. This rule is a standalone §5.8 example: its targets `BO.Vendor`
+/// and `BO.Audit` are illustrative and belong to no production in this bank. Until v1.21.0 it
+/// named `production="Example.Production"` — a class that does not exist, since every shipped
+/// production is `Example.Productions.*` (plural). That compiled, because the attribute is a
+/// string inside XData, and nothing checked it: C8 validates settings INSIDE a production and
+/// never looks at a rule. Tier-1 C10 now does, and an empty name is how you say "standalone"
+/// rather than leaving a dangling one.
 Class Example.RUL.OrderRouting Extends Ens.Rule.Definition
 {
 
@@ -35,7 +42,7 @@ Parameter RuleAssistClass = "EnsLib.MsgRouter.RuleAssist";
 
 XData RuleDefinition [ XMLNamespace = "http://www.intersystems.com/rule" ]
 {
-<ruleDefinition alias="" context="EnsLib.MsgRouter.RoutingEngine" production="Example.Production">
+<ruleDefinition alias="" context="EnsLib.MsgRouter.RoutingEngine" production="">
 <ruleSet name="" effectiveBegin="" effectiveEnd="">
 <rule name="AcceptOrder" disabled="false">
 <constraint name="msgClass" value="Example.MSG.AcceptOrderReq"/>
