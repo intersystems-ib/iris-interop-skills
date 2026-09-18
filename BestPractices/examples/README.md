@@ -90,6 +90,9 @@ its siblings.
 | §5.11 | Sibling: the `%Persistent` child that creates the obligation (`Example.DAT.Address`) | `ch05_bpl_dtl/dat-address-persistent.cls` |
 | §5.11 | Sibling: the cascade test — RUN, not just compiled, with a negative control (`Example.Tests.DeleteCascade`) | `ch05_bpl_dtl/tdd-delete-cascade.cls` |
 | §5.12 | Class-based (non-BPL) `Ens.BusinessProcess` — `pResponseRequired=0` runs the operation and drops the reply (`Example.BP.OrderFulfil`) | `ch05_bpl_dtl/bp-class-based-async.cls` |
+| §5.13 | Custom function set, `[ Final ]`, with the six measured call forms in its header (`Example.UTL.FunctionSet`) | `ch05_bpl_dtl/utl-functionset-final.cls` |
+| §5.13 | DTL calling BOTH kinds — built-in with `..`, custom with `##class()`; `DependsOn` mandatory (`Example.DT.CensoToMenus`) | `ch05_bpl_dtl/dtl-lookup-and-functions.cls` |
+| §5.13 | Sibling: the test — EXECUTED; two of the three wrong call forms are invisible to every tier (`Example.Tests.DtlFunctionForms`) | `ch05_bpl_dtl/tdd-dtl-function-forms.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |

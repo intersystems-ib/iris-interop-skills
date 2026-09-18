@@ -905,6 +905,55 @@ entered once per reply and the key is the only discriminator.
 - **Severity.** High — the reply is dropped and everything reports success.
 - **Example.** `examples/ch05_bpl_dtl/bp-class-based-async.cls`
 
+### 5.13 Calling a function from a DTL — the two forms have opposite rules and the wrong one is silent
+
+A DTL calls a **built-in** with `..` and a **custom** FunctionSet method with `##class()`. Those are
+not stylistic alternatives; each context rejects the other form, and the *third* form — bare —
+compiles everywhere and fails at runtime. All six combinations measured on 2026.1:
+
+| context | form | compile | runtime |
+|---|---|---|---|
+| DTL, built-in | `..Strip(x,"<>W")` / `..Lookup(t,k,d)` | ✓ | **works** |
+| DTL, built-in | `Strip(x,…)` / `Lookup(t,k,d)` — bare | ✓ | **`<UNDEFINED>`** |
+| DTL, custom | `##class(Pkg.FunctionSet).Norm(x)` | ✓ | **works** |
+| DTL, custom | `..Norm(x)` | **fails** `MPP5392 No such method` | — |
+| DTL, custom | `Norm(x)` — bare | ✓ | **`<UNDEFINED>`** |
+| business rule, custom | `AlreadyReportedErr(…)` — bare | ✓ | **works** |
+| business rule, custom | `##class(Pkg.FunctionSet).Already…` | **fails** `<Ens>ErrInvalidToken` | — |
+
+Read the last two rows against the third: **a DTL wants the call qualified and a rule wants it
+bare, for the same method on the same class.** That inversion is why this is got wrong, and it is
+the one-character difference people mean when they call it the most expensive mistake in a DTL.
+
+The failures are not equally kind. `..Custom()` in a DTL and `##class()` in a rule fail at
+**compile**, which is the good outcome. The **bare** form in a DTL compiles clean, so tier 2 is
+green and the `<UNDEFINED>` waits for a message to flow — in production, on real data.
+
+**`DependsOn` is mandatory on a DTL, and this is measured, not advice.** The generated `Transform`
+method needs the source and target classes already compiled:
+
+```
+single batch, no DependsOn  -> FAILS
+single batch, DependsOn     -> all compile
+```
+
+The failure names neither the cause nor the omission: it surfaces as
+`<CLASS DOES NOT EXIST> <MessageClass> … Ens.DTL.Transform`, or as
+`ERROR: Ens.DataTransformDTL.cls(Transform) of generated code compiling subclass`. A DTL without
+`DependsOn` compiles only while the batch happens to reach its dependencies first — luck, not a
+property of the code. `examples/ch05_bpl_dtl/dtl-order-to-vendor.cls` shipped that way for
+releases and failed the moment an unrelated error perturbed the batch order.
+
+Two smaller rules that come with the pattern: mark every FunctionSet method `[ Final ]` (EGDV
+§12.1 — no polymorphism support, and without it the method is not offered as a utility function),
+and always pass `..Lookup`'s third argument, the on-miss default, or a miss returns `""` and flows
+on as a legitimately empty value.
+
+- **Source.** Bank audit 2026-09-18; the bank had no gated FunctionSet consumer.
+- **Validity.** Verified against IRIS for Health 2026.1; all six call forms compiled and run.
+- **Severity.** High — the surviving wrong form is invisible to every tier.
+- **Example.** `examples/ch05_bpl_dtl/dtl-lookup-and-functions.cls`
+
 ## 6. Adapters & connectivity
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import

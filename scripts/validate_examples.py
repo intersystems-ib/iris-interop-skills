@@ -405,6 +405,38 @@ def tier1() -> bool:
                 bad_comments.append(f"{rel(f)} -> '--' inside an XML comment (#6301): \"{snippet}…\"")
     r.check("C12", "no '--' inside an XML comment (#6301 kills the whole XData parse)", bad_comments)
 
+    # ── C13 ───────────────────────────────────────────────────────────────────────────────
+    # A DTL's Transform method is GENERATED, and the generator needs the sourceClass/targetClass
+    # already compiled. Measured on 2026.1, same batch, same classes:
+    #     no DependsOn -> FAILS        DependsOn -> all compile
+    # So a DTL without DependsOn compiles only while the batch happens to reach its dependencies
+    # first. dtl-order-to-vendor shipped that way for releases and failed the moment an unrelated
+    # projection error perturbed the order -- reporting `<CLASS DOES NOT EXIST> <MessageClass> ...
+    # Ens.DTL.Transform`, which names neither the cause nor the omission.
+    #
+    # Narrow deliberately: it asks only that each project class named in sourceClass/targetClass
+    # appears in DependsOn. Platform classes (Ens*, EnsLib*, HS*, %*) are not required -- they are
+    # always already compiled -- and a DTL whose source and target are both platform classes needs
+    # nothing.
+    dtl_deps = []
+    for f in files:
+        if f.suffix != ".cls":
+            continue
+        text = read(f)
+        if "Ens.DataTransformDTL" not in text or "<transform" not in text:
+            continue
+        m_dep = re.search(r"Extends\s+Ens\.DataTransformDTL\s*(?:\[([^\]]*)\])?", text)
+        declared = m_dep.group(1) if (m_dep and m_dep.group(1)) else ""
+        referenced = set()
+        for attr in ("sourceClass", "targetClass"):
+            for val in re.findall(attr + r"='([^']+)'", text):
+                if not val.startswith(("Ens", "EnsLib", "HS", "%")):
+                    referenced.add(val)
+        missing = sorted(c for c in referenced if c not in declared)
+        if missing:
+            dtl_deps.append(f"{rel(f)} -> DependsOn omits {missing} (its generator needs them compiled first)")
+    r.check("C13", "a DTL declares DependsOn for the project classes it transforms", dtl_deps)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
