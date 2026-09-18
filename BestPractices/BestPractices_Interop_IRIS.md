@@ -2876,6 +2876,64 @@ The list is **illustrative**. Attribute names, casing and the region-specific id
 
 - **Severity.** Low (reference data).
 
+### 11.13 Asserting Server Certificate Validation — `VerifyPeer`, and the config that looks configured
+
+§11.7 step 1 is "Set `Server Certificate Validation = Require` on the SSL config". It is the point of
+that section, and the only step whose omission leaves nothing to see: with validation off the
+handshake **succeeds**, the connection works, every test passes, and the peer is unauthenticated for
+ever. This section is the executable check.
+
+**It lives in `%SYS`, and an application namespace can still reach it.** `Security.SSLConfigs` is not
+in an application namespace's dictionary — `SELECT … FROM Security.SSLConfigs` gives `SQLCODE -30`,
+and a late-bound `$classmethod("Security.SSLConfigs", …)` raises `<CLASS DOES NOT EXIST>`. The hop is
+two lines, and the first one is the important one:
+
+```objectscript
+ New $Namespace                    // <- restores the caller's namespace on ANY exit, error included
+ Set $Namespace = "%SYS"
+```
+
+Measured both ways: **with** `New $Namespace`, `before=[FHIRTEST] after=[FHIRTEST]`; **without** it the
+namespace leaks — `after=[%SYS]` — and every later line in that job reads and writes the wrong
+namespace's globals. In the example's own test suite, removing it reduced a five-method run to one
+recorded method: the leak follows the runner out of the first test and derails the rest.
+
+**What the platform already enforces, so you need not check it.** Measured:
+
+| attempt | result |
+|---|---|
+| `Create` with `VerifyPeer=1`, no `CAFile` | `#986 CA File is required when Peer Verification or CRL File is specified` |
+| `Create` with `VerifyPeer=1`, `CAFile` naming a file that does not exist | `#5012 File '…' does not exist` |
+| `Create` with `VerifyPeer=1`, `CAFile` containing junk | `#743 CA certificate file … is not valid` |
+
+You cannot turn validation on without a real, parseable CA chain on disk. That is good — and it is
+also why the failure mode is what it is: **`VerifyPeer=0` is the path of least resistance.** The config
+gets created with 0 because that is the only way to create it before the chain exists, and nobody comes
+back. Measured on a clean IRIS for Health Community 2026.1, **both** shipped configurations —
+`BFC_SSL` and `ISC.FeatureTracker.SSL.Config` — are `Enabled=1` with `VerifyPeer=0` and no CA file.
+
+**And the state worth auditing for: `CAFile` set, `VerifyPeer` 0.** Nothing stops a working config
+being switched back to no validation; the chain stays on disk, the config page still shows a CA file,
+and validation is off. An audit that asks "is a CA file configured?" passes it. Call that one out
+separately — it is the one a reviewer waves through.
+
+**Nothing in the class says what the numbers mean.** `VerifyPeer` is a plain `%Library.Integer` with
+`MINVAL 0`, `MAXVAL 3` and an **empty `VALUELIST`**; `Security.Datatype.SSLType` and
+`Security.Datatype.BooleanYN` have empty `VALUELIST`s too. Every one of these settings reads back as a
+bare number, and the meaning lives only in the Portal's labels — so write the threshold down once, in
+a named constant, instead of scattering `= 0` comparisons.
+
+**Reading the table is privileged**: `Security.SSLConfigs` declares
+`RESOURCEREQUIRED = %Admin_Secure`. An audit must return the error rather than an empty report —
+"no findings" and "not allowed to look" must never render the same way.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-18: every value by probe,
+  the audit run against the live `%SYS` table from an application namespace.
+- **Validity.** Still valid.
+- **Severity.** High — the failure is a successful handshake with an unauthenticated peer.
+- **Example.** `examples/ch11_security/ssl-config-verifypeer-assert.cls`,
+  `examples/ch11_security/tdd-ssl-verifypeer.cls`
+
 ### 11.12 XAdES EPES signature policy (Spanish e-invoicing TicketBAI / facturae)
 
 When integrating with Spanish public-sector e-invoicing (TicketBAI, facturae), the signature must include a `<xades:SignaturePolicyIdentifier>` block with the SHA-1 base64 digest of the policy PDF or URL. Reference: `https://www.facturae.gob.es/formato/Paginas/politicas-firma-electronica.aspx`.
