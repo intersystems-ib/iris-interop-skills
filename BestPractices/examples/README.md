@@ -99,6 +99,9 @@ its siblings.
 | §6.7 | Custom BS with a bare adapter — the case where you DO write the class | `ch06_adapters/bs-file-bare-adapter.cls` |
 | §6.8 | REST inbound: `EnsLib.REST.Service`, UrlMap dispatch, CreateBusinessService | `ch06_adapters/bs-rest-inbound.cls` |
 | §6.9 | SQL inbound: GenericService poll + the mandatory JGService item + KeyFieldName | `ch06_adapters/production-sql-poll.cls` |
+| §6.10 | File passthrough relay — prebuilt service + operation, `Ens.StreamContainer` body, no custom classes (`Example.Productions.FileRelay`) | `ch06_adapters/production-file-passthrough.cls` |
+| §6.10 | Sibling: a custom consumer that rewinds BEFORE reading (`Example.BO.ArchiveStream`) | `ch06_adapters/bo-stream-container-consumer.cls` |
+| §6.10 | Sibling: the second-read test — EXECUTED, with a negative control (`Example.Tests.StreamContainerRewind`) | `ch06_adapters/tdd-stream-container-rewind.cls` |
 | §7.1 | Canonical Ens.Alert routing circuit — class export carrying the production **and** its alert rule ⚠️ | `ch07_alerting/alert-circuit-production.xml` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |

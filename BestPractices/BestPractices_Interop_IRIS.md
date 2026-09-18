@@ -1016,6 +1016,54 @@ irreversible if the downstream fails, and the message is then the only copy.
 - **Source.** Workshop cohort 2026-09; verified against 2026.1. **Validity.** Still valid.
 - **Severity.** High. **Example.** `examples/ch06_adapters/production-sql-poll.cls`
 
+### 6.10 File passthrough relay — `Ens.StreamContainer`, and the read that only works once
+
+Moving a file from A to B unchanged is the commonest shape in the field and was the least
+documented here: `Ens.StreamContainer` had **zero** hits across all 20 skills and the whole bank,
+while `production-lifecycle` already wired `EnsLib.File.PassthroughOperation` as the canonical alert
+sink.
+
+**Write no classes.** `EnsLib.File.PassthroughService` polls, reads the file and wraps it;
+`EnsLib.File.PassthroughOperation` receives it and writes it out. Verified from the operation's own
+signature — `OnMessage(pRequest As Ens.StreamContainer, ...)` — the body travelling between them is
+an `Ens.StreamContainer`, not a project message class and not a raw stream.
+
+`Ens.StreamContainer` is **not** an `Ens.Request`. Its verified superclass list is
+`(%Library.Persistent, Ens.Util.MessageBodyMethods, %XML.Adaptor)`. So a DTL over a relay operates on
+the container and its `Stream`, not on properties — and note that `%Persistent` is leftmost, exactly
+as §5.10 requires of your own message classes.
+
+**The silent failure is the second read.** A `%Stream` keeps a read position and `Read()` advances
+it. Measured on 2026.1 against a saved-and-reopened container:
+
+| call | result |
+|---|---|
+| `Read(100)` | `line-1` |
+| `Read(100)` again | `""` — no error, no warning, nothing in the Event Log |
+| `Rewind()` then `Read(100)` | `line-1` |
+
+The shape that produces it looks careful: log the content, then write it out. The log gets the data,
+the write gets `""`, and the output file is created **empty** — so the run reports success and the
+problem surfaces downstream as "the file arrived but it's blank".
+
+The rule is therefore: **any method that reads a stream it did not create rewinds FIRST, not after.**
+After is a convention you must remember at every exit path including the error ones; before is one
+line that cannot be skipped, and rewinding a stream already at 0 costs nothing.
+
+A separate business host is not at risk — message bodies travel by id and each host opens its own
+instance at position 0. The exposure is entirely *within* one method, or one object passed along
+in-process.
+
+`OriginalFilename` is the only link back to the source file; the operation's `%f` substitution in its
+`Filename` setting is simply a read of that property. Note also that `Filename` is a **Host** setting
+while `FilePath` is an **Adapter** setting — the Portal shows both in one panel, and a setting on the
+wrong target is accepted and never read.
+
+- **Source.** Bank audit 2026-09-18; flagged by review as a prescribed-but-unmapped component type.
+- **Validity.** Verified against IRIS for Health 2026.1; the read/rewind sequence was executed.
+- **Severity.** High — an empty output file from a run that reported success.
+- **Example.** `examples/ch06_adapters/production-file-passthrough.cls`
+
 ## 7. Error handling, retries & alerting
 
 ### 7.1 Alert circuit — the canonical pattern
