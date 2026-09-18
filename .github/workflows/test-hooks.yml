@@ -15,11 +15,23 @@ on:
     paths:
       - 'hooks/**'
       - 'scripts/test_hooks.py'
+      # This job also runs the issue-fingerprint tests, so their subject has to be watched here
+      # too. Added in 1.16.0: the step landed in 1.15.1 while the filter still listed only the
+      # hook paths, so editing issue_fingerprint.py alone ran nothing -- a gate that could not
+      # see the file it gates.
+      - 'scripts/issue_fingerprint.py'
+      - 'scripts/test_issue_fingerprint.py'
       - '.github/workflows/test-hooks.yml'
   pull_request:
     paths:
       - 'hooks/**'
       - 'scripts/test_hooks.py'
+      # This job also runs the issue-fingerprint tests, so their subject has to be watched here
+      # too. Added in 1.16.0: the step landed in 1.15.1 while the filter still listed only the
+      # hook paths, so editing issue_fingerprint.py alone ran nothing -- a gate that could not
+      # see the file it gates.
+      - 'scripts/issue_fingerprint.py'
+      - 'scripts/test_issue_fingerprint.py'
       - '.github/workflows/test-hooks.yml'
   workflow_dispatch:
 
