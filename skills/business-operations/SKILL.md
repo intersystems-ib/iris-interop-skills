@@ -270,6 +270,10 @@ The two most-guessed-wrong families:
 
 **On `-30 Table not found`, the NEXT call is introspection — never another guessed name.**
 
+> **Compiled worked examples**: typed parameters and NULLs via `ExecuteUpdateParmArray` at
+> `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/sql-bo-typed-parmarray.cls`; the inbound side, with the mandatory
+> `EnsLib.JavaGateway.Service` item wired, at `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/production-sql-poll.cls`.
+
 ## JDBC outbound — wiring checklist
 
 A JDBC-backed BO needs more than just a `DSN` setting; the full path from class to database touches the JVM, the External Language Server, and four BO settings that must align. Missing one piece produces opaque errors ("Java gateway not started", "no driver found", "no suitable driver"). Validate the checklist before debugging code.

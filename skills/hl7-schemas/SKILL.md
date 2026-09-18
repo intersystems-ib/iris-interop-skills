@@ -356,6 +356,10 @@ A complete custom-schema artefact set has three parts, all source-controlled on 
   the sender's actual segment order routes through a router with `Validation="dm"`, while a
   malformed one reaches the `BadMessageHandler`. (a) alone cannot see a wrong `MessageStructure`.
 
+> **Compiled worked example** of the surrounding wiring — prebuilt `EnsLib.HL7.Service.FileService`,
+> `MessageSchemaCategory`, and the HL7-specific router with `Validation="dm"`, which is what
+> actually checks segment order: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_hl7v2/production-hl7-intake.cls`.
+
 ## When custom schema is NOT necessary
 
 If the messages are standard ADT_A01 v2.5 — no Z-segments, no overridden fields — just assign `MessageSchemaCategory="2.5:ADT_A01"` and don't author a custom category. Defining `MyApp_2.5` as an empty copy of `2.5` adds maintenance burden with no benefit, and version upgrades won't auto-propagate to your "custom" category.

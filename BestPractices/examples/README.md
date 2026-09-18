@@ -48,7 +48,10 @@ its siblings.
 
 | Chapter | Rule | File |
 |---|---|---|
+| §1.7 | RecordMap definition for a delimited CSV intake (the only class you author) | `ch01_production/recordmap-censo.cls` |
+| §1.8 | Complete production: prebuilt RecordMap FileService → router → outbound, with Host/Adapter targets | `ch01_production/production-censo-intake.cls` |
 | §2.3 | HL7 v2 escape special characters when building messages manually | `ch02_hl7v2/hl7v2-escape-functionset.cls` |
+| §2.10 | HL7 v2 file intake: prebuilt HL7 FileService + the HL7-SPECIFIC router (CR-6) | `ch02_hl7v2/production-hl7-intake.cls` |
 | §3.1 | CDA-from-XSD: Persistent + no Relationships + OnDelete Cascade | `ch03_cda/cda-from-xsd-persistence-pattern.cls` |
 | §3.1 | Sibling: the `<component>` child class the §3.1 template cascades to (`Example.CDA.Component`) | `ch03_cda/cda-from-xsd-component.cls` |
 | §3.2 | Comanda/Resposta inheritance for one-of-N subtypes — the abstract envelope | `ch03_cda/comanda-resposta-inheritance.cls` |
@@ -70,6 +73,7 @@ its siblings.
 | §5.7 | DTL — declared transform, XData escaping, compile-order trap (`Example.DT.OrderToVendor`) | `ch05_bpl_dtl/dtl-order-to-vendor.cls` |
 | §5.7 | Sibling: DTL target message, also the `<call>` request type in §5.6 (`Example.MSG.VendorOrder`) | `ch05_bpl_dtl/msg-vendororder.cls` |
 | §5.8 | Routing rule — one rule per source msgClass, N `<send>` fan-out (`Example.RUL.OrderRouting`) | `ch05_bpl_dtl/routing-rule-fanout.cls` |
+| §5.9 | Canonical `%UnitTest.TestProduction` test for a DTL, with both branches covered | `ch05_bpl_dtl/tdd-testproduction-dtl.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |
@@ -79,6 +83,9 @@ its siblings.
 | §6.2 / §12.4 | Per-BO `Alt.SOAP.WebClient` for SOAP tracing | `ch06_adapters/alt-soap-webclient-tracing.cls` |
 | §6.4 | Typed SQL parameters via `ExecuteUpdateParmArray` / `ExecuteQueryParmArray` (NULLs, dates, decimals) | `ch06_adapters/sql-bo-typed-parmarray.cls` |
 | §6.6 | Java integration via JavaGateway | `ch06_adapters/javagateway-bo.cls` |
+| §6.7 | Custom BS with a bare adapter — the case where you DO write the class | `ch06_adapters/bs-file-bare-adapter.cls` |
+| §6.8 | REST inbound: `EnsLib.REST.Service`, UrlMap dispatch, CreateBusinessService | `ch06_adapters/bs-rest-inbound.cls` |
+| §6.9 | SQL inbound: GenericService poll + the mandatory JGService item + KeyFieldName | `ch06_adapters/production-sql-poll.cls` |
 | §7.1 | Canonical Ens.Alert routing circuit — class export carrying the production **and** its alert rule | `ch07_alerting/alert-circuit-production.xml` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |

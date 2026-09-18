@@ -172,6 +172,42 @@ To prevent concurrent execution of a scheduled Business Service: (a) set Pool Si
 
 ---
 
+### 1.7 RecordMap file intake — configure the prebuilt service, never subclass it
+
+The only class you author for a delimited-file intake is the **RecordMap definition**. The Business
+Service, the poll loop and the per-record dispatch are all prebuilt: configure
+`EnsLib.RecordMap.Service.FileService` as a production item with `RecordMap`, `TargetConfigNames`
+and `HeaderCount` on target `Host`, and `FilePath`/`Charset` on target `Adapter`.
+
+**Subclassing the FileService to reshape records does not work**, and the reason is worth knowing
+before you try it. Verified with `%Dictionary.CompiledMethod` on IRIS for Health 2026.1:
+`FileService.OnProcessInput` receives `pInput As %Stream.Object` — **the whole file** — and takes
+three arguments. There is no per-record hook on it; `SendRecord()` exists only on the `Batch*`
+services. So an override replaces the record loop the service exists to run, and a two-argument
+override typed `pInput As EnsLib.RecordMap.Base` does not even compile (`#5478`). Put the reshaping
+in a **DTL on the router**, which is where it belongs and where it is testable.
+
+- **Source.** Workshop cohort 2026-09; signatures verified against 2026.1.
+- **Validity.** Still valid.
+- **Severity.** High — the wrong shape costs a rebuild, and the compile error names the signature, not the design.
+- **Example.** `examples/ch01_production/recordmap-censo.cls`, `examples/ch01_production/production-censo-intake.cls`
+
+### 1.8 Production class — the wiring IS the deliverable
+
+A production class is an `Ens.Production` subclass whose entire content is one
+`XData ProductionDefinition`. Everything operational lives in that XML: which items exist, their
+`ClassName`, their `PoolSize`, and their settings split across target `Host` and target `Adapter`.
+Getting the target wrong is the most common cause of "the setting had no effect" — `FilePath` is an
+**Adapter** setting, `TargetConfigNames` is a **Host** setting, and the Portal shows them in one
+list, which hides the distinction.
+
+`Category` must equal the package root, and item names follow `<Tipo>.<Nombre>`.
+
+- **Source.** Workshop cohort 2026-09.
+- **Validity.** Still valid.
+- **Severity.** Medium.
+- **Example.** `examples/ch01_production/production-censo-intake.cls`
+
 ## 2. HL7 v2
 
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
@@ -264,6 +300,26 @@ When source-system rows have ordering dependencies (e.g. a "Reprogramacio" canno
 - **Severity.** Medium.
 
 ---
+
+### 2.10 HL7 file intake — the prebuilt HL7 service and the HL7-SPECIFIC router
+
+No custom Business Service: configure `EnsLib.HL7.Service.FileService`. Two settings carry the
+whole design.
+
+**`MessageSchemaCategory` gives every parsed message its DocType.** Unset, the message arrives with
+no schema and symbolic field names stop resolving *everywhere downstream* — a segment inherits its
+DocType from the message, so one missing setting silently degrades every DTL to numeric paths.
+
+**The router must be `EnsLib.HL7.MsgRouter.RoutingEngine`, not the generic engine** (CR-6). The
+generic one transports an `EnsLib.HL7.Message` perfectly well, so an end-to-end test passes either
+way; what it loses is schema validation in the rule editor and `{MSH:9.1}` path syntax. The failure
+is invisible until someone tries to write a rule. Pair it with `Validation="dm"` so a malformed
+message reaches the `BadMessageHandler` instead of flowing on.
+
+- **Source.** Workshop cohort 2026-09; verified against 2026.1.
+- **Validity.** Still valid.
+- **Severity.** High — both failures are silent and both survive a green test.
+- **Example.** `examples/ch02_hl7v2/production-hl7-intake.cls`
 
 ## 3. HL7 v3 / CDA
 
@@ -560,6 +616,36 @@ The canonical fan-out is **one `<rule>` per source message class, with N `<send>
 
 ---
 
+### 5.9 TDD for interop — `%UnitTest.TestProduction`, and what a green actually proves
+
+Test classes extend **`%UnitTest.TestProduction`**, not `%UnitTest.TestCase`. It is the Interop
+superclass: it carries the production lifecycle helpers (`..SendRequest`, `..GetEventLog`) a
+routing-rule or BO test needs, and `Run()` works by class name with no `/noload` gymnastics.
+
+**`Parameter PRODUCTION` is compile-time mandatory** — omit it, or set it to `""`, and the class
+does not compile. When the production is managed outside the test, declare it anyway and neutralise
+the lifecycle with a `TestControl()` that returns `$$$OK`.
+
+**A green only means what the assertions can fail on.** Asserting the `%Status` of a
+`Transform()` and nothing else passes against a transform that produced an empty target — the most
+common vacuous green there is. Assert on a field the component actually **writes**, and cover both
+sides of every conditional.
+
+Run it with the tool, one compiled class per call — `pattern` does **not** expand a package:
+
+```
+iris_test(pattern="Example.Tests.OrderToVendor", namespace="<NS>")
+```
+
+A suite of N test classes is N calls, all after the last recompile. What is forbidden is mixing
+generations, not adding up calls. And `^UnitTestRoot` must point at a directory that exists on the
+**server**, or the run reports zero tests and still exits clean.
+
+- **Source.** Workshop cohort 2026-09; verified against 2026.1.
+- **Validity.** Still valid.
+- **Severity.** High — a vacuous green is worse than a red, because it stops the search.
+- **Example.** `examples/ch05_bpl_dtl/tdd-testproduction-dtl.cls`
+
 ## 6. Adapters & connectivity
 
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
@@ -699,6 +785,56 @@ In 2025+, prefer external services or ObjectScript reimplementation (the 2017+ S
 - **Example.** `examples/ch06_adapters/javagateway-bo.cls`
 
 ---
+
+### 6.7 Custom Business Service with a bare adapter — the case where you DO write the class
+
+Use this shape only when no prebuilt service fits: delimited files are a RecordMap (§1.7), HL7 is
+`EnsLib.HL7.Service.FileService` (§2.10). Writing it otherwise means re-implementing a poll loop, a
+parser and a dispatch that already exist.
+
+What makes the shape legal is that the adapter is named by `Parameter ADAPTER` on an
+`Ens.BusinessService`, so **`OnProcessInput`'s signature is yours to define**. On a prebuilt
+`EnsLib.*.Service.*` the base class fixes it — and on a RecordMap/HL7 `FileService` it is
+`(pInput As %Stream.Object, Output pOutput, ByRef pHint)`, the whole file, with no per-record hook.
+Getting that wrong is `#5478`. Note also that `##super()` in `OnInit` is *not* needed here (the
+inherited one does nothing, ESQL §6.5) but **is mandatory on a prebuilt service** (CR-14).
+
+- **Source.** Workshop cohort 2026-09. **Validity.** Still valid. **Severity.** Medium.
+- **Example.** `examples/ch06_adapters/bs-file-bare-adapter.cls`
+
+### 6.8 REST inbound — `EnsLib.REST.Service` and the dispatch that is not a MessageMap
+
+`EnsLib.REST.Service` extends `%CSP.REST`, so dispatch is by URL through `XData UrlMap` — **not** by
+message type through `XData MessageMap`, which is the BO mechanism. A MessageMap on a REST service
+is never consulted.
+
+There is **no inbound adapter** (`Parameter ADAPTER = ""`): the web application accepts the socket.
+Consequences: the service never visibly "starts", and a 404 is a **web application** problem, not a
+production one. And because `%CSP.REST` dispatches to a *classmethod*, there is no instance and no
+`..SendRequestAsync()` — get one with `Ens.Director.CreateBusinessService()`, which is what makes
+the production item load-bearing.
+
+- **Source.** Workshop cohort 2026-09. **Validity.** Still valid. **Severity.** Medium.
+- **Example.** `examples/ch06_adapters/bs-rest-inbound.cls`
+
+### 6.9 SQL inbound — poll a table with GenericService, and the JGService precondition
+
+`EnsLib.SQL.Service.GenericService` is configured, not subclassed: the query, the key field and the
+dispatch are settings.
+
+**`JGService` is mandatory for any `jdbc:` DSN, and its absence is not a connection failure — the
+host terminates at startup.** It must name an `EnsLib.JavaGateway.Service` item in the same
+production, character for character (ESQL §2.1, §3.1). That item is required and **not** deprecated.
+Without it: `<INVALID OREF> 192 initAdapterJG+2^EnsLib.JavaGateway.Common.1`, a frame naming neither
+the gateway nor the item nor `JGService`.
+
+**`KeyFieldName` is what makes the poll incremental.** Without it the same rows are re-read every
+`CallInterval` and re-sent forever — a duplicate-message source that looks like a working
+integration. Prefer a watermark `WHERE` clause over deleting consumed rows: a delete is
+irreversible if the downstream fails, and the message is then the only copy.
+
+- **Source.** Workshop cohort 2026-09; verified against 2026.1. **Validity.** Still valid.
+- **Severity.** High. **Example.** `examples/ch06_adapters/production-sql-poll.cls`
 
 ## 7. Error handling, retries & alerting
 
