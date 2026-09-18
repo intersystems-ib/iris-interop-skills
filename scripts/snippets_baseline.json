@@ -27,6 +27,7 @@
     "MyApp.Tests.Rule.RoutingCenso",
     "MyApp.UTL.CodeLookup",
     "MyApp.UTL.FunctionSet",
+    "MyApp.UTL.RecycleItem",
     "MyApp.UTL.WsdlFetch"
   ],
   "ungated": {

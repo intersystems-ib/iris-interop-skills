@@ -196,7 +196,60 @@ queries status — sees a stopped production and reports a confusing *downstream
 nothing like "the restart wasn't finished". Same family of trap as "recompile doesn't reload the
 running job" above: the lifecycle call succeeded, the state you assumed from it wasn't there yet.
 
-Use `UpdateProduction` after **production XML** changes only. Use `RestartProduction` after **class code** changes. Treat the two as distinct lifecycle events.
+It is a **three-way** choice, not two. Bouncing the whole production to re-test one Business
+Operation is the most common way to waste a minute per iteration:
+
+| What changed | Do this |
+|---|---|
+| production XML, or a Setting | `Ens.Director.UpdateProduction(timeout)` — or `iris_production(action=update)` |
+| **one host's class code** | recycle **that job only**: `iris_production(action=restart, item="<Item>")` |
+| several hosts, or the `Ens.Production` class itself | the full bounce — the `RestartProduction` pattern above |
+
+**The platform API behind the one-item recycle is `TempStopConfigItem`, not a "restart" method.** There
+is no `Ens.Director.RestartConfigItem` — measured, `##class(Ens.Director).RestartConfigItem(...)` raises
+`<METHOD DOES NOT EXIST>`. What exists is:
+
+```objectscript
+Class MyApp.UTL.RecycleItem Extends %RegisteredObject
+{
+
+/// Recycle ONE host's job, leaving the rest of the production running. Use after recompiling that
+/// host's class: neither a compile nor UpdateProduction restarts a running job.
+ClassMethod One(pItem As %String) As %Status
+{
+    // TempStopConfigItem(item, stop, doUpdate). There is no RestartConfigItem -- see above.
+    Set tSC = ##class(Ens.Director).TempStopConfigItem(pItem, 1, 1)
+    // A bad item name is reported, not swallowed: <Ens>ErrConfigItemNotFound names item AND production.
+    Quit:$$$ISERR(tSC) tSC
+    Quit ##class(Ens.Director).TempStopConfigItem(pItem, 0, 1)
+}
+
+/// The disable/enable equivalent, for taking an item out of service rather than recycling it.
+ClassMethod SetEnabled(pItem As %String, pEnabled As %Boolean) As %Status
+{
+    Quit ##class(Ens.Director).EnableConfigItem(pItem, pEnabled, 1)
+}
+
+}
+```
+
+Measured on 2026.1: both calls return `$$$OK` against a running production, and the rest of the
+production keeps running throughout.
+
+**A wrong item name fails clearly, so do not go hunting.** Measured:
+
+```
+EnableConfigItem("NoSuchItem", 1, 0)
+  -> ERROR <Ens>ErrConfigItemNotFound: Item NoSuchItem not found in Production Example.Productions.ResendFixture
+```
+
+— it names the item *and* the production. `TempStopConfigItem` with a bad name gives the same. So if a
+one-item recycle fails, read the status: it tells you whether the name matched.
+
+One exception, and it is narrower than it looks: the per-item stop is blocked for a **Business Process**
+with `PoolSize=0`, which runs in the shared actor pool rather than its own job. That restriction is
+host-type-specific — `PoolSize=0` on an adapterless *Service* is a legitimate configuration this
+codebase uses deliberately, and is not affected. A `PoolSize=0` BP needs the full bounce.
 
 ## Pre-flight validation before restart
 
@@ -355,7 +408,7 @@ Wildcards (`*`) work in Default Site Settings — apply a value to all File-adap
 | **Start** | Production goes from Stopped → Running. All `Enabled=true` items start. | Initial start, after major changes. |
 | **Stop** | All items shut down cleanly. | Maintenance, breaking change deploy. |
 | **Update** | Live re-read of the production class. Items with changed config restart in-place. | After editing settings in dev. Preferred over full Stop/Start. |
-| **Restart item** | Single component restart. | Targeted setting change without disturbing the rest. |
+| **Restart item** | Single component restart — `iris_production(action=restart, item="<Item>")`; `item` is required. | Targeted setting change, **or a recompile of that one host's class**, without disturbing the rest. |
 
 `Update` is the workflow — it's almost always what you want during dev. Full Stop/Start is heavier and slower.
 
@@ -384,7 +437,7 @@ from a registration with nothing behind it. `iris_doc(mode=head)` answers
 `{"success":true,"name":…,"exists":…}`; **any other envelope means the call could not look** (wrong
 namespace, wrong web prefix) and is **not** evidence of a ghost.
 
-`iris_production` has **no `clean` action** — its enum is `status, start, stop, restart, update,
+`iris_production` has **no `clean` action** — its enum is `status, start, stop, restart (item), update,
 check, recover, get_autostart, set_autostart` — so this remedy necessarily goes through
 `iris_execute`. Write it in the documented form, `Do ##class(Ens.Director).CleanProduction()`: the
 docs publish no return value, so do not wrap it in `Set sc=`.
