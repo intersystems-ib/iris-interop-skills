@@ -514,6 +514,129 @@ def tier2() -> bool:
     return ok
 
 
+SKILLS = REPO / "skills"
+SNIPPET_BASELINE = Path(__file__).resolve().parent / "snippets_baseline.json"
+
+# A fence may hold more than one class (messages/SKILL.md does), and may be preceded by an
+# Include line that belongs to the class. Split on the class boundary, keeping any Include.
+_CLASS_START = re.compile(r"(?im)^(?=(?:Include\s+[^\n]+\n+)?\s*Class\s+[\w.%]+\s+Extends)")
+
+
+def snippets() -> tuple[dict[str, tuple[str, str]], int, int]:
+    """Extract every compilable class out of the ```objectscript fences in skills/.
+
+    Returns (class -> (source, provenance), bare_members, loose_fragments).
+
+    WHAT THIS GATE DOES NOT COVER, stated here so a clean run is not read as more than it is
+    (the same reason the S5 note exists in CLAUDE.md): only fences containing a COMPLETE class
+    are compiled. A fence holding a bare Method/ClassMethod has no host class and no knowable
+    superclass, and a fence holding loose statements has no compilation unit at all. Both are
+    counted and printed, never silently skipped -- if that count is large, the gate is narrower
+    than it looks.
+    """
+    out: dict[str, tuple[str, str]] = {}
+    members = fragments = 0
+    for md in sorted(SKILLS.glob("*/SKILL.md")):
+        skill = md.parent.name
+        for m in re.finditer(r"```objectscript\n(.*?)```", read(md), re.S):
+            block = m.group(1)
+            if not re.search(r"(?im)^\s*Class\s+[\w.%]+\s+Extends", block):
+                if re.search(r"(?im)^\s*(Method|ClassMethod)\s+\w+", block):
+                    members += 1
+                else:
+                    fragments += 1
+                continue
+            parts = [p for p in _CLASS_START.split(block) if p.strip()]
+            for part in parts:
+                names = class_names(part)
+                if len(names) != 1:
+                    fragments += 1
+                    continue
+                out[names[0]] = (part, skill)
+    return out, members, fragments
+
+
+def tier3() -> bool:
+    print("Tier 3 -- compile the INLINE snippets in skills/*/SKILL.md\n")
+    sources, members, fragments = snippets()
+
+    collide = sorted(set(sources) & {n for f in artefacts() if f.suffix == ".cls"
+                                    for n in class_names(read(f))})
+    if collide:
+        print(f"  NAME COLLISION with the example bank: {collide}")
+        print("  rename the snippet class -- staging both would compile one over the other\n")
+        return False
+
+    iris = Atelier()
+    print(f"  target {iris.base}")
+    print(f"  staging {len(sources)} classes extracted from fences")
+    print(f"  not compiled: {members} bare member(s), {fragments} loose fragment(s) "
+          f"-- no compilation unit; see snippets() docstring\n")
+
+    staged: list[str] = []
+    ok = False
+    try:
+        try:
+            for cn, (src_text, _) in sources.items():
+                iris.put(f"{cn}.cls", src_text)
+                staged.append(cn)
+        except (urllib.error.URLError, urllib.error.HTTPError) as exc:
+            print(f"  CANNOT REACH IRIS: {exc}")
+            return False
+
+        docs = [f"{cn}.cls" for cn in sources]
+        iris.compile(docs)
+        failed = parse_failures(iris.compile(docs), set(sources))
+
+        # A snippet legitimately names a class it does not ship (MyApp.Msg.SomeRequest). That is
+        # an illustrative placeholder, not a defect, so #5373 is reported and does NOT fail the
+        # tier. Everything else -- wrong signature, undefined macro, unparseable member -- is a
+        # copy-paste that cannot work, which is the whole point of this tier.
+        dep = {c: e for c, e in failed.items() if "5373" in e or "used by" in e.lower()}
+        real = {c: e for c, e in failed.items() if c not in dep}
+
+        baseline = json.loads(read(SNIPPET_BASELINE)) if SNIPPET_BASELINE.exists() else {}
+        expected = set(baseline.get("expected_clean", []))
+        clean = sorted(set(sources) - set(failed))
+
+        print(f"  compiled clean          : {len(clean)} / {len(sources)}")
+        if dep:
+            print(f"  placeholder dependency  : {len(dep)} (illustrative name, not a defect)")
+            for cn in sorted(dep):
+                print(f"      {cn}  [{sources[cn][1]}]")
+        if real:
+            print(f"  BROKEN SNIPPETS         : {len(real)}")
+            for cn, err in sorted(real.items()):
+                flag = "REGRESSION vs baseline" if cn in expected else "not in baseline"
+                print(f"      {cn}  [{sources[cn][1]}]  [{flag}]")
+                print(f"        {err}")
+        newly_clean = sorted(set(clean) - expected)
+        if newly_clean and expected:
+            print(f"  new since baseline: {', '.join(newly_clean)}")
+
+        ok = not real
+    finally:
+        left = []
+        for cn in staged:
+            try:
+                iris.delete(f"{cn}.cls")
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                left.append(cn)
+        msg = f"  cleanup                 : {len(staged) - len(left)} deleted"
+        if left:
+            msg += f", {len(left)} LEFT BEHIND: {left}"
+        print(msg)
+
+    print(f"\nTier 3: {'every inline class snippet compiles' if ok else 'FAILED'}\n")
+    return ok
+
+
+def update_snippet_baseline(clean: list[str]) -> None:
+    SNIPPET_BASELINE.write_text(
+        json.dumps({"expected_clean": sorted(clean)}, indent=2) + "\n", encoding="utf-8")
+    print(f"snippet baseline recorded: {len(clean)} classes -> {SNIPPET_BASELINE.name}")
+
+
 def update_baseline() -> None:
     sources = []
     for f in artefacts():
@@ -547,7 +670,13 @@ def main() -> int:
     if args.compile:
         # A failed preflight means the environment is wrong, not the bank. Say which,
         # and do not stage 34 classes into an instance that cannot compile them.
-        ok = (preflight() and tier2()) and ok
+        # One preflight for both live tiers; a bad target is an environment fault, not a
+        # content fault, and must not be reported as 69 broken classes.
+        if preflight():
+            ok = tier2() and ok
+            ok = tier3() and ok
+        else:
+            ok = False
     return 0 if ok else 1
 
 

@@ -142,7 +142,23 @@ This **Completes** the message regardless of reply code; the BP receives the res
 | Scenario | Pattern |
 |---|---|
 | **One row per message** (typical) | No explicit transaction. `..Adapter.ExecuteUpdate(...)` commits under the driver's autocommit; if it fails, the message is suspended and can be resent. |
-| **Multiple rows per message** (batch) | `..Adapter.StartTransaction()` → loop `ExecuteUpdate` → `..Adapter.Commit()` on success, `..Adapter.Rollback()` on any failure. Set `AutoCommit=false` on the adapter so intermediate INSERTs don't commit independently. |
+| **Multiple rows per message** (batch) | **`..Adapter.SetAutoCommit(0)`** → loop `ExecuteUpdate` → `..Adapter.Commit()` on success, `..Adapter.Rollback()` on any failure → `SetAutoCommit(1)` to restore. **Turning autocommit off IS the transaction start — there is no `StartTransaction()`.** Verified on 2026.1: the adapter's whole transaction API is `SetAutoCommit` / `Commit` / `Rollback` (`%Dictionary.CompiledMethod`, parent `EnsLib.SQL.OutboundAdapter`). `..Adapter.StartTransaction()` fails at runtime with `<METHOD DOES NOT EXIST>`; an earlier revision of this skill prescribed it. `SetAutoCommit` connects first if the adapter is cold, so it is safe to call in `OnMessage`. |
+
+> **There is no `Finally` in ObjectScript.** The block after `Catch` is the pseudo-finally and it
+> only runs if the `Catch` does not `Quit` early — a `Quit` there leaves the transaction **open on
+> a connection that outlives the message** (`StayConnected`), and the next message inherits it.
+> Restore autocommit in that block, guard it with a flag set only after `SetAutoCommit(0)`
+> succeeded, and do not overwrite your `%Status` with the rollback's own.
+
+> **`ConnectionAttributes` has two syntaxes and the wrong one fails silently.** ODBC takes
+> `attr:val,attr:val` (e.g. `AutoCommit:1`); **JDBC takes `attr=val;attr=val`** (e.g.
+> `TransactionIsolationLevel=TRANSACTION_READ_COMMITTED`). The `:`/`,` parsing loop in
+> `EnsLib.SQL.Common` sits inside `If '..%Connection.%Extends("EnsLib.SQL.CommonJ")` — **ODBC
+> only**. On JDBC the string is passed through unparsed to `connectWithPropString`, so ODBC syntax
+> on a JDBC connection becomes an unrecognised driver property and is **ignored**. Field-observed:
+> `ConnectionAttributes=AutoCommit:1` sat on dozens of production items running an Oracle JDBC
+> driver for years, doing nothing — harmless only because it asked for the default the driver
+> already had.
 | **Oracle JDBC** | Set `AutoCommit=true` on the adapter even for single-row work. Oracle treats SELECT as transactional by default and connections can hang on idle transactions otherwise. |
 
 ## Idempotency — let the remote constraint do the work

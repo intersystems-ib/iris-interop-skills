@@ -1,7 +1,12 @@
 # validate-examples: the gate over the BestPractices example bank.
 #
 #   structural  tier 1, no IRIS, ~1s — every push
-#   compile     tier 2, real IRIS in a container — every push
+#   compile     tier 2 (the example bank) AND tier 3 (the inline ```objectscript snippets in
+#               skills/*/SKILL.md), real IRIS in a container — every push
+#
+# Tier 3 exists because the snippets people actually READ were gated by nothing, while the bank
+# was gated and clean. Six of them did not compile — a canonical BS skeleton among them — and
+# every defect found in the 2026-09-17 audit lived in that ungated text, none in the bank.
 #
 # Tier 2 is the check that matters. Tier 1 catches structure; only a compiler would have
 # caught the 10-of-18 failures found in 1.7.0, or the two #5478 signature traps that the
@@ -14,6 +19,7 @@ on:
   push:
     paths:
       - 'BestPractices/**'
+      - 'skills/**/SKILL.md'
       - 'scripts/validate_examples.py'
       - 'scripts/examples_baseline.json'
       - 'scripts/atelier_fixtures.json'
@@ -21,6 +27,7 @@ on:
   pull_request:
     paths:
       - 'BestPractices/**'
+      - 'skills/**/SKILL.md'
       - 'scripts/validate_examples.py'
       - 'scripts/examples_baseline.json'
       - 'scripts/atelier_fixtures.json'

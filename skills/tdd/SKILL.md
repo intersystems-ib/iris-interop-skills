@@ -25,7 +25,7 @@ description: TDD-first workflow for IRIS Interoperability — the non-negotiable
 ```objectscript
 Class My.Tests.X Extends %UnitTest.TestProduction
 {
-Parameter PRODUCTION = "My.Production";   ; compile fails without it — see below
+Parameter PRODUCTION = "My.Production";   // compile fails without it — see below
 }
 ```
 
@@ -230,7 +230,7 @@ Class MyApp.Tests.DT.Censo2Menus Extends %UnitTest.TestProduction
 
 Parameter PRODUCTION = "MyApp.Production";
 
-Method TestControl() As %Status { Quit $$$OK }   ; production managed externally
+Method TestControl() As %Status { Quit $$$OK }   // production managed externally
 
 /// Verifies that Apellido1 + Apellido2 are concatenated with a single space separator
 Method TestApellidosConcat()

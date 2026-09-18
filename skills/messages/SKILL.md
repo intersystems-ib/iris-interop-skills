@@ -268,13 +268,13 @@ Class MyApp.MSG.MenuRequest Extends (%Persistent, Ens.Request)
 {
 Property PacienteId As %String(MAXLEN = 20) [ Required ];
 Property Nombre     As %String(MAXLEN = 100) [ Required ];
-Property Alergias   As %String(MAXLEN = 500);   ; pipe-separated, legacy consumers read this
+Property Alergias   As %String(MAXLEN = 500);   // pipe-separated, legacy consumers read this
 // ... other 3.1 properties ...
 }
 
 Class MyApp.MSG.MenuRequestRich Extends MyApp.MSG.MenuRequest
 {
-Property AlergiasList            As list Of %String(MAXLEN = 100);   ; typed collection
+Property AlergiasList            As list Of %String(MAXLEN = 100);   // typed collection
 Property AlergiasAcompananteList As list Of %String(MAXLEN = 100);
 Property AcompananteNombre       As %String(MAXLEN = 100);
 Property TieneAcompanante        As %Boolean [ InitialExpression = 0 ];
