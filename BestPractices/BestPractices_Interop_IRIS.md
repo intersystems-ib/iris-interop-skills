@@ -1192,6 +1192,52 @@ wrong target is accepted and never read.
 - **Severity.** High — an empty output file from a run that reported success.
 - **Example.** `examples/ch06_adapters/production-file-passthrough.cls`
 
+### 6.11 Subclassing a prebuilt Business Service — `##super()` first, and what #5478 does and does not enforce
+
+There is one good reason to subclass a prebuilt service: extra **initialisation**. Do not subclass a
+RecordMap service to reshape records — its `OnProcessInput` receives the whole file as a
+`%Stream.Object` with no per-record hook, so an override replaces the loop you wanted (§1.11).
+Reshaping belongs in a DTL on the router.
+
+**`##super()` first in `OnInit`, and it matters more on some hosts than others.** `OnInit` is not
+always a no-op you can safely replace. Read `Origin` out of `%Dictionary.CompiledMethod` to see
+where the implementation actually lives — measured on 2026.1:
+
+| host | `OnInit` origin |
+|---|---|
+| `EnsLib.RecordMap.Service.FileService` | **`EnsLib.RecordMap.Service.Standard`** |
+| `EnsLib.HL7.Service.FileService` | **`EnsLib.HL7.Service.FileService`** |
+| `EnsLib.File.PassthroughService` | `Ens.Host` |
+| `Ens.BusinessService` | `Ens.Host` |
+
+The first two define their **own** `OnInit` — real setup that an override silently replaces if
+`##super()` is omitted. It compiles either way and the production starts; the failure appears later
+as records that do not parse, or a host behaving as if unconfigured. That query is the check to run
+before overriding any host: **if `Origin` is not `Ens.Host`, the base is doing work you need.**
+
+**What #5478 actually enforces**, measured on `EnsLib.RecordMap.Service.FileService` — and it is not
+what it is usually said to enforce:
+
+| override | result |
+|---|---|
+| 3 args, correct types | compiles |
+| **2 args** (`pHint` dropped), correct types | **compiles** — arity is *not* enforced |
+| 3 args, `pInput As %RegisteredObject` | **fails `#5478`** — the *type* is enforced |
+| 3 args, `pHint` by value not ByRef | **compiles** — ByRef is *not* enforced |
+
+So the enforcement is on argument **types**, not on the count. You can quietly drop `pHint` and
+compile clean, and then never see what the framework passed — for a file service that is where the
+filename arrives. Declare the full signature, ByRef included, because nothing will tell you that
+you have not.
+
+And the protection exists only for **prebuilt** hosts: a 2-arg `OnProcessInput` override on a plain
+`Ens.BusinessService` subclass compiles with no complaint at all.
+
+- **Source.** Bank audit 2026-09-18. The row that proposed this sample, and the review correction that followed it, both said the 3-arg signature was compile-enforced; measured, the arity is not.
+- **Validity.** Verified against IRIS for Health 2026.1; every row above was compiled.
+- **Severity.** High — the `##super()` omission is silent, and so is a dropped `pHint`.
+- **Example.** `examples/ch06_adapters/bs-recordmap-service-subclass.cls`
+
 ## 7. Error handling, retries & alerting
 
 ### 7.1 Alert circuit — the canonical pattern
