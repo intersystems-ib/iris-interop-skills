@@ -67,6 +67,7 @@
     "Example.UTL.DriftReport",
     "Example.UTL.FunctionSet",
     "Example.UTL.TryCatchIdiom",
+    "Example.UTL.UnitTestResult",
     "Example.Vendor.WSC.SAPClient",
     "Example.Vendor.WSC.SAPDateRequest",
     "Example.Vendor.WSC.SAPPatient",
