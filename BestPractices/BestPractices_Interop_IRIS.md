@@ -397,6 +397,80 @@ at. See §1.15 for the same defect in the pre-flight validator.
 
 ## 2. HL7 v2
 
+### 1.17 Compiling a RecordMap does NOT generate its `.Record` class
+
+Measured on IRIS for Health 2026.1, after compiling the whole example bank:
+
+```
+Example.RecordMap.Censo          exists = 1
+Example.RecordMap.Censo.Record   exists = 0        <-- never generated
+```
+
+The definition compiles, the gate is green, `production-censo-intake.cls` names the map — and the
+record class the prebuilt service must instantiate is **absent**, so that production could not have
+processed a single record. This repo shipped it that way for every release that carried the map.
+
+Nothing catches it. A compile gate compiles `.cls` files; generation is a separate step, and the
+class that is missing is one no file declares. The symptom appears only at run time, and it **names
+the wrong class**:
+
+```
+ERROR #5002: ObjectScript error: <CLASS DOES NOT EXIST>
+  zGetObject+11^Example.RecordMap.Censo.1 *Example.Record
+```
+
+The missing class is `Example.RecordMap.Censo.Record`; the error says `*Example.Record`. So the one
+clue points at a name that does not exist either, which is how this gets diagnosed as "the map is
+broken" instead of "the map was never generated".
+
+**What generates it**, and it is two different classes — not one, as is easy to assume:
+
+| call | where it lives |
+|---|---|
+| `GenerateObject(pRecordMap, &pTargetClassname, &pStructure = 1)` | `EnsLib.RecordMap.Generator` |
+| `SaveToClass()` — arity 0 | `EnsLib.RecordMap.Model.Record` |
+
+`EnsLib.RecordMap.RecordMap` — the class the name suggests — has **neither**. `SaveToClass` also
+exists on `Ens.Config.Production` and `EnsLib.RecordMap.Model.ComplexBatch` with different
+signatures, so the name cannot be pattern-matched.
+
+**`GenerateObject` is not idempotent.** With the record class already present it fails:
+
+```
+ERROR #5768: Class already exists: 'Example.RecordMap.Censo.Record'
+```
+
+Measured three times running — not a first-call-only condition. A bootstrap that simply calls the
+generator therefore works exactly **once** and fails on every redeploy, which is the worst possible
+schedule for finding out: the first deployment succeeds. Drop the class first, and report whether you
+generated or regenerated.
+
+**Two error messages that mislead**, both measured:
+
+- For a name that is not a compiled class, the generator says `#5351: Class 'X' does not exist.` —
+  correct.
+- For a class that **is** compiled but is not a RecordMap, it says **the same thing** — which is
+  false, and sends you looking for a missing class rather than at the name you mistyped. Check
+  `%Extends("EnsLib.RecordMap.RecordMap")`, not mere existence, and say which is wrong.
+
+**`GetObject` is on the map class**, inherited from `EnsLib.RecordMap.RecordMap`. The generated
+`.Record` class extends `EnsLib.RecordMap.Base`, which does **not** have it — so calling it there
+raises `<METHOD DOES NOT EXIST>`, the same error shape as an ungenerated map for a different reason.
+
+**On character encoding**, the honest result: the mojibake this was expected to demonstrate **does not
+reproduce** on an instance whose default encoding already handles UTF-8. Real UTF-8 bytes in a file,
+read through `%IO.FileStream`, gave `'Ángel Muñoz'` (11 characters) both with `CharEncoding` unset and
+with `CharEncoding="UTF8"`. That is not a refutation — it is the host-dependence §1.11 already warns
+about, demonstrated. Set the encoding explicitly and the question does not arise; rely on the default
+and the answer depends on the host. (A `%IO.StringStream` is not a substitute for this measurement: it
+has no byte-to-character boundary, so setting an encoding on it translates text that was already
+decoded.)
+
+- **Validity.** Verified against IRIS for Health 2026.1 — compiled and executed.
+- **Severity.** High (the production is unusable and every gate is green).
+- **Example.** `examples/ch01_production/recordmap-generate-bootstrap.cls`,
+  `examples/ch01_production/tdd-recordmap-getobject-encoding.cls`
+
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
 
 When a partner emits ER7 messages that deviate from the published HL7 standard (e.g., `SQM_S25` / `SRM_S25` missing `RGS` segment), define a custom HL7 schema based on v2.5 in the Portal, redefine just the affected messages, and set the BS's `MessageSchemaCategory` setting (Portal: “Message Schema Category”) to that schema name.
