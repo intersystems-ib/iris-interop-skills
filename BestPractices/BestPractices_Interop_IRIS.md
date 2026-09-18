@@ -949,6 +949,30 @@ Two smaller rules that come with the pattern: mark every FunctionSet method `[ F
 and always pass `..Lookup`'s third argument, the on-miss default, or a miss returns `""` and flows
 on as a legitimately empty value.
 
+**And the default is why an unnormalised key is dangerous rather than merely wrong.** Measured
+against a table holding one row keyed `diabetica`:
+
+| call | result |
+|---|---|
+| `%GetValue(table, "diabetica", .exists)` | `"DIA"`, `exists = 1` |
+| `%GetValue(table, "  Diabética  ", .exists)` | `""`, `exists = 0` |
+| `FunctionSet.Lookup(table, normalised, "UNKNOWN")` | `"DIA"` |
+| `FunctionSet.Lookup(table, raw, "UNKNOWN")` | **`"UNKNOWN"`** |
+
+The last row is the failure in one value: a missed key returns the **default** — a plausible code,
+not an error — so every message is quietly mapped to the fallback and the pipeline reports success.
+With `""` as the default it is worse in a different way: the miss becomes an empty field that flows
+on as if the source had sent nothing.
+
+`exists` is what separates a miss from an empty value, and it is `%GetValue`'s third, **by-ref**
+argument — not a default, which is what it looks like. A row whose `DataValue` is genuinely empty
+returns `""` with `exists = 1`; a missing row returns `""` with `exists = 0`.
+
+Load a table with **delete-then-insert**, always: an INSERT alone either duplicates the key or fails,
+so a non-idempotent loader breaks the second time it runs, which is the first time anyone re-runs a
+deployment. Embedded `&sql` is fine in a **compiled class** — it is `&sql` sent through
+`iris_execute` that is rewritten and loses `SQLCODE`.
+
 - **Source.** Bank audit 2026-09-18; the bank had no gated FunctionSet consumer.
 - **Validity.** Verified against IRIS for Health 2026.1; all six call forms compiled and run.
 - **Severity.** High — the surviving wrong form is invisible to every tier.

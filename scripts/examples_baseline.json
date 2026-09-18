@@ -59,6 +59,7 @@
     "Example.Tests.DtlFunctionForms",
     "Example.Tests.Hl7RouterValidation",
     "Example.Tests.Hl7SymbolicPaths",
+    "Example.Tests.LookupNormalize",
     "Example.Tests.MessageOwnExtent",
     "Example.Tests.OrderToVendor",
     "Example.Tests.StreamContainerRewind",
