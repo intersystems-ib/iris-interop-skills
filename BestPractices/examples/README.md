@@ -101,6 +101,8 @@ its siblings.
 | §5.15 | Message `%String` boundaries — bare (50), sized, and `MAXLEN=""` | `ch05_bpl_dtl/msg-maxlen-boundaries.cls` |
 | §5.15 | Sibling: the run that settles reject-vs-truncate, and the second ceiling | `ch05_bpl_dtl/tdd-maxlen-truncation.cls` |
 | §5.16 | `ConvertDateTime` oracle — all five documented rows, both silent failure modes, and the `$ZDATEH` non-equivalence | `ch05_bpl_dtl/tdd-convertdatetime-cheatsheet.cls` |
+| §5.17 | Lookup bootstrap — transaction-bracketed, `SQLCODE`-checked, row-count asserted | `ch05_bpl_dtl/lookup-bootstrap-sqlproc.cls` |
+| §5.17 | Sibling: the run proving a non-transactional reload leaves a partial table | `ch05_bpl_dtl/tdd-lookup-bootstrap.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |
