@@ -37,6 +37,14 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   `skillListingMaxDescChars: 2048`) in `~/.claude/settings.json` so `interop`/`tdd` don't get evicted.
 - `BestPractices/` — the worked-example bank the skills cite:
   - `BestPractices_Interop_IRIS.md` — patterns tagged Validity/Severity.
+  - `COVERAGE-MAP.md` — **the work-list for new samples. Read it before authoring one.** A
+    12-agent audit of all 20 skills against the bank: 59 missing or ungated canonical samples in
+    six waves, with what each would pin down, its severity, whether CI can compile it, and what it
+    depends on. Wave 0 is 16 items where the right answer is NOT a new sample. It carries a
+    progress ledger — update it when something lands, and do not rewrite the wave tables. Rows
+    marked ⚠ were corrected by adversarial review; read §"Review corrections" before building one.
+    The point of the document is that building a sample should be following a recipe, not
+    re-deriving which sample is needed and why.
   - `examples/` — runnable artefacts indexed in `examples/README.md`, gated by
     `scripts/validate_examples.py` (tier 1 structural in CI; `--compile` against a
     live IRIS before a release). Adding an example means adding its README row.
