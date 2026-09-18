@@ -145,6 +145,8 @@ its siblings.
 | §11.5 | OAuth 2.0 + LDAP server-side broker — a **subclass** of `%OAuth2.Server.Validate` | `ch11_security/oauth2-server-validate-ldap.cls` |
 | §11.7 | SSL/TLS trusted CA chain build (`openssl s_client -servername`) ⚠️ | `ch11_security/ssl-trusted-ca-chain.sh` |
 | §13.7 | Credentials migration — walk `Ens.Config.Credentials`, export, re-import | `ch13_migration/credentials-export-reimport.cls` |
+| §15.4 | DICOM MWL date FunctionSet — `$ZDATEH` format 5 and the ninth-slot error trap | `ch15_dicom/dicom-mwl-date-functionset.cls` |
+| §15.4 | Sibling: the run, whose central assertion is the off-by-one the first draft made | `ch15_dicom/tdd-dicom-mwl-date.cls` |
 
 ## Rules with public-repo canonical sources
 
