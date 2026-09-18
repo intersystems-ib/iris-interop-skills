@@ -1704,9 +1704,39 @@ Use IRIS as an OAuth 2.0 broker between a third-party SaaS app and on-premise Ac
 
 **Smoke test.** Verify the OAuth server reachable via `<server>/<csp-app>/oauth2/.well-known/openid-configuration` (OIDC discovery endpoint).
 
+**Subclass `%OAuth2.Server.Validate`; do not copy it.** Measured on 2026.1, against the copy the
+worked example replaced in v1.35.0:
+
+- **Inherit `SupportedClaims`.** The vendor returns six claims (`preferred_username`, `email`,
+  `email_verified`, `name`, `phone_number`, `phone_number_verified`). The copy overrode it with
+  `quit ""` — measured 6 → 0. Nothing in a copy tells you that you have taken over a method you did
+  not mean to change.
+- **Inherit `ValidateClient`.** Its vendor body is exactly `Set sc=$$$OK` / `Quit 1`, so copying it
+  changes no behaviour; it only transfers the obligation to re-diff it on every upgrade. Note what
+  the default means: this hook accepts every client, because client authentication is done against
+  the client secret in the server configuration and not here.
+- **Copy the signature from the running dictionary, not from a sample.** `ValidateUser` takes six
+  formals — `username, password, scope, properties, *sc, *use2fa`. A five-formal override (the
+  pre-`use2fa` shape) compiles clean as a subclass, raises nothing when the server calls it with six
+  arguments, and returns a plausible boolean; the only consequence is that two-factor can never be
+  requested, with no error anywhere.
+- **Never fall back to `##super()` on an LDAP failure.** The inherited implementation authenticates
+  against the local IRIS user database, so a directory outage would silently re-enable local
+  accounts. Fail closed.
+- **Reject an empty password explicitly.** An LDAP simple bind with an empty password is an
+  *anonymous* bind and returns success, so without the guard every existing username authenticates
+  with no password. The inherited code treats `password=""` as "already authenticated in this
+  session" — safe for a local comparison, unsafe for a bind. Do not port that convention down.
+- **`$$$LDAPSUCCESS` is `0`**, so `If tErr` is the error test. `Include %syLDAP` alone resolves it
+  along with `$$$LDAPSCOPESUBTREE` (2), `$$$LDAPPORT` (389) and `$$$LDAPOPTXTLSCACERTFILE` (24578).
+- **Two namespaces.** The server configuration is a `%SYS`-only object — from an application
+  namespace `OAuth2.Server.Configuration` is not visible — while the validate class must be compiled
+  into the customisation namespace the configuration names. Compiling it in the wrong one is the
+  standard cause of "my `ValidateUserClass` is never called".
+
 - **Validity.** Still valid.
 - **Severity.** High.
-- **Example.** `examples/ch11_security/oauth2-server-validate-ldap.cls.xml`
+- **Example.** `examples/ch11_security/oauth2-server-validate-ldap.cls`
 
 ### 11.6 OAuth 2.0 + PKCE for mobile clients
 
