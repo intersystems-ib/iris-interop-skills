@@ -1078,7 +1078,7 @@ Canonical wiring:
 
 - **Validity.** Still valid.
 - **Severity.** High.
-- **Example.** `examples/ch07_alerting/alert-circuit-production.xml`
+- **Example.** `examples/ch07_alerting/production-alert-circuit.cls`
 
 ### 7.2 Alert deduplication FunctionSet (verbatim)
 

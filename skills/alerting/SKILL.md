@@ -49,7 +49,21 @@ Production XML excerpt for the alert circuit:
       ClassName="Ens.MonitorService" PoolSize="1" Enabled="true"/>
 ```
 
-A complete production XML with this wiring lives in `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch07_alerting/alert-circuit-production.xml`.
+A complete, **compiled** production with this wiring lives in
+`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch07_alerting/production-alert-circuit.cls`, with its
+rule in `alert-routing-rule.cls`.
+
+It replaced an `.xml` export in 1.21.0, and the conversion is worth knowing about: because the file
+was `.xml`, **no tier compiled it** — and it had been shipping a rule that *cannot compile*. Its two
+dedup conditions used the package-qualified form. Measured on 2026.1 in the rule context:
+
+| condition | result |
+|---|---|
+| `AlreadyReportedPerSession()=1` | **compiles** |
+| `##class(Demo.FilterAlerts.FunctionSet).AlreadyReportedPerSession()=1` | **fails** — `<Ens>ErrParsingExpression` … `<Ens>ErrInvalidToken` |
+
+The file's own header told the reader to `$system.OBJ.Load()` it. That is what an artefact indexed
+as an example and gated by nothing is worth.
 
 ## Alert deduplication — `Ens.Alert` routing-rule guards
 

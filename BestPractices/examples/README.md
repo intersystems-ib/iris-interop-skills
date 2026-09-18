@@ -102,7 +102,7 @@ its siblings.
 | §6.10 | File passthrough relay — prebuilt service + operation, `Ens.StreamContainer` body, no custom classes (`Example.Productions.FileRelay`) | `ch06_adapters/production-file-passthrough.cls` |
 | §6.10 | Sibling: a custom consumer that rewinds BEFORE reading (`Example.BO.ArchiveStream`) | `ch06_adapters/bo-stream-container-consumer.cls` |
 | §6.10 | Sibling: the second-read test — EXECUTED, with a negative control (`Example.Tests.StreamContainerRewind`) | `ch06_adapters/tdd-stream-container-rewind.cls` |
-| §7.1 | Canonical Ens.Alert routing circuit — class export carrying the production **and** its alert rule ⚠️ | `ch07_alerting/alert-circuit-production.xml` |
+| §7.1 | Canonical `Ens.Alert` circuit, **compiled** — replaces the former `.xml`, whose rule could not compile (`Example.Alerting.Production`) | `ch07_alerting/production-alert-circuit.cls` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |
 | §11.3 | Sibling: request message the SOAP BO's MessageMap keys on (`Demo.SAML.MSG.InvokeReq`) | `ch11_security/saml2-invoke-request.cls` |
@@ -125,22 +125,23 @@ maintained version — no local copy here. See `external-repos.md` for URLs.
 
 ## ⚠️ Rows that are indexed but NOT compiled
 
-**Three artefacts in this index are checked by no tier, and the ⚠️ on their rows says so at the point
-of the claim rather than in a footnote nobody reaches.** Tier 2 stages `.cls` files only, and
+**Two artefacts in this index are checked by no tier, and the ⚠️ on their rows says so at the point
+of the claim rather than in a footnote nobody reaches.** (This was three until v1.21.0, when the
+§7.1 alert circuit was converted to a compiled class — and the conversion immediately found that its
+rule could not compile at all.) Tier 2 stages `.cls` files only, and
 `examples_baseline.json` holds class names — so an `.xml` export and a `.sh` script are indexed,
 counted in the artefact total, and compiled by nothing:
 
 | artefact | why no tier sees it |
 |---|---|
-| `ch07_alerting/alert-circuit-production.xml` | an XML production export, not a class file |
 | `ch11_security/oauth2-server-validate-ldap.cls.xml` | an XML **class export** — the `.cls.xml` suffix is not `.cls` |
 | `ch11_security/ssl-trusted-ca-chain.sh` | a shell script; there is no shell tier |
 
-This matters because these are not small: the two security/alerting artefacts are the largest
-non-`.cls` items in the bank. Tier-1 **C8** does reach the `.xml` files (it is why the alert
+This matters because these are not small: the §11.5 OAuth artefact is the largest non-`.cls` item
+left in the bank. Tier-1 **C8** does reach the `.xml` files (it is why the alert
 circuit's dangling rule name was caught), so they are not *entirely* unchecked — but nothing
 compiles them, and a green run must not be read as saying otherwise. Tracked in
-`../COVERAGE-MAP.md` (wave items S2 and S14 convert the first two into gated `.cls`).
+`../COVERAGE-MAP.md` (wave item S14 converts the OAuth artefact into a gated `.cls`; S2 did the alerting one in v1.21.0).
 
 ## Rules without code (process / architecture / version-specific)
 
