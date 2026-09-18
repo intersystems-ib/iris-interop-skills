@@ -311,13 +311,25 @@ Strict types like `%SmallInt`, `%Integer`, `%Boolean`, `%Date` are fine for fiel
 
 ## `%String` length — the `MAXLEN=50` trap (and `MAXLEN=""` for big text)
 
-A **bare `%String` defaults to `MAXLEN=50`** — and values longer than 50 chars are **silently truncated** on `%Save` (no error, the data is just gone). This routinely bites canonical messages carrying free text: addresses, clinical notes, HL7 `OBX`/`NTE` text, JSON blobs, base64.
+A **bare `%String` defaults to `MAXLEN=50`**, and a longer value is **rejected, not truncated**.
+Measured on IRIS for Health 2026.1, one property, four paths: 50 chars saves and reads back 50; 51
+gives `ERROR #7201`; `%ValidateObject()` on its own gives the same `#7201`; an SQL `INSERT` gives
+`SQLCODE=-104 … failed validation`; and after `Set`, the in-memory value still holds all 100 chars.
+**Nothing is silently discarded** — which is why the fix is to read the `#7201` you already have
+rather than to go hunting for missing text. This routinely bites canonical messages carrying free
+text: addresses, clinical notes, HL7 `OBX`/`NTE` text, JSON blobs, base64.
+
+Two boundaries on that measurement, because the word "silent" has been wrong here before. It covers
+the object and SQL persistence paths only: whether a **SOAP/XML import** truncates on
+deserialization is a different path and is **not** measured. And a value cut short at a *separator*
+is an unrelated mechanism — see `business-services` on a RecordMap separator defaulting to
+`$char(32)`, which really is silent.
 
 - Give every text-ish property an explicit length: `As %String(MAXLEN=200)` (size it to the source).
 - For "as large as a string can be", use **`As %String(MAXLEN="")`** — unbounded, capped at the IRIS string ceiling of **~3.6 MB** (3,641,144 chars). No penalty for declaring it.
 - Past ~3.6 MB, or for genuinely large/streamed payloads, switch the property to **`%Stream.GlobalCharacter`** (see the XML-projection and SOAP-envelope patterns above).
 
-> **SOAP Wizard / WSDL caveat.** When a WSDL declares a string **without a length facet**, the message class the SOAP wizard auto-generates can come out with a **bounded `%String` (the 50 default)** for that property — so inbound/outbound values silently truncate. After running the wizard, **review the generated payload classes and widen** the affected properties to `%String(MAXLEN="")` (or `%Stream.GlobalCharacter` for large content). See `soap-bo`.
+> **SOAP Wizard / WSDL caveat.** When a WSDL declares a string **without a length facet**, the message class the SOAP wizard auto-generates can come out with a **bounded `%String` (the 50 default)** for that property — so a longer value fails validation the moment the message is saved. After running the wizard, **review the generated payload classes and widen** the affected properties to `%String(MAXLEN="")` (or `%Stream.GlobalCharacter` for large content). See `soap-bo`. Whether the SOAP *deserializer* rejects or quietly shortens before any save is a separate path and is unmeasured — widen the property and the question does not arise.
 
 ## Collections — `list Of` for typed multi-valued fields
 
