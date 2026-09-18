@@ -33,6 +33,10 @@ XData ProductionDefinition
         PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
     <Setting Target="Host" Name="MessageSchemaCategory">2.5</Setting>
     <Setting Target="Host" Name="TargetConfigNames">Router.Adt</Setting>
+    <!-- THE ASSIGNMENT. A search table indexes nothing until an item names it: the class can be
+         compiled, its props registered, and no row will ever be written. Target="Host" because it is a
+         host setting (origin EnsLib.HL7.Service.Standard), not an adapter one. -->
+    <Setting Target="Host" Name="SearchTableClass">Example.Search.Hl7Adt</Setting>
     <Setting Target="Host" Name="AlertOnError">1</Setting>
     <Setting Target="Adapter" Name="FilePath">/data/hl7/in/</Setting>
     <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
@@ -55,6 +59,11 @@ XData ProductionDefinition
   <Item Name="BO.AdtOut" Category="Example" ClassName="EnsLib.HL7.Operation.FileOperation"
         PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" Schedule="">
     <Setting Target="Host" Name="AlertOnError">1</Setting>
+    <!-- Assigned on the OPERATION as well, deliberately. Indexing on the inbound service only
+         records what arrived; indexing outbound records what was actually sent, which is the half
+         you need when a receiver says it never got it. A ROUTER has no SearchTableClass property at
+         all (measured: absent on EnsLib.HL7.MsgRouter.RoutingEngine), so there is no third place. -->
+    <Setting Target="Host" Name="SearchTableClass">Example.Search.Hl7Adt</Setting>
     <Setting Target="Adapter" Name="FilePath">/data/hl7/out/</Setting>
   </Item>
 
