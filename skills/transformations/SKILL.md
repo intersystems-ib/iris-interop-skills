@@ -464,6 +464,19 @@ the grouped `OBX` above resolves symbolic names fine. What the group *does* brea
 `msg.GetValueAt("OBX(1):3.2")` returns `""` and `msg.GetSegmentAt("OBX(1)")` returns no object at
 all, while the index-iteration route reaches the very same segment.
 
+**Both of those failures DO set an error status** — measured on 2026.1:
+`msg.GetSegmentAt("OBX(1)", .sc)` leaves `sc` = `ERROR <Ens>ErrGeneral: No segment found at path
+'OBX(1)'`, and `msg.GetValueAt("OBX(1):3.2", , .sc)` sets the same kind of error. So this is silent
+only if you discard the status — and `GetValueAt`'s status is its **third by-reference argument**,
+which is exactly the one a `<code>` block omits. Pass it and check it, and the group trap announces
+itself instead of looking like missing data.
+
+One caveat on the tree above: **whether a segment is grouped depends on the message type.** `NK1` is
+*top-level* in an ADT_A01, so `GetSegmentAt("NK1(1)")` there returns the object and
+`GetValueAt("NK1(1):2.1")` returns the value — the message-level path works. It is `OBX` in an
+ORU_R01, and `NK1` in message types that group it, where the path fails. Check the structure before
+concluding the path form is at fault.
+
 Two consequences:
 
 - In a `<code>` block, if your symbolic paths come back empty, check `msg.DocType` **before**
