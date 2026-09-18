@@ -9,7 +9,10 @@
 /// `<Pkg>.MSG.<Name>Req` per the naming convention; Ens.Request already brings
 /// %Persistent + %XML.Adaptor, which is what lets it appear in a WSDL as a SOAP parameter.
 /// No `Storage` block: IRIS generates default storage on first compile.
-Class Example.MSG.AcceptOrderReq Extends Ens.Request
+/// `%Persistent` is LEFTMOST deliberately: without it this message shares
+/// `^Ens.MessageBodyD` with every other message type in the namespace, and no compile,
+/// test or Event Log entry would ever say so (§5.10, and tdd-message-own-extent.cls).
+Class Example.MSG.AcceptOrderReq Extends (%Persistent, Ens.Request)
 {
 
 Parameter XMLNAME = "AcceptOrderReq";

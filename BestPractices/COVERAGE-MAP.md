@@ -46,7 +46,9 @@
 | ✅ | 4 gate defects found while doing the above: a `///` prefix was split off its class and dropped; an `Include` was **always** orphaned (so `$$$Str2MsgTyp`/`$$$Sql*` fences compiled without it); an **indented** class fence was silently counted as a fragment; tier 3 left `Ens_Config.SearchTableProp` rows behind, so any SearchTable **rename** failed with `PropCollision` naming a deleted class | v1.15.0 |
 | ✅ | **N15** — **tier 2b** compiles `BestPractices/external/**` with its own baseline. Surveyed first: all **19** classes compile clean today, so gating was free. Deliberately NOT added to tier 1 — **0 of 19** carry a `/// Rule:` header, so C1 would fail all of them and greening it would mean editing vendor source. Count correction: the audit said "21 classes / 1738 lines"; measured twice independently it is **19 classes / 1934 lines** | v1.15.1 |
 | ✅ | **N16** — `scripts/issue_fingerprint.py` + `scripts/test_issue_fingerprint.py`, wired into the `test-hooks` CI job. **Not** a pytest: this repo's harnesses are stdlib-only so CI needs no dependencies, and matching that beat following the map's wording. The tests caught **4 real bugs** in the helper before it shipped | v1.15.1 |
-| ⬜ | **Wave 0 is COMPLETE.** Next: wave 1, the silent-failure sample set (16 samples / 22 files, all P0) | — |
+| ✅ | **Wave 0 COMPLETE** (v1.15.1) | — |
+| ✅ | Wave 1 **S3** — `msg-persistent-leftmost.cls` + `tdd-message-own-extent.cls`, new deliverable **§5.10**, and the **4 bank message classes that taught the shared-extent shape are fixed**. Measured: `(%Persistent, Ens.Request)` → own extent; `(Ens.Request, %Persistent)` and bare `Ens.Request` → `^Ens.MessageBodyD`. All three compile clean, so tier 2 was green on all three. Test mutation-checked: passes as shipped, fails on both wrong orders | v1.16.0 |
+| ⬜ | Wave 1 remaining: S2, S4–S16 (S1 shipped in v1.14.0) | — |
 | ⬜ | everything else below | — |
 
 **Bank as of v1.15.0: 47 compile-gated classes, 50 artefacts. Tier 1: 9 checks. Tier 3: 29 fences

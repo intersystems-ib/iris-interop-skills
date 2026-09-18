@@ -9,7 +9,10 @@
 /// `<Pkg>.MSG.<Name>Rsp` per the naming convention; Ens.Response already brings
 /// %Persistent + %XML.Adaptor.
 /// No `Storage` block: IRIS generates default storage on first compile.
-Class Example.MSG.AcceptOrderRsp Extends Ens.Response
+/// `%Persistent` is LEFTMOST deliberately: without it this message shares
+/// `^Ens.MessageBodyD` with every other message type in the namespace, and no compile,
+/// test or Event Log entry would ever say so (§5.10, and tdd-message-own-extent.cls).
+Class Example.MSG.AcceptOrderRsp Extends (%Persistent, Ens.Response)
 {
 
 Parameter XMLNAME = "AcceptOrderRsp";

@@ -5,7 +5,10 @@
 /// Sibling: the DTL target message for `dtl-order-to-vendor.cls`, and the request type the
 /// `<call>` in `bpl-order-process.cls` builds. Kept in its own file so every example class
 /// is one loadable unit.
-Class Example.MSG.VendorOrder Extends Ens.Request
+/// `%Persistent` is LEFTMOST deliberately: without it this message shares
+/// `^Ens.MessageBodyD` with every other message type in the namespace, and no compile,
+/// test or Event Log entry would ever say so (§5.10, and tdd-message-own-extent.cls).
+Class Example.MSG.VendorOrder Extends (%Persistent, Ens.Request)
 {
 
 Parameter XMLNAME = "VendorOrder";

@@ -78,6 +78,8 @@ its siblings.
 | §5.7 | Sibling: DTL target message, also the `<call>` request type in §5.6 (`Example.MSG.VendorOrder`) | `ch05_bpl_dtl/msg-vendororder.cls` |
 | §5.8 | Routing rule — one rule per source msgClass, N `<send>` fan-out (`Example.RUL.OrderRouting`) | `ch05_bpl_dtl/routing-rule-fanout.cls` |
 | §5.9 | Canonical `%UnitTest.TestProduction` test for a DTL, with both branches covered | `ch05_bpl_dtl/tdd-testproduction-dtl.cls` |
+| §5.10 | Message class design — `%Persistent` leftmost or the message shares `^Ens.MessageBodyD` (`Example.MSG.OrderEvent`) | `ch05_bpl_dtl/msg-persistent-leftmost.cls` |
+| §5.10 | Sibling: the only mechanical check for §5.10 — reads `DataLocation`, with a negative control (`Example.Tests.MessageOwnExtent`) | `ch05_bpl_dtl/tdd-message-own-extent.cls` |
 | §6.1.1 | `wsp:PolicyReference` (#6447) compile fix | `ch06_adapters/soap-wsdl-policyreference-fix.cls` |
 | §6.1.2 | Suppress `xsi:type` for vendor SOAP servers | `ch06_adapters/soap-xsi-type-suppress.cls` |
 | §6.1.4 | Drop `REQUIRED=1` from generated SOAP type properties | `ch06_adapters/soap-required-flag-drop.cls` |
