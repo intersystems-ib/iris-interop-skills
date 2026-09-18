@@ -616,27 +616,42 @@ failure you have:
 |---|---|---|
 | file gone, new message rows | it worked | `iris_interop_query(what=trace, session_id=<n>)` to follow it downstream |
 | file gone or moved, **no** new rows | the adapter processed it and the BS produced nothing | `iris_interop_query(what=logs, since_id=<watermark>)`. **The adapter renames or deletes only if the method did NOT return an error** (EFIL) — so a file that moved while emitting nothing means the BS returned *success* having done nothing, which is the `OnInit()`-without-`##super()` signature exactly. Re-copying just feeds it another file |
-| file still sitting there | **check which case before concluding** | Not necessarily "nothing is polling it": with no `ArchivePath`/`WorkPath`, a successfully processed file is left in the input directory unless *Delete From Server* is true (EFIL, scenario 2). So look at the watermark first — new rows mean it worked and simply did not move. No new rows → `iris_production(action=status)`, then `FilePath` / `FileSpec` on the item: BS disabled, production not running, or watching a different directory |
+| file still sitting there | it was **not** consumed — or the BS returned an error | Under defaults a processed file is **gone**, so this is not "it worked and simply did not move". Read `iris_interop_query(what=logs, since_id=<watermark>)` first: error rows mean the call returned `$$$ERROR` and the adapter left the file where it was. Look for one `Skipping previously errored file '<path>' with timestamp '<ts>'` warning — that is the adapter declining to retry it, not a poll failure. No rows at all → `iris_production(action=status)`, then `FilePath` / `FileSpec` / `ConfirmComplete` on the item: BS disabled, production not running, or watching a different directory |
 
 **Where the file ends up is a SETTING, not a constant — do not reason from "it disappeared".**
 EFIL publishes a six-scenario table; the three that matter while developing:
 
-| `ArchivePath` / `WorkPath` | After a successful call |
+| `ArchivePath` / `WorkPath` | After a successful call (`DeleteFromServer` at its default `1`) |
 |---|---|
-| neither set | left in the input directory — **unless** *Delete From Server* is true, then gone |
+| neither set | **deleted — the file is gone.** It survives only if you explicitly set `DeleteFromServer` = 0 |
 | `ArchivePath` set, different from `FilePath`, `WorkPath` unset | moved to `ArchivePath` + filename |
+| `WorkPath` set, `ArchivePath` unset | processed via `WorkPath` and **deleted from there**. The property comment says `DeleteFromServer` is ignored when a `WorkPath` is set; the disposal branch requires a non-empty `ArchivePath`, so with only a `WorkPath` the file still goes. Set both if you want to keep it |
 | both set and different | processed via `WorkPath`, ends at `ArchivePath` + filename |
+
+`EnsLib.File.InboundAdapter` declares `Property DeleteFromServer As %Boolean [ InitialExpression = 1 ]`,
+and no file-inbound service in the product overrides it — checked on the live instance for
+`EnsLib.File.PassthroughService`, `EnsLib.HL7.Service.FileService`,
+`EnsLib.RecordMap.Service.FileService` and `EnsLib.EDI.XML.Service.FileService`: all four instantiate
+`EnsLib.File.InboundAdapter` with `DeleteFromServer=1`, `ArchivePath=""`, `WorkPath=""`.
 
 Two consequences worth holding on to, both from EFIL:
 
 - **The adapter renames or deletes the file only if the method did NOT return an error.** So a file
   that moved is evidence the BS returned success — which is what makes "moved, but zero messages"
   point straight at an `OnInit()` that skipped `##super()` rather than at a crash.
-- A file **still sitting in the input directory is not proof nothing ran.** With neither path set
-  that is the documented resting place of a *successfully* processed file. Read the watermark, not
-  the directory.
+- **A file still in the input directory is not the resting place of a processed file.** Under
+  defaults it means the file was not consumed, or the call returned an error. Read the watermark
+  *and* the Event Log, not the directory alone.
+- **After an error the file stays, and is then SKIPPED — not retried for ever.** The adapter marks
+  the path plus its timestamp before processing and clears the mark only on success; on the next
+  poll it logs one warning and moves on. Measured: a failing target, `CallInterval` 2s, ~7 polls →
+  the file delivered **once**, and **one** `Skipping previously errored file …` warning. So the tell
+  is a single warning, and the file becomes eligible again only when its modified time changes or it
+  disappears. Do not expect a retry loop, and do not read the surviving file as "still queued".
 
-Set **Archive Path** while developing so a run is re-runnable and the outcome is unambiguous:
+**`ArchivePath` is part of the item definition, not a debugging aid.** Without it the input is
+consumed and the run is not repeatable; set it deliberately, in the production, not just while
+developing:
 
 ```
 iris_production_item(namespace="<NS>", action="set_settings", item="<BS item>",
