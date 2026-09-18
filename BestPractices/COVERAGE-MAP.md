@@ -56,6 +56,7 @@
 | ✅ | Wave 1 **S5** — `dtl-hl7-symbolic-paths.cls` + `tdd-hl7-fixture-test.cls` + deliverable **§2.11**. The fixture dependency of S1/S12/S36. Measured: a DTL compiles **identically** with a correct or a nonsense symbolic path, so tier 2 is green on both. The map said a guessed name returns `""` with `$$$OK`; **measured it is subtler** — an invalid path returns `""` with an ERROR status, a valid-but-empty field returns `""` with OK, and the two-arg `GetValueAt(path)` everyone writes DISCARDS the only discriminator. Also: `ImportFromString` leaves DocType EMPTY; the component is `.IDNumber`, not `.ID` | v1.22.0 |
 | ✅ | A **fourth** site of the `MessageSchemaCategory` colon-form defect — `transformations:322` — found while writing S5. v1.15.0 fixed three; this one survived | v1.22.0 |
 | ✅ | **Name HL7 segments and fields, never number them** (user-requested policy). Promoted in the deliverable §2.11, `transformations` (new §"Name the field, do not number it"), `hl7-schemas`, `bpl`, `component-map`, `unit-tests` — and applied to the bank: the gated HL7 rule now compares `{MSH:MessageType.MessageCode}`, not `{MSH:9.1}`. Measured mapping table, plus three rules: you **cannot mix** (`{MSH:MessageType.1}` is invalid), names are case-insensitive, and `GetFieldNameFromNumber` is authoritative but returns **empty for repeating fields** | v1.23.0 |
+| ✅ | **Wave 1 premise verification pass** — every remaining row's checkable claim measured on a live instance before building. Found **3 wrong** (`interop` says `Ens_Config.Item` is not queryable — it IS; the review correction that followed from it is void; `component-map`'s `Post(.resp,url,body)` takes no URL) and **1 stale** (S7) and **1 mis-stated arity** (S13). Confirmed S9, S10, S8. Recorded as §"Wave 1 follow-on", with a dependency-ordered execution list | v1.24.0 |
 | ⬜ | Wave 1 remaining: S6–S16 (S1 v1.14.0, S2 v1.21.0, S3 v1.16.0, S4 v1.17.0, S5 v1.22.0) | — |
 | ✅ | **Custom inbound adapter** (the corrections' "belongs in wave 1" item, proposed by no wave row) — `adp-scheduler-inbound-adapter.cls` + `bs-scheduled-cron.cls` + `tdd-inbound-adapter-dispatch.cls` under §5.2. Confirmed first: `Ens.InboundAdapter` had **0 hits** in `skills/` and 0 in the bank. Adapter executed and mutation-checked — dispatch removed → `dispatched=0` with `sc=OK`; schedule check removed → fires always. Found on the way: an `Ens.BusinessService` subclass **cannot be `%New()`d** (returns `""`, silently), and `BusinessHost` accepts a non-BS stand-in, which is what makes the adapter testable at all | v1.18.0 |
 | ⬜ | everything else below | — |
@@ -265,6 +266,47 @@ Recording these so a later pass does not re-derive them as gaps.
 **Ordering note.** Build S5 (HL7 fixture) and S23/S16 (production-settings reader) early: four other samples depend on them. Build N14 (the `BusinessRuleName`-resolves check) before wave 1 ships, or S1, S2 and S34 will close three dangling names while the check that would have caught them still does not exist.
 
 ---
+
+## Wave 1 follow-on — premises VERIFIED against a live instance, 2026-09-18
+
+S4's premise was false and S5's was half-right, so before building any more of Wave 1 each
+remaining row's checkable claim was measured on IRIS for Health 2026.1. **Where this section and a
+wave row disagree, this section wins** — and where it disagrees with §"Review corrections", it wins
+there too, for the rows named below.
+
+### Corrections found by the verification pass
+
+| # | Claim as written | Measured |
+|---|---|---|
+| **V1** | `interop` §"is it a table at all": `Ens_Config.Item` is **not a queryable table** (`SQLCODE -30`) | **False — it IS a table.** `SELECT Name, ClassName FROM Ens_Config.Item WHERE Production='<Pkg>.Production'` returns the items, and the count agrees exactly with `tProd.Items.Count()`. The `-30` comes from querying the **class** name (`Ens.Config.Item` → `Table 'CONFIG.ITEM' not found`) — the dots→underscores rule, not a missing table. `Ens_Config.Setting` and `Ens_Util.Queue` genuinely are `-30`; the row lumped them together. **Corrected in `interop` at v1.24.0.** The real hazard is worse than an error: the table is populated for REGISTERED productions, so an uncompiled/undeployed one reads as **0 rows**, which looks like "no items". |
+| **V2** | §"Review corrections": S8/S16/S22 must be rewritten against the object API because embedded `&sql` on `Ens_Config.Item` is a compile-time failure | **Void — the reasoning rests on V1.** The table exists, so the `&sql` compiles and works. `bpl:163/178/222` was RIGHT all along, and `bpl:182`'s `##class(Ens.Config.Item).%OpenId(routerItem)` is correct too: it selects `ID`, not a name. Build S8/S16/S22 as originally written. |
+| **V3** | `component-map`: `..Adapter.Post(.resp, url, body)` | **Wrong twice.** `Post(*pHttpResponse, pFormVarNames, pData...)` takes **no URL** — it comes from the adapter's `URL` setting. The URL-taking variant is `PostURL(pURL, *pHttpResponse, …)`, URL **first**. The form as written passes the URL as form-var names. **Corrected at v1.24.0**; S11 must assert the arity. |
+| **V4** | S7: contrast the working `NormalizeKey` against "the tier-3-**green** broken one" | **Stale.** That broken snippet was fixed in v1.15.0 (wave-0 N4) — `"*-CWE"` raised `<FUNCTION>` and is now `"*WC"` + `$TRANSLATE`. The sample is still worth building; the contrast it was framed around no longer exists in the repo. |
+| **V5** | S13: "the 3-arg `DebugRunTestCase`" | **Wrong arity.** Measured: `DebugRunTestCase(testsuite, testcase, qspec, testmethod, &userparam)` — **5** parameters. And measured separately: it ran without error while writing **no rows** to `%UnitTest_Result.TestMethod`, so it yields no verdict to read back — a zero there is indistinguishable from a pass. S13 must account for that. |
+
+### Premises confirmed (build as written)
+
+| # | Row | Confirmed |
+|---|---|---|
+| **V6** | S9 | There is **no** `StartTransaction`. `EnsLib.SQL.OutboundAdapter` has `SetAutoCommit(pAutoCommit=1)`, `Commit()`, `Rollback()` — and also `Transact(type)`, which the row does not mention. |
+| **V7** | S10 | `EnsLib.RecordMap.Service.FileService.OnProcessInput(pInput As %Stream.Object, *pOutput, &pHint)` is **3-arg**, as the row says, and `OnInit()` exists to `##super()` from. |
+| **V8** | S8 | The defect is real and is the router `SELECT`: `ClassName = 'EnsLib.MsgRouter.RoutingEngine'` matches the generic router **only**, never `EnsLib.HL7.MsgRouter.RoutingEngine`, and `TOP 1` picks arbitrarily among several. |
+
+### Suggested order for the rest of Wave 1
+
+Dependency- and cost-ordered, cheapest verified win first:
+
+1. **S12** — HL7 router validation test. Unblocked by S5's fixture (v1.22.0), which it reuses directly.
+2. **S6** — `..Func()` vs bare in a DTL. Pure compile-vs-run contrast; the fixture pattern is settled.
+3. **S10** — RecordMap service subclass: `##super()` first, 3-arg `OnProcessInput` (V7 confirmed).
+4. **S11** — REST outbound BO; must assert the `Post`/`PostURL` arity from V3.
+5. **S9** — SQL batch transaction (V6 confirmed; include `Transact`).
+6. **S7** — lookup normalisation (re-scoped per V4).
+7. **S15** — drift report, disk vs namespace.
+8. **S13** — `%UnitTest` result reader (re-scoped per V5; the reader is *more* needed now that `DebugRunTestCase` is known to produce no rows).
+9. **S8** and **S16** — both now buildable as originally written (V2), using `Ens_Config.Item`.
+10. **S14** — last: the OAuth/LDAP artefact, and per §"Review corrections" ship the **subclass**, never a copy of vendor source.
+
 
 ## Review corrections — apply these before building a ⚠ row
 
