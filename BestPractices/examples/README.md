@@ -63,6 +63,7 @@ its siblings.
 | §3.2 | Sibling: BS that picks the concrete Comanda variant (`Demo.BS.ComandaReceiver`) | `ch03_cda/comanda-receiver-service.cls` |
 | §3.4 | SOAP carrying CDA / HL7 as MessageBody — the patched generated proxy | `ch03_cda/soap-messagebody-hl7-proxy.cls` |
 | §3.4 | Sibling: BO half of the same pattern (`Demo.Vendor.BO.AcceptMessage`) | `ch03_cda/soap-messagebody-hl7-operation.cls` |
+| §4.10 | FHIR Facade production wiring (Foundation namespace prerequisite; Facade vs Repository is one ClassName) | `ch04_fhir/production-fhir-facade.cls` |
 | §5.1 | BS that exposes a SOAP service | `ch05_bpl_dtl/soap-business-service.cls` |
 | §5.1 | Sibling: request message of that BS (`Example.MSG.AcceptOrderReq`) | `ch05_bpl_dtl/msg-acceptorder-req.cls` |
 | §5.1 | Sibling: response message of that BS (`Example.MSG.AcceptOrderRsp`) | `ch05_bpl_dtl/msg-acceptorder-rsp.cls` |

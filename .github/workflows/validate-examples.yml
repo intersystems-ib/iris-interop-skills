@@ -55,7 +55,7 @@ jobs:
     env:
       IRIS_HOST: localhost
       IRIS_PORT: '52773'
-      IRIS_NAMESPACE: USER
+      IRIS_NAMESPACE: FHIRFOUNDATION
       IRIS_USER: _SYSTEM
       IRIS_PASSWORD: SYS
     steps:
@@ -81,7 +81,7 @@ jobs:
           # (the entrypoint's own "Already initialized, skipping" path). The cost is that
           # docker_setup_username is skipped too, which is why the password step below
           # exists. Reproduced locally in 10s; do not remove without re-testing.
-          docker run -d --name iris \
+          docker run -d --name iris-interop-skills-ci \
             -e IRIS_INIT=1 \
             -p 52773:52773 -p 1972:1972 \
             intersystemsdc/irishealth-community:2026.1
@@ -95,7 +95,7 @@ jobs:
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' \
               -u "$IRIS_USER:$IRIS_PASSWORD" \
-              "http://localhost:$IRIS_PORT/api/atelier/v1/$IRIS_NAMESPACE" || true)
+              "http://localhost:$IRIS_PORT/api/atelier/v1/USER" || true)   # USER: exists pre-Foundation
             if [ "$code" != "000" ]; then
               echo "web server answering after $((i*5))s (HTTP $code)"
               exit 0
@@ -104,25 +104,52 @@ jobs:
             sleep 5
           done
           echo "IRIS never answered in 5 minutes"
-          docker logs --tail 50 iris || true
+          docker logs --tail 50 iris-interop-skills-ci || true
           exit 1
 
       - name: Enable the default credentials
         run: |
           # Skipping iris-after-start also skipped docker_setup_username, so _SYSTEM's
           # password is still flagged expired and every Atelier call returns 401.
-          docker exec iris iris session IRIS -U %SYS \
+          docker exec iris-interop-skills-ci iris session IRIS -U %SYS \
             '##class(Security.Users).UnExpireUserPasswords("*")'
           for i in $(seq 1 10); do
             code=$(curl -s -o /dev/null -w '%{http_code}' \
               -u "$IRIS_USER:$IRIS_PASSWORD" \
-              "http://localhost:$IRIS_PORT/api/atelier/v1/$IRIS_NAMESPACE" || true)
+              "http://localhost:$IRIS_PORT/api/atelier/v1/USER" || true)   # USER: exists pre-Foundation
             if [ "$code" = "200" ]; then echo "authenticated (HTTP 200)"; exit 0; fi
             echo "  attempt $i: HTTP $code"
             sleep 3
           done
           echo "credentials still rejected"
           exit 1
+
+      - name: Create a Foundation namespace (maps HS.* so FHIR examples can compile)
+        run: |
+          # IRIS for Health ships HSLIB/HSSYS/HSCUSTOM in the image, but a plain namespace does
+          # NOT have the HS.* classes mapped — HS.FHIRServer.* is absent from USER. A FOUNDATION
+          # namespace is the documented way to get them (HXFHIRINS §2.3.1), and it is also
+          # interop-enabled, so it is a strict SUPERSET of what USER could compile: the bank and
+          # the snippets give byte-identical results in it, verified locally.
+          #
+          # This is why the bank can carry FHIR examples at all. An earlier revision of CLAUDE.md
+          # claimed FHIR "cannot be compile-gated" on the community image — that was wrong, and
+          # it was wrong because the check was made in USER instead of a Foundation namespace.
+          # Pipe the ObjectScript on STDIN (docker exec -i). The single-argument form of
+          # `iris session` takes a routine reference, not a `Do` statement, and answers
+          # <INVALID ARGUMENT>; the installer also emits a lot of progress output that wants a
+          # real session. This is the form verified by hand before being put here.
+          docker exec -i iris-interop-skills-ci iris session IRIS -U HSLIB <<'EOS' || true
+          do ##class(HS.Util.Installer.Foundation).Install("FHIRFOUNDATION")
+          halt
+          EOS
+          # POSITIVE CONTROL. Fail loudly here rather than reporting 40 broken classes later and
+          # leaving someone to work out that the namespace, not the bank, was the problem.
+          docker exec -i iris-interop-skills-ci iris session IRIS -U FHIRFOUNDATION <<'EOS' | tee /tmp/fhircheck
+          write "HS.FHIRServer.Interop.Operation mapped: ",##class(%Dictionary.CompiledClass).%ExistsId("HS.FHIRServer.Interop.Operation"),!
+          halt
+          EOS
+          grep -q 'mapped: 1' /tmp/fhircheck || { echo "Foundation namespace did not map HS.*"; exit 1; }
 
       - name: Preflight — is this target usable at all?
         run: python3 scripts/validate_examples.py --preflight
@@ -136,6 +163,6 @@ jobs:
           echo "=== docker ps ==="
           docker ps -a
           echo "=== container logs (tail) ==="
-          docker logs --tail 200 iris || true
+          docker logs --tail 200 iris-interop-skills-ci || true
           echo "=== messages.log ==="
-          docker exec iris sh -c 'tail -100 /usr/irissys/mgr/messages.log' || true
+          docker exec iris-interop-skills-ci sh -c 'tail -100 /usr/irissys/mgr/messages.log' || true
