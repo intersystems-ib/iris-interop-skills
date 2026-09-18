@@ -565,7 +565,26 @@ class Atelier:
         return self._call("DELETE", f"/doc/{name}")
 
     def query(self, sql: str):
-        return self._call("POST", "/action/query", {"query": sql, "parameters": []})
+        """Run SQL. Warns — loudly — when the response carries an error, because the default
+        failure mode of this endpoint is a SILENT EMPTY RESULT.
+
+        A query naming a column that does not exist returns `content: []` with the reason only in
+        `status.summary` (`SQLCODE -29, Field 'X' not found`). A caller that reads `content` and not
+        the status therefore sees "nothing matches" for what is actually a broken query. That cost
+        three confident wrong conclusions in one session — including "this class carries no index"
+        about a class that has one, which in turn produced a published finding that had to be
+        retracted (coverage-map X14).
+
+        The warning is ADDITIVE: the response is returned unchanged, so no caller's behaviour moves.
+        It exists so the error reaches a human in the run output instead of waiting to be asked for.
+        """
+        resp = self._call("POST", "/action/query", {"query": sql, "parameters": []})
+        errors = (resp.get("status") or {}).get("errors") or []
+        if errors:
+            summary = str((resp.get("status") or {}).get("summary") or errors[0])
+            print(f"  SQL WARNING -- this query FAILED and returned no rows, which is not the same "
+                  f"as 'no rows matched':\n      {summary[:300]}\n      query: {sql[:200]}")
+        return resp
 
 
 def preflight() -> bool:
