@@ -140,6 +140,8 @@ its siblings.
 | §6.13 | SQL batch in one transaction — autocommit IS the start; flag-guarded restore; keep the rollback's status out of yours (`Example.Adapters.BO.SqlBatchTransaction`) | `ch06_adapters/sql-bo-batch-transaction.cls` |
 | §6.14 | The adapter-less BO — local `%Persistent` save, status **returned** | `ch06_adapters/bo-local-object-save.cls` |
 | §6.14 | Sibling: the run — three silent modes, and the filtered count that hid one | `ch06_adapters/tdd-local-save-status.cls` |
+| §6.15 | Manual HTTP envelope BO — 3-arg vs 6-arg, and booleans that fail both polarities | `ch06_adapters/http-manual-envelope-bo.cls` |
+| §6.15 | Sibling: the run, against a real HTTP response | `ch06_adapters/tdd-http-response-reading.cls` |
 | §7.1 | Canonical `Ens.Alert` circuit, **compiled** — replaces the former `.xml`, whose rule could not compile (`Example.Alerting.Production`) | `ch07_alerting/production-alert-circuit.cls` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |
