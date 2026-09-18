@@ -130,7 +130,7 @@ Root element is `<Category>` (NOT `<Schema>`). Discover the exact shape by expor
        NOT nested <Segment> elements. Square brackets [~..~] = optional,
        curly braces {~..~} = repeating, <~A~|~B~> = choice. -->
   <MessageStructure name='ORM_O01'
-    definition='MSH~[~ZAL~]~[~{~NTE~}~]~[~PID~[~PD1~]~...~{~ORC~[~&lt;~OBR~|~RXO~&gt;~...~]~}'/>
+    definition='base:MSH~[~ZAL~]~[~{~base:NTE~}~]~[~base:PID~[~base:PD1~]~...~{~base:ORC~[~&lt;~base:OBR~|~base:RXO~&gt;~...~]~}'/>
 
   <MessageType name='ORM_O01' structure='ORM_O01'/>
 
@@ -149,22 +149,30 @@ Notes:
 > `#5559 … non-matching {} or ()`. `Pkg.DT.ADT_A01ToMenuReq` → `Pkg.DT.AdtA01ToMenuReq`. See
 > `interop` §"Invariants when writing ANY ObjectScript class".
 
-### Extending an inherited MessageStructure — prefix every base segment `N.N:`
+### Extending an inherited MessageStructure — prefix every base segment `base:`
 
 `base="2.5"` makes the category inherit, but the moment you **override** a MessageStructure you are
 re-declaring the whole definition string, and every segment in it is re-resolved against **your**
 category. A bare `PID` in that string means "PID as defined here" — and your category does not
-define one. So each segment that comes from the base must carry the `category:` prefix; only the
-segments you are adding go unprefixed.
+define one. Every segment that comes from the base carries the literal prefix `base:`; only the
+segments you are adding go unprefixed. **`base:` is not the base category's name** — it is resolved
+against the `base` attribute of the containing `<Category>`, so the definition keeps pointing at the
+right parent when that attribute changes.
 
 ```xml
 <!-- WRONG: the base segments look local. Some resolve from the base by luck,
      others silently do not, and nothing errors at import time. -->
 <MessageStructure name='ADT_A01' definition='MSH~EVN~PID~{~NK1~}~PV1~[~{~AL1~}~]~[~ZDI~]'/>
 
-<!-- RIGHT: base segments prefixed, only the new Z-segment bare. -->
+<!-- ALSO WRONG: a version prefix names a CATEGORY, not "the base". It imports cleanly and
+     early-binds. Measured on 2026.1: imported under base="2.5.1" this still stores 2.5:PID with
+     sc=OK, and a 2.5.1 field name then fails at run time -
+     PropertyPath 'producersreference' is invalid. -->
+<MessageStructure name='ADT_A01' definition='2.5:MSH~2.5:EVN~2.5:PID~{~2.5:NK1~}~2.5:PV1~[~ZDI~]'/>
+
+<!-- RIGHT: base segments carry the literal base:, only the new Z-segment is bare. -->
 <MessageStructure name='ADT_A01'
-  definition='2.5:MSH~[~{~2.5:SFT~}~]~2.5:EVN~2.5:PID~[~2.5:PD1~]~[~{~2.5:ROL~}~]~[~{~2.5:NK1~}~]~2.5:PV1~[~2.5:PV2~]~[~{~2.5:DB1~}~]~[~{~2.5:OBX~}~]~[~{~2.5:AL1~}~]~[~2.5:DRG~]~[~2.5:PDA~]~[~ZDI~]'/>
+  definition='base:MSH~[~{~base:SFT~}~]~base:EVN~base:PID~[~base:PD1~]~[~{~base:ROL~}~]~[~{~base:NK1~}~]~base:PV1~[~base:PV2~]~[~{~base:DB1~}~]~[~{~base:OBX~}~]~[~{~base:AL1~}~]~[~base:DRG~]~[~base:PDA~]~[~ZDI~]'/>
 ```
 
 An unprefixed segment resolves against the *current* category; where it is not defined there, IRIS
@@ -177,10 +185,18 @@ stays correct when the IRIS version moves the base schema underneath you:
 ```objectscript
 // The real v2.5 ADT_A01 definition, as this instance has it
 Set base = $Get(^EnsHL7.Schema("2.5","MS","ADT_A01"))
-// Append the custom segment, then paste the result into definition='...'
-Set extended = base _ "~[~ZDI~]"
+// The global stores the RESOLVED names, so rebind them to the base attribute before appending.
+Set extended = $Replace(base, "2.5:", "base:") _ "~[~ZDI~]"
 Write extended, !
 ```
+
+**Reading your own category back shows the resolved names again** —
+`$Get(^EnsHL7.Schema("MyCat","MS","ADT_A01"))` returns `2.5:MSH~…` even when the XML said `base:`.
+That is the importer having resolved `base:`, not your XML being ignored: `EnsLib.HL7.SchemaXML.Export`
+of the same category writes `base:` back out. Measured both directions on 2026.1.
+
+The same literal applies to `<MessageType>`: write `returntype='base:ACK_A31'`, never
+`2.5:ACK_A31` — measured, accepted and round-tripped.
 
 Hand-typing the string is how a segment goes missing from the middle of a 14-segment definition
 without anyone noticing.
