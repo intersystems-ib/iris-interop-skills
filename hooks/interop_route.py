@@ -31,18 +31,19 @@ MAX = 3
 TOPICS = [
     ("hl7-schemas", r"\bZ-?segment|segmento\s+Z|\bZ[A-Z]{2}\b|custom\s+HL7\s+schema|esquema\s+HL7|DocType|MessageStructure|EnsLib\.HL7|\bADT[_^]?[A-Z]?\d*\b|\bORU[_^]?[A-Z]?\d*\b|\bMSH\b"),
     ("transformations", r"\bDTL\b|data\s*transform|transformaci|subtransform|mapear|GetValueAt|\{[A-Z0-9]{3}:"),
-    ("business-services", r"RecordMap|Record\s+Map(per)?|\bCSV\b|inbound|business\s+service|servicio\s+de\s+entrada|fichero\s+de\s+entrada|MLLP"),
+    ("business-services", r"RecordMap|Record\s+Map(per)?|\bCSV\b|inbound|business\s+service|servicio\s+de\s+entrada|fichero\s+de\s+entrada|MLLP|web\s+app|CSP\s+app|AutheEnabled|sin\s+credenciales"),
     ("business-operations", r"business\s+operation|outbound|\bJDBC\b|SQL\s+[Gg]ateway|pasarela\s+SQL|operaci[óo]n\s+de\s+salida"),
+    ("soap-bo", r"\bSOAP\b|\bWSDL\b|SOAP\s+Wizard|web\s+service\s+client|cliente\s+SOAP|%SOAP\."),
     ("bpl", r"MessageRouter|routing\s+rule|regla\s+de\s+enrutamiento|enrutador|router|\bBPL\b|business\s+process"),
     ("messages", r"message\s+class|clase\s+de\s+mensaje|Ens\.Request|Ens\.Response"),
     ("lookup-tables", r"lookup\s+table|tabla\s+de\s+b[úu]squeda|Ens\.Util\.LookupTable"),
     ("production-lifecycle", r"producci[óo]n|\bproduction\b|arrancar|UpdateProduction|Ens\.Director|deploy"),
-    ("message-search-debug", r"visual\s+trace|event\s+log|Ens\.MessageHeader|Ens_Util\.Log|ha\s+llegado|reenviar|resend|queue\s+depth"),
-    ("tdd", r"\btests?\b|prueba|%UnitTest|\bTDD\b"),
+    ("message-search-debug", r"visual\s+trace|event\s+log|Ens\.MessageHeader|Ens_Util\.Log|ha\s+llegado|reenv[íi]|resend|queue\s+depth|verif|comprobar|comprobaci|did\s+it\s+arrive|how\s+many\s+rows|cu[áa]ntos\s+mensajes|ha\s+funcionado|message\s+viewer|message\s+search|buscar\s+mensaje|troubleshoot|depurar|traza"),
+    ("tdd", r"\btests?\b|\bpruebas?\b|%UnitTest|\bTDD\b"),
     ("fhir", r"\bFHIR\b|SMART.on.FHIR"),
     ("dicom", r"\bDICOM\b|C-STORE|C-FIND|C-MOVE|\bMWL\b|\bPACS\b"),
     ("alerting", r"Ens\.Alert|alerta|alert\s+on\s+error"),
-    ("security", r"\bSAML\b|OAuth|\bLDAP\b|ZAUTHENTICATE|SSL/TLS"),
+    ("security", r"\bSAML\b|OAuth|\bLDAP\b|ZAUTHENTICATE|SSL/TLS|client\s+certificate|certificado|\bPKCE\b|seguridad|autenticaci"),
 ]
 
 
@@ -54,7 +55,13 @@ def main():
     prompt = data.get("prompt") or ""
     if not isinstance(prompt, str) or not prompt:
         return
-    hits = [s for s, pat in TOPICS if re.search(pat, prompt, re.I)][:MAX]
+    # Rank by how much of the prompt each topic actually matched, THEN slice. Slicing by
+    # declaration order alone drops a topic that matched three phrases in favour of one that
+    # matched a single incidental word -- and it is why widening a late-declared pattern (
+    # message-search-debug is 10th) looked inert before this change. Ties keep declaration order.
+    scored = [(len(re.findall(pat, prompt, re.I)), -i, s)
+              for i, (s, pat) in enumerate(TOPICS) if re.search(pat, prompt, re.I)]
+    hits = [s for _, _, s in sorted(scored, reverse=True)][:MAX]
     if not hits:
         return
     calls = ", ".join("Skill(iris-interop-skills:%s)" % s for s in hits)
