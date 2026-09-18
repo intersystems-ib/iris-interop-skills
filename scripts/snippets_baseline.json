@@ -23,5 +23,9 @@
     "MyApp.UTL.AlertFilterFunctions",
     "MyApp.UTL.FunctionSet",
     "REDSA.RecordMap.Ifa"
-  ]
+  ],
+  "ungated": {
+    "bare_members": 20,
+    "loose_fragments": 34
+  }
 }

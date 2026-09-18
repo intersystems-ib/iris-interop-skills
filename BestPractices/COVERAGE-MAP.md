@@ -29,10 +29,14 @@
 | ✅ | **N2** — duplicate §1.7/§1.8/§1.9 headings (mine renumbered to §1.11/§1.12/§1.13) | v1.14.0 |
 | ✅ | **N11** — `soap-bo` `%DeleteId({ID})` → `{Payload}` | v1.14.0 |
 | ✅ | `snippets()` silent overwrite on duplicate class name — now fails and names the pair | v1.14.0 |
+| ✅ | tier-1 **C9**: ratchets the ungated-fence counts, after the prose figure in `CLAUDE.md` was found stale (said 33, was 34) | v1.14.2 |
+| ✅ | `update_snippet_baseline()` was dead code that would have clobbered any other baseline key — now merges | v1.14.2 |
+| ⬜ | **NEW (not in any wave below): the Foundation-namespace recipe in `fhir/SKILL.md` is the fence C9 caught — loose statements, so no tier compiles it.** Its class names (`HS.Util.Installer.Foundation.Install`, `HS.FHIRServer.Installer.InstallNamespace` / `InstallInstance`) were verified live against IRIS for Health 2026.1 on 2026-09-18 and are all real — but only a `.cls` in the bank would keep them that way. | — |
 | ⬜ | everything else below | — |
 
-**Bank at time of writing: 47 compile-gated classes, 50 artefacts. Tier 1: 8 checks. Tier 3: 26
-fences staged, 23 clean.**
+**Bank at time of writing: 47 compile-gated classes, 50 artefacts. Tier 1: 9 checks. Tier 3: 26
+fences staged, 23 clean, plus 20 bare members and 34 loose fragments that no tier compiles —
+the last two are now ratcheted by C9 rather than described in prose.**
 
 ## Two systemic caveats — read before planning from any wave
 
