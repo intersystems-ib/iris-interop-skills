@@ -2601,6 +2601,66 @@ What this protects against (both real, repeatedly observed):
 
 - **Severity.** Medium.
 
+### 7.4 Testing the alert circuit without an SMTP server
+
+The documented way to check §7.1's circuit is a six-step manual procedure needing an SMTP server, a
+real mailbox and a person to look in it. It gets run once, at go-live. After that, **a dedup guard
+that suppresses every alert is indistinguishable from a production with nothing to alert about** —
+there is no error, no queue, and no email, which is also what success looks like.
+
+The circuit is testable end to end with no network at all: replace the ordinary host with an
+operation that fails on demand, and the `EnsLib.EMail.AlertOperation` with one that records what it
+received. Both ends then keep a receipt, and §7.1's claims become assertions.
+
+**`AlertOnError` acts on the `%Status` that `OnMessage` RETURNS.** Measured: a message whose handler
+returns `$$$ERROR` produces one `Ens.AlertRequest`, which travels through `Ens.Alert` and the dedup
+rule and arrives carrying the returned reason —
+`ERROR #5001: FailOnDemand was asked to fail: FAIL please`. A successful message produces **none**
+(attempts 1, alerts 0). A `Throw` also alerts, but through the framework's system-error path, so the
+Event Log names the exception instead of your reason; return the status.
+
+**The dedup key, measured exactly, including the part that surprises people:**
+
+| call | result | |
+|---|---|---|
+| `AlreadyReportedErr("BO.X","boom",60)` | **0** | first report |
+| the same again | **1** | same bucket, same text |
+| `AlreadyReportedErr("BO.X","different",60)` | **0** | the positive control: the key really is consulted |
+| `AlreadyReportedErr("BO.OTHER","boom",60)` | **1** | **`SourceConfigName` is accepted and is NOT part of the key** |
+
+That last row is §7.2's deliberate trade: keying on the error text alone is what makes a BP and a BO
+reporting the *same* text dedupe against each other, which is failure mode 1. It also means one host's
+alert suppresses another's. Add `SourceConfigName` to the subscripts only if you want one alert per host.
+
+**`AlreadyReportedPerSession()` outside a business-host process.** `%Ensemble("SessionId")` exists only
+inside one. The §7.2 verbatim form references it bare, and measured, `Set s = %Ensemble("SessionId")`
+raises **`<UNDEFINED>`** — which surfaces as a rule-evaluation error and **loses the alert**. Reading it
+with `$get` and returning 0 ("not reported yet, let it through") is the difference between a rule that
+degrades safely and one that drops alerts when called from a terminal or a test. Inside a session:
+first 0, second 1, and a different session 0.
+
+**The purge is `day-1` in the verbatim version, and that is a leak.**
+`kill ^FilterAlerts(kind, day-1)` only ever reaches yesterday, so every day on which no alert is
+evaluated leaks its subtree for ever — after a quiet weekend, Friday's and Saturday's buckets are never
+revisited. Walking `$order` from the start and killing everything older than today fixes it. Measured:
+with day−5 and day−1 both planted, one call removes **both** and leaves today's.
+
+**One thing not to try to assert end to end.** The key includes `seconds\Interval`, so two alerts that
+straddle a minute boundary land in different buckets and are both forwarded — correctly. Counting
+alerts out of a running production to prove deduplication therefore fails roughly twice an hour for a
+reason that is not a defect. Assert the arithmetic against the FunctionSet, where it is exact, and use
+the production to assert that the circuit fires and carries the right text.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-18: every value by probe
+  against a started production.
+- **Validity.** Still valid.
+- **Severity.** High — the failure mode of every guard in this chapter is silence.
+- **Example.** `examples/ch07_alerting/tdd-alert-dedup.cls`,
+  `examples/ch07_alerting/bo-fail-on-demand.cls`,
+  `examples/ch07_alerting/bo-alert-recorder.cls`,
+  `examples/ch07_alerting/rul-alert-dedup-fixture.cls`,
+  `examples/ch07_alerting/production-alert-dedup-fixture.cls`
+
 ---
 
 ## 9. Deployment, source control & CI/CD

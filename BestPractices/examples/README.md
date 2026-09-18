@@ -158,6 +158,11 @@ its siblings.
 | §6.17 | Sibling: the run — which target the setting belongs on, and why | `ch06_adapters/tdd-soap-inbound-targets.cls` |
 | §7.1 | Canonical `Ens.Alert` circuit, **compiled** — replaces the former `.xml`, whose rule could not compile (`Example.Alerting.Production`) | `ch07_alerting/production-alert-circuit.cls` |
 | §7.2 / §12.5 | Alert deduplication FunctionSet (`AlreadyReportedErr` / `AlreadyReportedPerSession`) | `ch07_alerting/alert-dedup-functionset.cls` |
+| §7.4 | Oracle for the whole circuit — first/second/different-message, the per-session guard outside a host process, and the purge | `ch07_alerting/tdd-alert-dedup.cls` |
+| §7.4 | Fixture: a BO that fails on demand, so `AlertOnError` can be exercised | `ch07_alerting/bo-fail-on-demand.cls` |
+| §7.4 | Fixture: an `Ens.AlertRequest` recorder standing in for the email operation | `ch07_alerting/bo-alert-recorder.cls` |
+| §7.4 | Fixture: the `Ens.Alert` rule with the dedup guards in front of the send | `ch07_alerting/rul-alert-dedup-fixture.cls` |
+| §7.4 | Fixture: the §7.1 circuit made startable — no SMTP, no adapters, no ports | `ch07_alerting/production-alert-dedup-fixture.cls` |
 | §11.3 | SAML 2.0 custom security header on a generated SOAP BO | `ch11_security/saml2-custom-security-header.cls` |
 | §11.3 | Sibling: request message the SOAP BO's MessageMap keys on (`Demo.SAML.MSG.InvokeReq`) | `ch11_security/saml2-invoke-request.cls` |
 | §11.5 | OAuth 2.0 + LDAP server-side broker — a **subclass** of `%OAuth2.Server.Validate` | `ch11_security/oauth2-server-validate-ldap.cls` |
