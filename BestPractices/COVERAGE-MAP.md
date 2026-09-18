@@ -44,14 +44,15 @@
 | ✅ | `business-operations`' typed-SQL sketch was a loose fragment naming an unverified `$$$SqlDate`; replaced by a pointer at the gated bank file, whose `$$$Sql*` macros tier 2 does compile | v1.15.0 |
 | ✅ | **N13** — the three indexed-but-uncompiled artefacts (`.xml`, `.cls.xml`, `.sh`) now carry ⚠️ on their own README rows | v1.15.0 |
 | ✅ | 4 gate defects found while doing the above: a `///` prefix was split off its class and dropped; an `Include` was **always** orphaned (so `$$$Str2MsgTyp`/`$$$Sql*` fences compiled without it); an **indented** class fence was silently counted as a fragment; tier 3 left `Ens_Config.SearchTableProp` rows behind, so any SearchTable **rename** failed with `PropCollision` naming a deleted class | v1.15.0 |
-| ⬜ | **N15** — extend tier 2 over `BestPractices/external/**` (21 classes / 1738 lines, compiled by nothing) | — |
-| ⬜ | **N16** — move the `report-issue` helpers to `scripts/` + a pytest | — |
+| ✅ | **N15** — **tier 2b** compiles `BestPractices/external/**` with its own baseline. Surveyed first: all **19** classes compile clean today, so gating was free. Deliberately NOT added to tier 1 — **0 of 19** carry a `/// Rule:` header, so C1 would fail all of them and greening it would mean editing vendor source. Count correction: the audit said "21 classes / 1738 lines"; measured twice independently it is **19 classes / 1934 lines** | v1.15.1 |
+| ✅ | **N16** — `scripts/issue_fingerprint.py` + `scripts/test_issue_fingerprint.py`, wired into the `test-hooks` CI job. **Not** a pytest: this repo's harnesses are stdlib-only so CI needs no dependencies, and matching that beat following the map's wording. The tests caught **4 real bugs** in the helper before it shipped | v1.15.1 |
+| ⬜ | **Wave 0 is COMPLETE.** Next: wave 1, the silent-failure sample set (16 samples / 22 files, all P0) | — |
 | ⬜ | everything else below | — |
 
 **Bank as of v1.15.0: 47 compile-gated classes, 50 artefacts. Tier 1: 9 checks. Tier 3: 29 fences
 staged, 28 clean (1 illustrative placeholder), plus 19 bare members and 33 loose fragments that no
-tier compiles — the last two ratcheted by C9 rather than described in prose.** Wave 0 is complete
-except N15 and N16.
+tier compiles — the last two ratcheted by C9 rather than described in prose. Tier 2b: 19/19 external.**
+**Wave 0 is complete.**
 
 ## Two systemic caveats — read before planning from any wave
 

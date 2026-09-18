@@ -1,0 +1,24 @@
+{
+  "_comment": "Vendor reference tree under BestPractices/external. Compiled by tier 2b, and deliberately NOT subject to tier 1 -- none of these files carries a /// Rule: header, and they are a read-only mirror of someone else's repo. A failure means the mirror and this IRIS version disagree; re-sync upstream rather than editing the file.",
+  "expected_clean": [
+    "DICOM.BP.MoveProcess",
+    "DICOM.BP.PDFProcess",
+    "DICOM.BP.QueryProcess",
+    "DICOM.BP.StoreProcess",
+    "DICOM.BP.StowRsHandlerProcess",
+    "DICOM.BP.WorkListProcess",
+    "DICOM.BS.MoveService",
+    "DICOM.BS.QueryService",
+    "DICOM.BS.RESTService",
+    "DICOM.Msg.MoveReq",
+    "DICOM.Msg.MoveRsp",
+    "DICOM.Msg.QueryReq",
+    "DICOM.Msg.QueryRsp",
+    "DICOM.Msg.SaveReport",
+    "DICOM.Msg.StowRsReq",
+    "DICOM.Msg.StowRsRsp",
+    "DICOM.Msg.WorkListReq",
+    "DICOM.Production",
+    "DICOM.Util"
+  ]
+}

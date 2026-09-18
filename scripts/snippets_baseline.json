@@ -1,15 +1,15 @@
 {
   "expected_clean": [
     "App.BS.Preauth",
-    "DICOM.BS.RESTService",
-    "DICOM.MSG.StowRsReq",
     "My.Tests.X",
     "MyApp.BO.WriteCensusToSQL",
+    "MyApp.BS.DicomRest",
     "MyApp.BS.PatientCensusFromCSV",
     "MyApp.BS.RestEntry",
     "MyApp.Bootstrap",
     "MyApp.DAT.Address",
     "MyApp.DT.AL1Subtransform",
+    "MyApp.MSG.DicomStowReq",
     "MyApp.MSG.MenuRequest",
     "MyApp.MSG.MenuRequestRich",
     "MyApp.MSG.PatientCensusRequest",

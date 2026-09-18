@@ -170,11 +170,15 @@ outbound. The BS subclasses both `Ens.BusinessService` and `%CSP.REST`:
 
 ```objectscript
 /// The message carried to the BP: the Ids of the DICOM documents built from one upload.
+/// Named MyApp.* rather than DICOM.* on purpose: the external workshop tree ships its own
+/// DICOM.Msg.StowRsReq and DICOM.BS.RESTService, and since v1.15.1 tier 2b compiles those. Two
+/// different bodies under one class name is the shadowing hazard tier 3 already refuses for the
+/// bank, so the teaching copy takes its own name.
 /// `%Persistent` leftmost so this gets its OWN extent (`messages` §"Why `%Persistent` must be
 /// leftmost"). Note the external workshop's equivalent is `DICOM.Msg.StowRsReq`, which extends
 /// `Ens.Request` alone and hand-writes a `Storage` block — neither is what this plugin prescribes,
-/// and the external tree is compiled by no tier, so nothing has ever checked it.
-Class DICOM.MSG.StowRsReq Extends (%Persistent, Ens.Request)
+/// neither of which this plugin prescribes. (That tree IS compiled now — tier 2b, since 1.15.1.)
+Class MyApp.MSG.DicomStowReq Extends (%Persistent, Ens.Request)
 {
 
 Property DICOMDocumentIdList As list Of %String;
@@ -201,7 +205,7 @@ different file layout than the one that compiles.
 ```objectscript
 Include EnsDICOM
 
-Class DICOM.BS.RESTService Extends (Ens.BusinessService, %CSP.REST)
+Class MyApp.BS.DicomRest Extends (Ens.BusinessService, %CSP.REST)
 {
 
 Parameter ADAPTER = "";
@@ -221,7 +225,7 @@ ClassMethod NewStudy() As %Status
     Set tSC = $$$OK
     Try {
         $$$ThrowOnError(##class(Ens.Director).CreateBusinessService("DICOM REST Service", .tService))
-        Set tMsg = ##class(DICOM.MSG.StowRsReq).%New()
+        Set tMsg = ##class(MyApp.MSG.DicomStowReq).%New()
 
         // Walk the multipart/related parts. NextMimeData("") starts the iteration and returns ""
         // when exhausted — a `while` on the name, not an index.
