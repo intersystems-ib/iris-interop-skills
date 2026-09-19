@@ -191,7 +191,7 @@ ERROR <Ens>ErrInvalidToken: Invalid token at offset 21
 | Don't write this in a condition | Write this instead |
 |---|---|
 | `##class(MyApp.UTL.Validar).EsValido(Document)=1` | put the method in an **`Ens.Rule.FunctionSet` subclass** and call it bare, by name: `EsValido(Document)=1` |
-| `Document.Planta '= ""` — ObjectScript's "not equal" | `Document.Planta != ""` |
+| `Document.Planta '= ""` — ObjectScript's "not equal" | `Document.Planta != ""` — **only here**: in ObjectScript `!=` is `#1054`, use `'=` (see `interop`) |
 | `document.Planta` on an `EnsLib.MsgRouter.RoutingEngine` | `Document.Planta` — **capitalised**; the lowercase form doesn't resolve |
 
 Once the FunctionSet class exists in the namespace, its methods are offered by name in the rule editor
