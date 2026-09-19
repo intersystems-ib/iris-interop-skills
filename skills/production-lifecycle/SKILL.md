@@ -162,94 +162,8 @@ Three consequences for this skill specifically:
 
 ## Hot-swap vs. restart — when code changes don't take effect
 
-`Ens.Director.UpdateProduction(timeout)` is for **production XML changes** — adding/removing items, modifying settings. It does **NOT** recompile class code and does **NOT** restart the OS jobs running BO/BP/BS instances.
-
-When you edit and recompile a component class (BO method body, DTL, Rule XData), the running job still executes the **old** code. Symptoms: `<NOLINE>^MyClass.1` errors (line numbers from old/new code don't match), `<CLASS DOES NOT EXIST>` when a new helper class was added but the BO process didn't reload, behaviour matching the pre-edit code.
-
-The right pattern after **code** changes:
-
-```objectscript
-ClassMethod RestartProduction(pName As %String) As %String [ SqlProc ]
-{
-    Set running = ##class(Ens.Director).IsProductionRunning(.current)
-    If running = 1 {
-        Set sc = ##class(Ens.Director).StopProduction(30, 1)   ; force=1
-        If $$$ISERR(sc) Quit "Stop err: "_$SYSTEM.Status.GetErrorText(sc)
-    }
-    Hang 1
-    Set sc = ##class(Ens.Director).StartProduction(pName)
-    If $$$ISERR(sc) Quit "Start err: "_$SYSTEM.Status.GetErrorText(sc)
-    // StartProduction returns BEFORE the production is up — wait for Running
-    For i = 1:1:30 {
-        Quit:##class(Ens.Director).IsProductionRunning()
-        Hang 1
-    }
-    If '##class(Ens.Director).IsProductionRunning() Quit "Started but NOT Running after 30s"
-    Quit "Restarted"
-}
-```
-
-**Do not drop the wait-for-Running loop.** The start call returns before the production has come
-back up; a restart without the wait leaves the production observably **Stopped** for the next few
-seconds. Code that restarts and immediately continues — starts a component, sends a test message,
-queries status — sees a stopped production and reports a confusing *downstream* failure that looks
-nothing like "the restart wasn't finished". Same family of trap as "recompile doesn't reload the
-running job" above: the lifecycle call succeeded, the state you assumed from it wasn't there yet.
-
-It is a **three-way** choice, not two. Bouncing the whole production to re-test one Business
-Operation is the most common way to waste a minute per iteration:
-
-| What changed | Do this |
-|---|---|
-| production XML, or a Setting | `Ens.Director.UpdateProduction(timeout)` — or `iris_production(action=update)` |
-| **one host's class code** | recycle **that job only**: `iris_production(action=restart, item="<Item>")` |
-| several hosts, or the `Ens.Production` class itself | the full bounce — the `RestartProduction` pattern above |
-
-**The platform API behind the one-item recycle is `TempStopConfigItem`, not a "restart" method.** There
-is no `Ens.Director.RestartConfigItem` — measured, `##class(Ens.Director).RestartConfigItem(...)` raises
-`<METHOD DOES NOT EXIST>`. What exists is:
-
-```objectscript
-Class MyApp.UTL.RecycleItem Extends %RegisteredObject
-{
-
-/// Recycle ONE host's job, leaving the rest of the production running. Use after recompiling that
-/// host's class: neither a compile nor UpdateProduction restarts a running job.
-ClassMethod One(pItem As %String) As %Status
-{
-    // TempStopConfigItem(item, stop, doUpdate). There is no RestartConfigItem -- see above.
-    Set tSC = ##class(Ens.Director).TempStopConfigItem(pItem, 1, 1)
-    // A bad item name is reported, not swallowed: <Ens>ErrConfigItemNotFound names item AND production.
-    Quit:$$$ISERR(tSC) tSC
-    Quit ##class(Ens.Director).TempStopConfigItem(pItem, 0, 1)
-}
-
-/// The disable/enable equivalent, for taking an item out of service rather than recycling it.
-ClassMethod SetEnabled(pItem As %String, pEnabled As %Boolean) As %Status
-{
-    Quit ##class(Ens.Director).EnableConfigItem(pItem, pEnabled, 1)
-}
-
-}
-```
-
-Measured on 2026.1: both calls return `$$$OK` against a running production, and the rest of the
-production keeps running throughout.
-
-**A wrong item name fails clearly, so do not go hunting.** Measured:
-
-```
-EnableConfigItem("NoSuchItem", 1, 0)
-  -> ERROR <Ens>ErrConfigItemNotFound: Item NoSuchItem not found in Production Example.Productions.ResendFixture
-```
-
-— it names the item *and* the production. `TempStopConfigItem` with a bad name gives the same. So if a
-one-item recycle fails, read the status: it tells you whether the name matched.
-
-One exception, and it is narrower than it looks: the per-item stop is blocked for a **Business Process**
-with `PoolSize=0`, which runs in the shared actor pool rather than its own job. That restriction is
-host-type-specific — `PoolSize=0` on an adapterless *Service* is a legitimate configuration this
-codebase uses deliberately, and is not affected. A `PoolSize=0` BP needs the full bounce.
+A compiled change that has not taken effect is a hot-swap question, not a compile question:
+see [references/hot-swap.md](references/hot-swap.md).
 
 ## Pre-flight validation before restart
 
@@ -412,54 +326,10 @@ Wildcards (`*`) work in Default Site Settings — apply a value to all File-adap
 
 `Update` is the workflow — it's almost always what you want during dev. Full Stop/Start is heavier and slower.
 
-## When the production will NOT start — the recovery ladder
+## When the production will NOT start
 
-A `start` can be **refused because of leftover state**, and every one of these refusals is
-recoverable — but not by retrying. The cardinal rule:
-
-> **Never re-issue an identical `start` after a refusal. The state must change first.**
-> Measured over a workshop cohort: 105 start refusals across 18/18 students, dominated by the
-> same `iris_production(action="start", ...)` call repeated unchanged against a namespace that
-> could never accept it.
-
-Always begin with `iris_production(action=status, namespace=...)` — never start blind. Then match
-the error:
-
-| Refusal | What it actually means | Recovery |
-|---|---|---|
-| `<Ens>ErrInvalidProduction` | The production class is missing, not compiled, or the name doesn't resolve | Verify the class exists in that namespace and compiles clean (`iris_compile`), and that the name is the exact FQCN. Then start. |
-| `<Ens>ErrProductionSuspendedMismatch` | A **different** production was left suspended in this namespace; nothing else can start until it is cleared | **The error names the OLD production, not yours** — do not "fix" the name you typed. Stop/clear the suspended one (it is the namespace's registered production, so `Ens.Director.StopProduction(30, 1)` targets it), then start yours. |
-| `<Ens>ErrProductionNotShutdownCleanly` | The previous run died without a clean shutdown | Run the recovery path — `##class(Ens.Director).RecoverProduction()` — then start. A plain retry hits the same refusal forever. |
-| `<Ens>ErrProductionSuspendedMismatch` **and the named class does not exist** | The namespace holds an orphan RUNTIME registration, not a production — a leftover from a stale image or a deleted exercise. `recover` is a **no-op** here (the production is Suspended, not Troubled — EGDV §12.3), and `stop force=true` leaves it `Stopped` without clearing the registration, so the next `start` under any other name refuses again. | 1. `iris_production(action=status, namespace="<NS>")` — note the production name it returns. 2. `iris_doc(mode=head, name="<that name>.cls", namespace="<NS>")`. 3. `exists:false` → `iris_execute(namespace="<NS>", code="Do ##class(Ens.Director).CleanProduction()")`, then start yours. 4. `exists:true` → a real suspended production: `iris_production(action=stop, force=true)` on **that** name, then start yours. |
-
-**Step 2 is the one that must not be skipped** — it is what separates a real suspended production
-from a registration with nothing behind it. `iris_doc(mode=head)` answers
-`{"success":true,"name":…,"exists":…}`; **any other envelope means the call could not look** (wrong
-namespace, wrong web prefix) and is **not** evidence of a ghost.
-
-`iris_production` has **no `clean` action** — its enum is `status, start, stop, restart (item), update,
-check, recover, get_autostart, set_autostart` — so this remedy necessarily goes through
-`iris_execute`. Write it in the documented form, `Do ##class(Ens.Director).CleanProduction()`: the
-docs publish no return value, so do not wrap it in `Set sc=`.
-
-> **CAUTION** — Never use this procedure on a live, deployed production. The `CleanProduction()`
-> method removes all messages from queues and removes all current information about the production.
-> Use this procedure only on a production that is still under development.
->
-> — *Developing Productions* §13.1.3, "Resetting Productions in a Namespace"
-
-If there are messages still needed, export or resend them **before** running it.
-
-`ErrProductionSuspendedMismatch` is the nastiest: because the message names the *old* production
-(`Production 'Cocina.Production' was suspended, a new production of a different name can not be
-started`), the reflex is to edit the production name you just passed and retry — which returns the
-identical error, indefinitely. The name in the message is the thing to **clear**, not the thing to
-type. Typical in shared/workshop namespaces where a previous exercise's production was left
-suspended.
-
-This ladder is about starts that are **refused outright**. The complementary trap — a start/restart
-that *succeeds* but returns before the production is actually `Running` — is covered by the
-wait-for-Running loop in the RestartProduction pattern above.
+There is a recovery ladder and the order matters:
+see [references/wont-start.md](references/wont-start.md).
 
 ## Deployment: export → import
 
@@ -521,98 +391,18 @@ Key behaviours of any production-aware deploy tool:
 
 Pick a tool early. Manual per-env maintenance scales poorly past three integrations × three environments.
 
-## Git source control on a shared dev IRIS — Windows gotchas
+## Windows, HL7 schema export, and migration
 
-When using `git-source-control` (or `objectscript-git-source-control` via ZPM) on Windows where IRIS runs as a service, two issues recur:
-
-### CVE-2022-24765 — `fatal: unsafe repository`
-
-Git 2.35+ verifies the repository owner matches the running user. IRIS running as `LocalSystem` hits this when the repo is owned by a developer account. Three fixes, pick one:
-
-1. Run the IRIS service as a service account (`Intersystems` user or a domain account) instead of `LocalSystem`.
-2. Change the Windows owner of the repo to match the IRIS service account.
-3. `git config --global --add safe.directory <path>` for whichever account runs IRIS. **Note**: some Git versions need a trailing `/` on the path; some don't. If the error persists after adding the rule, try both forms.
-
-### ZPM install paradox
-
-`zpm install` works only when IRIS is started as `LocalSystem` (it uses `$ZU(-1)` which fails for non-`LocalSystem` users). After installing the source-control packages, switch the service account to your service user. Document this dance — it's non-obvious and a fresh environment setup will hit it.
-
-## HL7 schemas — manual export required (HIGH severity)
-
-Custom HL7 schemas edited via the Management Portal are stored **in the namespace**, not on disk. They are not auto-exported by source-control integration. After every schema edit, manually `Export` to the SCM root and commit alongside related class changes.
-
-Failure to export is a silent loss-of-work risk on the next namespace refresh. See `hl7-schemas` §"Schemas are NOT auto-exported to source control" for the full risk discussion.
-
-## Migration of interop productions
-
-When migrating a production between IRIS instances (version upgrade, hardware refresh, container rebuild), these patterns prevent silent failures.
-
-### Never auto-start a migrated production
-
-Set `EnsembleAutoStart = 0` (or its IRIS equivalent) on the freshly migrated instance. The restored productions point at **real** endpoints — auto-starting them injects test traffic (or real traffic from yesterday's queue) into production systems. Validate each component's settings manually before enabling.
-
-### Credentials migration
-
-`Ens.Config.Credentials` records contain passwords encrypted with the **instance key** of the source system. Standard backup-restore preserves the records but renders the passwords unreadable in the target instance.
-
-Pattern: write an ObjectScript utility that walks all `Ens.Config.Credentials` rows in the source, exports `(name, username, password)` to a file (treating the file as a secret), then re-imports them on the target. Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch13_migration/credentials-export-reimport.cls`.
-
-### `Ens.<X>` package shadowing
-
-If a customer-written class lives in package `Ens.<something>` (e.g. `Ens.Util.MyHelper`), the ENSLIB-to-namespace mapping returns the system version (or fails to resolve), **shadowing** the customer class. Symptoms: `<PROTECT>` runtime errors, classes appearing in the dictionary but not callable.
-
-Fix: export the affected classes, rename the package to a customer-owned namespace (e.g. `CustomerUtil.MyHelper`), re-import.
-
-**Side effect**: the storage definition changes when the class is renamed; old persistent instances of the renamed class become unreadable. Migrate or archive the data before renaming.
-
-### IRIS Windows service account for UNC paths
-
-Default Windows installs of IRIS run the service as `LocalSystem`, which has no rights to UNC paths. Any `FileService` / `FileOperation` / FTP-mount adapter that points at `\\server\share\...` will **fail silently** after migration. Fix: change the IRIS Windows service to run as a domain user with read/write to the UNC paths.
-
-### Production startup protocol
-
-A migration with 30+ steps cannot be done from memory; one missed step ships a non-functional production. Build a documented, line-by-line startup protocol covering: disable user logins, restore each `.bck`, restore the CPF, reconfigure environment globals, modify routines for new file paths, register license / credentials, configure ODBC for new DSN, configure terminal connections, **explicitly do NOT auto-start** the production.
-
-### Ensemble vs IRIS default ports
-
-| Default | Ensemble (≤2017) | IRIS (2018+) |
-|---|---|---|
-| SuperServer | 1972 | 1972 |
-| Web (Apache) | 57772 | 52773 |
-
-The **SuperServer default did not change** — it is `1972` on both, and the authoritative value on any instance is the CPF `[Startup] DefaultPort` key (`##class(Config.Startup).Get()`, or read `iris.cpf` directly). Only the web port moved. Read the CPF rather than assuming: a container publishes the SuperServer on a *host* port (`0.0.0.0:43972->1972/tcp`, say), and that host-side number is not the instance's default.
-
-Watch for hardcoded port references in client code and firewall rules during migration.
-
-## Bootstrap scripts on Windows — `irissession` stdin gotcha
-
-When writing a bootstrap script (`install.ps1`, environment-prep helper) that pipes ObjectScript into `irissession`, the **shell `<` redirect form does NOT work in PowerShell 5.1 or 7**:
-
-```powershell
-# FAILS — parser error: "The '<' operator is reserved for future use"
-& $irisSession $instance -U %SYS < $tmpScript.FullName
-```
-
-Use one of these portable alternatives:
-
-```powershell
-# Option A — pipe via Get-Content (preferred; works in 5.1 and 7)
-Get-Content $tmpScript.FullName | & $irisSession $instance -U %SYS
-
-# Option B — drop to cmd.exe for the redirect
-cmd.exe /c "`"$irisSession`" $instance -U %SYS < `"$($tmpScript.FullName)`""
-```
-
-The `<` redirect is a `cmd.exe` / bash builtin; PowerShell parses it as a reserved operator and fails before executing the command. Any bootstrap script that crosses PowerShell hits this — and since PowerShell 5.1 is the Windows default, the failure surfaces on every fresh student environment.
-
-If the installer must run identically on Linux and Windows, prefer driving it from ObjectScript via MCP (`iris_execute` or a `SqlProc` wrapper) and skip the shell layer entirely.
+Git on a shared dev IRIS, the ZPM paradox, manual HL7 schema export (HIGH severity), migrating a
+production, `Ens.<X>` shadowing, UNC service accounts, Ensemble-vs-IRIS ports, and the
+`irissession` stdin gotcha: see [references/windows-migration.md](references/windows-migration.md).
 
 ## Common pitfalls
 
 - **Editing settings in the production XML directly** in TEST/PROD instead of using Default Site Settings → values get blown away on next deploy.
 - **Stop/Start when Update would do** → unnecessary downtime.
 - **Restart-then-act without waiting for Running** → poll `Ens.Director.IsProductionRunning()` after every restart — see §"Hot-swap vs. restart" above.
-- **Re-issuing an identical `start` after a refusal** → the refusal never clears on retry; the state must change first. See §"When the production will NOT start — the recovery ladder".
+- **Re-issuing an identical `start` after a refusal** → the refusal never clears on retry; the state must change first. See [references/wont-start.md](references/wont-start.md).
 - **Answering `ErrProductionSuspendedMismatch` with `recover`** → `recover` is for `ErrProductionNotShutdownCleanly`. On a **suspended** production it reports success and changes nothing — EGDV §12.3: *"If the production is not Troubled, the method simply returns."* Watch for the giveaway: `action=recover` answering `{"state":"Running","success":true}` on a production that `action=status` reports `Suspended` seconds later. That is the documented no-op, not a fixed production.
 - **Probing credentials with `IDKeyExists()`** → the method does not exist; use `%OpenId()` + `$IsObject()` — see §"Probing for an existing credential" above.
 - **Ignoring the rollback file** after a botched import → manual recovery is much harder.

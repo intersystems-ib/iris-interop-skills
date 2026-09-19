@@ -29,7 +29,7 @@ What's the input?
 
 **First decide whether you need a custom BS at all.** For a RecordMap flow you usually do not —
 configure the prebuilt `EnsLib.RecordMap.Service.FileService` and put any reshaping in a DTL on the
-router. See §"Record Mapper — file gotchas" for the prebuilt-component table.
+router. See [references/recordmap.md](references/recordmap.md) for the prebuilt-component table.
 
 **And know what subclassing `FileService` actually gives you**, because the obvious move does not
 work. Verified against IRIS for Health 2026.1 with `%Dictionary.CompiledMethod`:
