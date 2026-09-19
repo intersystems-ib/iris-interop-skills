@@ -346,7 +346,7 @@ the anti-pattern further down about credentials on the call itself still stands.
 **Trap 2 — a disabled or password-expired account fails identically**, because the login page is what
 comes back either way. Check the account, not the URL: `##class(Security.Users).Get(user, .info)` then
 `info("Enabled")`. Re-enable with `Set props("Enabled") = 1` and
-`##class(Security.Users).Modify(user, .props)`. `ChangePassword` is a **property**, not a method, and
+`##class(Security.Users).Modify(user, .props)` — and **do not put a `Roles` subscript in that array**: measured, `Modify` REPLACES the role list rather than adding to it, and returns `$$$OK` either way. With only `Enabled` set the roles are untouched. To add a role use `AddRoles` (see `security`). `ChangePassword` is a **property**, not a method, and
 assigning `usr.Password` raises `<CANNOT SET THIS PROPERTY>`.
 
 ### When to fall back to HTTP-manual envelope instead
@@ -391,7 +391,7 @@ Verified in a real integration using the hand-crafted-envelope pattern:
 When you're on the **other side** — exposing a SOAP service that an external client (or a sibling IRIS namespace) will call — `%SOAP.WebService`:
 
 - Web app config (Security.Applications): `AutheEnabled=32` — `32` is the password (Instance Authentication) bit, the one HTTP Basic exercises. `4` is **Kerberos** (`AutheK5API`), not password, and answers `Negotiate` rather than `Basic`; `96` is `32+64` and also admits unauthenticated callers, so use it only when anonymous access is intended. See `business-services` for the bit table.
-- The authenticated user must have **read access to the system globals** the SOAP framework touches (`^ISCSOAP`). Granting `%All` to the service user is the simplest workshop pattern; production should grant `%DB_<TARGET>_DATA:RW` plus enough on `IRISSYS` to read `^ISCSOAP`. The error `<PROTECT> OnPage+9^%SOAP.WebService.1 ^ISCSOAP("LogMaxFileSize")` is the symptom of missing this read access.
+- The authenticated user must have **read access to the system globals** the SOAP framework touches (`^ISCSOAP`). The error `<PROTECT> OnPage+9^%SOAP.WebService.1 ^ISCSOAP("LogMaxFileSize")` is the symptom of missing it. **Do not grant `%All` to reach it** — not even in a workshop. `%All` is instance superuser, and a service account is the one principal an external caller controls the credentials of. Three resources cover it: `U` on the web application, `RW` on `%DB_<NAMESPACE>`, and `R` on `%DB_IRISSYS`. `security` has the compiled recipe, and the reason the shortcut looks necessary is usually that the **anonymous** principal was given `%All` first — fix that end, not this one.
 - `Parameter SERVICENAME` and `Parameter NAMESPACE` (the XML target namespace) drive the WSDL. They must match what clients expect from `<service name>` and `targetNamespace` respectively.
 
 ### Registering the service as a production item — two silent misconfigurations

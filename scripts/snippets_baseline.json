@@ -1,6 +1,7 @@
 {
   "expected_clean": [
     "App.BS.Preauth",
+    "Demo.UTL.EndpointRole",
     "My.Tests.X",
     "MyApp.BO.WriteCensusToSQL",
     "MyApp.BS.DicomRest",
