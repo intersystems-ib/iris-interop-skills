@@ -10,6 +10,7 @@ One skeleton per thing under test — a DTL, HL7 fixtures, a routing rule, a BO 
 - Routing rule test (integration style — preferred)
 - BO method test (integration with real adapter)
 - BPL via Testing Service
+- Per-run key base class (test data isolation)
 - Enabling the Testing Service on a production
 
 ## Canonical skeletons (USE THESE AS TEMPLATES)
@@ -251,6 +252,45 @@ Method TestProcessReceivesAndForwards()
 
 }
 ```
+
+## Per-run key base class (test data isolation)
+
+One run id, one place, and every key built from it. See `tdd` §"Test data isolation — spectrum, not
+all-or-nothing" for *which* isolation level to pick; this is the skeleton for the lightest one.
+
+```objectscript
+Class MyApp.Tests.Base Extends %UnitTest.TestProduction
+{
+
+// A base class is still a TestProduction subclass, so it needs this too -- omitting it is
+// `ERROR #5001: Parameter PRODUCTION must be specified` at compile time, exactly as
+// tdd §"Required parameters" says. Subclasses may override it.
+Parameter PRODUCTION = "MyApp.Production";
+
+/// Unique per RUN, not per test: every key this suite writes carries it, so a second run cannot
+/// collide with the first even if the first never reached OnAfterAllTests.
+Property RunId As %String;
+
+Method OnBeforeAllTests() As %Status
+{
+    // $Increment on a global is the short, collision-free choice. $JOB reuses pids; $ZTIMESTAMP and
+    // $Horolog are long and unique only by luck; CreateGUID() is 36 characters in every key and log line.
+    Set ..RunId = $Increment(^MyApp.Tests.RunId)
+    Quit $$$OK
+}
+
+/// Build every test key through here, so the INSERT and the ASSERT cannot drift apart.
+Method Key(pTag As %String) As %String [ CodeMode = expression ]
+{
+"TST-"_..RunId_"-"_pTag
+}
+
+}
+```
+
+Each suite then cleans **its own** destination — the `DELETE` names a table, so it belongs in the
+suite that owns that table, not in a shared parent every suite inherits. Cleanup targets exactly this
+run's rows: `LIKE 'TST-'_..RunId_'-%'`.
 
 ## Enabling the Testing Service on a production
 

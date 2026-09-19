@@ -128,10 +128,20 @@ The existing cap covers a test that **will not run** (`NO_TESTS_FOUND`, a compil
 nothing about a test that runs and **stays red**, which is the longer loop: the model edits, re-runs,
 edits, re-runs, and each iteration costs a compile plus a production restart.
 
-**Read the failing assertion before editing anything.** `iris_test` tells you pass/fail; it is
-`iris_get_log(log_id=…)` and the run's `failure_message` that name the assert and the two values it
-compared. Two edits that leave the failure mode unchanged mean the hypothesis is wrong — not that the
-fix was too small — and the next edit will be the third guess in a row.
+**Read the failure before editing anything — and a red test has two shapes.** An **assert failure**
+has an assertion and two compared values. An **abort** has neither: `<PROPERTY DOES NOT EXIST>`,
+`<METHOD DOES NOT EXIST>` and friends kill the test before the assert runs, so there is nothing to
+compare and the symbol named in the error *is* the finding. Looking for an assertion in an abort is
+the commonest way to read a red wrongly.
+
+`iris_test` returns `failure_message` and `failure_location` inline in `failed_tests` — read those
+first. Call `iris_get_log(log_id=…)` only when they come back **empty**, which is today's abort case,
+or when `failed_tests_truncated` is true. Do not expect a `.cls` line number from
+`failure_location`: it is a raw `.INT` frame (`Method+offset^Pkg.Class.1`), nothing maps it back on
+IRIS 2026.1, and it is worth reading only when it names a class of yours rather than library code.
+
+Two edits that leave the failure mode unchanged mean the hypothesis is wrong — not that the fix was
+too small — and the next edit will be the third guess in a row.
 
 **At the third red that told you nothing new, stop and report the blocker**: the class, the assertion,
 and what you have ruled out. That is more useful than a fourth variation.
@@ -375,42 +385,10 @@ For shared destinations (one PostgreSQL `Cocina.Menus` table used by both prod a
 
 Default to **a per-run suffix inside the shared destination** unless you have a concrete reason to escalate. Auditing a workshop production for "weak isolation" because it isolates by key rather than by database is misreading the spectrum. The suffix does not replace cleanup — it makes the suite **re-runnable when cleanup did not run**, and it lets cleanup target exactly this run's rows (`LIKE 'TST-'_..RunId_'-%'`).
 
-One run id, one place, and every key built from it:
-
-```objectscript
-Class MyApp.Tests.Base Extends %UnitTest.TestProduction
-{
-
-// A base class is still a TestProduction subclass, so it needs this too -- omitting it is
-// `ERROR #5001: Parameter PRODUCTION must be specified` at compile time, exactly as §"Required
-// parameters" says. Subclasses may override it.
-Parameter PRODUCTION = "MyApp.Production";
-
-/// Unique per RUN, not per test: every key this suite writes carries it, so a second run cannot
-/// collide with the first even if the first never reached OnAfterAllTests.
-Property RunId As %String;
-
-Method OnBeforeAllTests() As %Status
-{
-    // $Increment on a global is the short, collision-free choice. $JOB reuses pids; $ZTIMESTAMP and
-    // $Horolog are long and unique only by luck; CreateGUID() is 36 characters in every key and log line.
-    Set ..RunId = $Increment(^MyApp.Tests.RunId)
-    Quit $$$OK
-}
-
-/// Build every test key through here, so the INSERT and the ASSERT cannot drift apart.
-Method Key(pTag As %String) As %String [ CodeMode = expression ]
-{
-"TST-"_..RunId_"-"_pTag
-}
-
-}
-```
-
-Each suite then cleans **its own** destination — the `DELETE` names a table, so it belongs in the suite
-that owns that table, not in a shared parent every suite inherits. See the `OnAfterAllTests` in the
-BO skeleton in [references/skeletons.md](references/skeletons.md), which is compiled by the gate
-rather than quoted here.
+One run id, one place, and every key built from it — the base class that allocates a `RunId` in
+`OnBeforeAllTests` and a `Key()` helper every insert and assert goes through. See the per-run key base
+class in [references/skeletons.md](references/skeletons.md), which the gate compiles rather than
+quoting here.
 
 ## See also
 
