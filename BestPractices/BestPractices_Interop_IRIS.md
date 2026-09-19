@@ -1799,9 +1799,52 @@ OnError(request, &response, callrequest, pErrorStatus, pCompletionKey)
 `pCompletionKey` is how replies are told apart: with more than one outstanding call `OnResponse` is
 entered once per reply and the key is the only discriminator.
 
-- **Source.** Bank audit 2026-09-18; the bank had no class-based BP at all.
-- **Validity.** Verified against IRIS for Health 2026.1 in a running production, both variants.
-- **Severity.** High — the reply is dropped and everything reports success.
+**AND THE OTHER HALF: not overriding `OnResponse` at all.** Everything above is about the reply never
+arriving. The opposite mistake is leaving `pResponseRequired` at its default `1` — so the reply *does*
+arrive — and never overriding the callback. Read at the source, `Ens.BusinessProcess.OnResponse` is:
+
+```objectscript
+// Subclass responsibility
+Quit $$$EnsError($$$NotImplemented)
+```
+
+and `$$$NotImplemented` renders as `ERROR #5003: Not implemented`. So **every** reply terminates the
+process:
+
+```
+<Ens>ErrBPTerminated: Terminating BP BP.Whatever # due to error: ERROR #5003: Not implemented
+```
+
+The two halves are the same omission with opposite symptoms, and neither shows up where you look:
+
+| | `OnResponse` runs? | process | where the evidence is |
+|---|---|---|---|
+| `pResponseRequired = 0` | **no** | completes **green** | nowhere — Visual Trace shows success |
+| default `1`, no override | invoked, unimplemented | **terminated**, once per reply | Event Log only |
+
+The second is worse to diagnose than it sounds, because **the circuit can still deliver**: the outbound
+operation already ran before the reply came back, so rows land in the target table, an end-to-end test
+passes, and the failure exists only as `ErrBPTerminated` entries in the Event Log — which is exactly where
+nobody looks once the data has arrived.
+
+`Ens.BusinessProcessBPL` is exempt: it **generates** its own `OnResponse` (the body opens
+`If %compiledclass.Name="Ens.BusinessProcessBPL" Quit $$$OK`, then generated code). This is the whole
+reason "BP" and "BPL" being treated as synonyms is expensive — the obligation exists only for the hand
+form. `EnsLib.MsgRouter.RoutingEngine` has nothing to implement either, which is the other way out.
+
+**This is now a criterion.** `CR-15` fires mechanically on a hand `Ens.BusinessProcess` that calls
+`SendRequestAsync` and overrides no `OnResponse`, and the pre-scan's advisory names the runtime failure
+rather than the style rule — a warning that says `#5003` is harder to step over than one that says
+"less idiomatic". It complements `CR-1` rather than repeating it: CR-1 has legitimate exceptions, and when
+a hand BP is written *with* reason, CR-15 is the obligation that comes with it.
+
+- **Source.** Bank audit 2026-09-18; the bank had no class-based BP at all. The `#5003` half added
+  2026-09-19 from issues #331/#332, with `Ens.BusinessProcess.OnResponse`'s body read from
+  `%Dictionary.CompiledMethod` and `$$$NotImplemented` resolved to its message text.
+- **Validity.** Verified against IRIS for Health 2026.1 in a running production, both `pResponseRequired`
+  variants; the `#5003` mechanism verified at the source rather than by terminating a process.
+- **Severity.** High — one half drops the reply and reports success, the other terminates on every reply
+  while the circuit still delivers.
 - **Example.** `examples/ch05_bpl_dtl/bp-class-based-async.cls`
 
 ### 5.13 Calling a function from a DTL — the two forms have opposite rules and the wrong one is silent

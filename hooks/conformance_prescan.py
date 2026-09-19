@@ -32,12 +32,60 @@ def read_source(ti):
     return path, ""
 
 
+def code_only(src):
+    """`src` with whole-line comments removed, for matching CHECKS against.
+
+    WHY THIS EXISTS. The `none_of` escapes are plain text matches, so before this they were
+    satisfied by a COMMENT. Measured on the bank: `bp-class-based-async.cls` extends
+    `Ens.BusinessProcess`, not BPL, and mentions `Ens.BusinessProcessBPL` exactly once -- in a
+    `///` line explaining the difference. That comment alone exempted it from CR-1.
+
+    And the exemption is not a freak case, it is the LIKELY one: a developer writing a deliberate
+    hand BP naturally documents it as "unlike a BPL, this class ...", and thereby switches off the
+    criterion that was written for them. Strip the prose, match the code.
+
+    Deliberately line-based and not a tokeniser. A `//` that follows code on the same line is left
+    alone: cutting at the first `//` would corrupt a string containing a URL, and turning a
+    false negative into a false positive is the worse trade for an advisory.
+    """
+    kept = []
+    for line in src.split("\n"):
+        stripped = line.lstrip()
+        if stripped.startswith("///") or stripped.startswith("//") or stripped.startswith("#;"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def checks_for(src):
+    """The `CID (label)` strings the text criteria fire for, matched against code only."""
+    body = code_only(src)
+    out = []
+    for cid, label, all_of, none_of in CHECKS:
+        if all(re.search(p, body) for p in all_of) and not any(re.search(p, body) for p in none_of):
+            out.append("%s (%s)" % (cid, label))
+    return out
+
+
 # (regex-or-list, regex-none-of-list, label). A criterion fires when ALL "all_of" match
 # and NONE of "none_of" match. Conservative to avoid false positives; the agent confirms.
 CHECKS = [
     ("CR-1", "pass-through BP instead of a MessageRouter rule",
      [r"Extends\s*[\s(][^{]*Ens\.BusinessProcess\b", r"\.Transform\(", r"SendRequestAsync\("],
      [r"Ens\.BusinessProcessBPL"]),
+    # CR-15 COMPLEMENTS CR-1 rather than duplicating it. CR-1 says "do not write a BP to route";
+    # it has legitimate exceptions, and when someone writes a hand BP WITH reason there is still
+    # nothing telling them OnResponse is mandatory. Confirmed at the source: Ens.BusinessProcess's
+    # own OnResponse body is `// Subclass responsibility  Quit $$$EnsError($$$NotImplemented)`, and
+    # $$$NotImplemented renders as `ERROR #5003: Not implemented`. So a hand BP that calls
+    # SendRequestAsync with the DEFAULT pResponseRequired=1 and does not override OnResponse fails
+    # on EVERY reply. Not a style opinion: a guaranteed runtime failure.
+    #
+    # Ens.BusinessProcessBPL is exempt because it GENERATES its own OnResponse -- measured, its body
+    # begins `If %compiledclass.Name="Ens.BusinessProcessBPL" Quit $$$OK` followed by generated code.
+    ("CR-15", "hand BP calls SendRequestAsync but overrides no OnResponse — #5003 at every reply",
+     [r"Extends\s*[\s(][^{]*Ens\.BusinessProcess\b", r"SendRequestAsync\("],
+     [r"Method\s+OnResponse\b", r"Ens\.BusinessProcessBPL"]),
     ("CR-2", "hand-rolled file parser instead of a RecordMap",
      [r"Extends\s*[\s(][^{]*Ens\.BusinessService\b", r"EnsLib\.File\.InboundAdapter", r"(\$Piece\(|\.ReadLine\()"],
      []),
@@ -240,10 +288,7 @@ def main():
     if not src:
         return
 
-    hits = []
-    for cid, label, all_of, none_of in CHECKS:
-        if all(re.search(p, src) for p in all_of) and not any(re.search(p, src) for p in none_of):
-            hits.append("%s (%s)" % (cid, label))
+    hits = list(checks_for(src))
     for cid, label, fn in STRUCTURAL:
         try:
             fired = fn(src)
@@ -270,6 +315,21 @@ def main():
         "to confirm and get the canonical fix. "
         "Advisory; this is the only warning you will get for these criteria on this file."
     )
+    # NAME THE FAILURE, NOT THE CRITERION. A warning that states a style rule competes with the
+    # rest of the session's context; one that states what breaks at run time does not. Both notes
+    # below are measured, and #331 is the case for them: an advisory that named only the criterion
+    # was read, acknowledged and stepped over.
+    if any(h.startswith("CR-15") for h in hits):
+        msg += (" CR-15 specifically: Ens.BusinessProcess.OnResponse is `Quit "
+                "$$$EnsError($$$NotImplemented)`, so with the default pResponseRequired=1 EVERY reply "
+                "terminates the process with `<Ens>ErrBPTerminated ... ERROR #5003: Not implemented`. "
+                "The circuit can still deliver, so end-to-end tests pass and the only evidence is in "
+                "the Event Log. Either override OnResponse, or use EnsLib.MsgRouter.RoutingEngine, "
+                "which has nothing to implement.")
+    if any(h.startswith("CR-1 ") for h in hits):
+        msg += (" CR-1 specifically: a hand BP is not just less idiomatic — it obliges you to "
+                "implement OnResponse, and without it SendRequestAsync terminates the process with "
+                "#5003 on every reply (see CR-15).")
     if any(h.startswith("CR-7") for h in hits):
         msg += (" CR-7 specifically: test results count only from the real iris_test tool, "
                 "never from a [SqlProc] that returns \"PASS\".")

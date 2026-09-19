@@ -1,6 +1,6 @@
 ---
 name: conformance-review
-description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. For ANY review, audit, or quality/conformance check of interop work, read THIS skill FIRST — the criteria (CR-1…CR-14) live here, not in the router or the build skills, and a review run without them is graded incomplete. Use after building/modifying components, before declaring done, or whenever the user asks whether the implementation is correct, idiomatic, or per best practices. The `conformance-reviewer` plugin agent (an agent, not a skill — with no agent tool, reading this file IS the review) and the `conformance-prescan` hook both check against this file. Triggers EN: review, audit, conformance, best practices, is this correct, is this idiomatic, code review, quality check, check my production, validate the implementation, ready to ship. Triggers ES: revisar, auditar, auditoría, conformidad, buenas prácticas, está bien implementado, es correcto, cumple, revisión, control de calidad.
+description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. For ANY review, audit, or quality/conformance check of interop work, read THIS skill FIRST — the criteria (CR-1…CR-15) live here, not in the router or the build skills, and a review run without them is graded incomplete. Use after building/modifying components, before declaring done, or whenever the user asks whether the implementation is correct, idiomatic, or per best practices. The `conformance-reviewer` plugin agent (an agent, not a skill — with no agent tool, reading this file IS the review) and the `conformance-prescan` hook both check against this file. Triggers EN: review, audit, conformance, best practices, is this correct, is this idiomatic, code review, quality check, check my production, validate the implementation, ready to ship. Triggers ES: revisar, auditar, auditoría, conformidad, buenas prácticas, está bien implementado, es correcto, cumple, revisión, control de calidad.
 ---
 
 # IRIS Interoperability — Conformance Review
@@ -8,7 +8,7 @@ description: Review an already-built IRIS Interoperability production against th
 > **This file is the review.** However you arrived here — the Skill tool, a native-skill search,
 > or reading `skills/conformance-review/SKILL.md` directly — this document is self-contained:
 > follow its workflow and check its criteria. Do NOT run an interop review from the router or the
-> build skills alone; they do not carry the criteria, and a review without CR-1…CR-14 misses the
+> build skills alone; they do not carry the criteria, and a review without CR-1…CR-15 misses the
 > checks this plugin exists to make.
 
 > **A Stop hook enforces this pass.** When a session has written classes into IRIS, it blocks
@@ -46,7 +46,7 @@ re-plan from scratch and it never rewrites silently.
 2. **Load the relevant skills** so you judge against their guidance, not memory: `iris-interop-skills:interop`
    (router/naming), plus the component skills in play (`:bpl`, `:business-services`, `:transformations`,
    `:alerting`, `:hl7-schemas`, `:messages`, `:tdd`).
-3. **Check every criterion below** (CR-1…CR-14) against the actual code. Cite `file:line` and the exact
+3. **Check every criterion below** (CR-1…CR-15) against the actual code. Cite `file:line` and the exact
    best-practice it meets or breaks.
 3b. **Re-check the criteria that depend on WIRING, not just on the classes you changed.** Some
    violations are created by an edit to a *different* component than the one that ends up wrong —
@@ -125,7 +125,7 @@ re-plan from scratch and it never rewrites silently.
 - **P2** — idiomatic gap that works but loses tooling/robustness (declarative vs procedural; missing alerts).
 - **P3** — cosmetic / naming / hardcoded paths.
 
-## Criteria (CR-1 … CR-14)
+## Criteria (CR-1 … CR-15)
 
 Items marked **⚙ pre-scannable** are also detected mechanically by the `conformance-prescan` hook from a
 single file's text; the rest need the agent's cross-file/semantic judgment.
@@ -147,6 +147,7 @@ single file's text; the rest need the agent's cross-file/semantic judgment.
 
 | **CR-13** | **P0** | **The test went green against a destination the session fabricated, not the one the task named.** A green `iris_test` proves the code ran; it does not prove it ran against the right thing. The test, or the BO it exercises, points at a database, schema, table, file path or endpoint the session **created** rather than the one the requirement fixed. Three hard signals: (a) a `CREATE DATABASE`/`CREATE TABLE`/`mkdir` issued during the build to make the test runnable, against a name the task never mentions; (b) DDL executed with a credential **stronger** than the one the task granted (task says the app login is CRUD-without-DDL; the session used a superuser); (c) the message class or DTL contract reshaped to fit the fabricated destination instead of the specified one. Applies whenever the tests touch an external system. Verify by reading the BO's `DSN`/`FilePath`/`Credentials` from its production settings and the test class's own setup — read, not assumed — and comparing both against the task statement. | Point the BO and the test back at the destination named in the requirement and re-run `iris_test`. Isolate **inside** that destination (`tdd` §"Test data isolation" — a per-run key suffix first; a separate database is the top rung, not the default). A genuine name collision is fixed by renaming the **test artefact**, never the destination. If the task's credentials cannot do what the test needs, that is a finding to report, not a licence to escalate. | `tdd`, `business-operations` |
 | **CR-14** ⚙ | **P1** | A subclass of a **prebuilt** `EnsLib.*.Service.*` / `EnsLib.*.Operation.*` whose `OnInit()` override never calls `##super()`. The base `OnInit` is the only place the host's parser state is initialised (`..recordMapFull`, `..%Parser`); without it the component starts green, consumes and **deletes** its input, and emits no message and no Event Log entry — a green run that proves nothing happened. Mechanical: the class extends `EnsLib\..*\.(Service\|Operation)\.` **and** the file contains no `##super`. Does **not** apply to a direct `Ens.BusinessService`/`Ens.BusinessOperation` subclass with `Parameter ADAPTER` — its inherited `OnInit()` does nothing by default (ESQL). | Make `Set tSC = ##super()  Quit:$$$ISERR(tSC) tSC` the first statement of the override, then validate. | `business-services` |
+| **CR-15** ⚙ | **P1** | A hand-written `Ens.BusinessProcess` that calls `SendRequestAsync()` and overrides **no** `OnResponse()`. Measured at the source: `Ens.BusinessProcess.OnResponse` is `// Subclass responsibility  Quit $$$EnsError($$$NotImplemented)`, and `$$$NotImplemented` renders as `ERROR #5003: Not implemented` — so with the default `pResponseRequired = 1` **every reply** terminates the process with `<Ens>ErrBPTerminated ... #5003`. The circuit can still deliver, so end-to-end tests pass and the only evidence is in the Event Log, which is exactly where nobody looks once the data has arrived. **Complements CR-1 rather than duplicating it:** CR-1 says do not code routing as a BP and has legitimate exceptions; when a hand BP is written *with* reason, CR-15 is the obligation that comes with it. Does **not** apply to `Ens.BusinessProcessBPL`, which generates its own `OnResponse` (`If %compiledclass.Name="Ens.BusinessProcessBPL" Quit $$$OK` then generated code). | Override `OnResponse(request, ByRef response, callrequest, callresponse, pCompletionKey)` — see §5.12 for the callback signatures and for the *other* half of this trap, `pResponseRequired = 0`, where the callback never runs at all and the process completes green. Or use `EnsLib.MsgRouter.RoutingEngine`, which has nothing to implement. | `bpl` |
 
 ## Output template
 
