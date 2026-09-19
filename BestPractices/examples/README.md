@@ -166,6 +166,8 @@ its siblings.
 | §6.19 | Inbound SOAP Basic auth: `OnPreWebMethod` must deny with `ReturnFault`, since a returned `%Status` is discarded | `ch06_adapters/soap-inbound-onprewebmethod-auth.cls` |
 | §6.19 | Fixture: a production must be running AND its item named after the class, or the guard never executes | `ch06_adapters/production-soap-authguard.cls` |
 | §6.19 | Oracle: real SOAP POSTs, positive control first; mutation 1 reopens the hole for an uncredentialed caller | `ch06_adapters/tdd-soap-onprewebmethod-deny.cls` |
+| §6.20 | `%SOAP.WSDL.Reader.Process` behind one call site — a typed `#Dim` documents, it does not gate | `ch06_adapters/soap-wsdl-reader-generate.cls` |
+| §6.20 | Oracle: the formal spec from the dictionary, a generation run from a local file, and the `MakeBusinessOperation` differential | `ch06_adapters/tdd-wsdl-reader-signature.cls` |
 | §6.18 | Oracle: the wrong class compiles and dies at run time, and both escape routes are refused | `ch06_adapters/tdd-path-from-setting.cls` |
 | §6.17 | The production wiring both modes, with the FQCN item-name exception | `ch06_adapters/production-soap-inbound.cls` |
 | §6.17 | Sibling: the run — which target the setting belongs on, and why | `ch06_adapters/tdd-soap-inbound-targets.cls` |

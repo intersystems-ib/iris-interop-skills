@@ -263,10 +263,19 @@ Set sc = reader.Process("http://host/path/Service.cls?WSDL", "Pkg.WSC.MyService"
 If $$$ISERR(sc) { /* $System.Status.GetErrorText(sc) */ }
 // Read the generated source with iris_doc(get) and commit it — these are generated classes, and the
 // filesystem is still the source of truth.
+//
+// WHAT LANDS WHERE, measured on a one-operation WSDL (deliverable §6.20):
+//   MakeBusinessOperation = 0 ->  Pkg.<Svc>Soap          %SOAP.WebClient
+//                                 Pkg.<Svc>Soap.<Op>     %SOAP.ProxyDescriptor
+//   MakeBusinessOperation = 1 ->  the two above, PLUS a BusOp SUB-PACKAGE:
+//                                 Pkg.BusOp.<Svc>Soap    Ens.BusinessOperation
+//                                 Pkg.BusOp.<Op>Request  Ens.Request
+//                                 Pkg.BusOp.<Op>Response Ens.Response
+// pLocationURL also accepts a LOCAL FILE PATH, which is what makes this testable with no endpoint up.
 ```
 
 Verified on IRIS-for-Health 2026.1: `Process` is an **instance** method with signature
-`Process(pLocationURL As %String, pPackage As %String = "", pTest As %Boolean = 0, schemaReader = "")`,
+`Process(pLocationURL As %String, pPackage As %String = "", pTest As %Boolean = 0, schemaReader As %XML.Utils.SchemaReader = "")`,
 and there is also `GenerateService(pService, pNamespace, pPort, PackageName, ClientClassName, ServiceClassName)`
 for the service-class variant.
 
