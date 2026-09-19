@@ -1652,6 +1652,48 @@ generations, not adding up calls. And `^UnitTestRoot` must point at a directory 
 - **Severity.** High — a vacuous green is worse than a red, because it stops the search.
 - **Example.** `examples/ch05_bpl_dtl/tdd-testproduction-dtl.cls`
 
+**A green says nothing about the namespace it ran in.** A real run made 21 tool calls with the schema's
+**default** namespace, reported **8 of 8 tests green**, and left nothing at all in the namespace the work
+was meant for. Every assertion passed because the classes had been compiled into the default namespace
+too. The tests were right about the code and wrong about the place.
+
+**The obvious guard does not work.** "Is this namespace Interoperability-enabled?" is the natural check and
+it is useless: measured on IRIS for Health Community 2026.1, `USER` carries `Ens.Director`,
+`Ens.Production` **and** `Ens.Config.Item` exactly as an interop namespace does. A run in `USER` passes
+that test.
+
+**So assert against the default instead.** No interop project runs its production tests in `USER` — `USER`
+is what you get when nobody passed a namespace. It exists on every instance, so the check is portable:
+
+```objectscript
+Parameter FORBIDDENNAMESPACE As STRING = "USER";
+Parameter EXPECTEDNAMESPACE As STRING = "";
+
+Method TestAaNamespaceIsNotTheInstanceDefault()
+{
+    Do $$$AssertNotEquals($Namespace, ..#FORBIDDENNAMESPACE, "running in '" _ $Namespace _ "'")
+    If ..#EXPECTEDNAMESPACE '= "" {
+        Do $$$AssertEquals($Namespace, ..#EXPECTEDNAMESPACE, "and it must be the declared namespace")
+    }
+    Do $$$AssertTrue(##class(%SYS.Namespace).Exists(..#FORBIDDENNAMESPACE), "POSITIVE CONTROL: that namespace is real, so the assertion compares against something")
+}
+```
+
+Measured, the same suite compiled and run in two namespaces:
+
+| namespace | verdict |
+|---|---|
+| the interop namespace | 4 methods, **0 failed** |
+| `USER` | 4 methods, **1 failed** — the guard, and only the guard |
+
+The other three methods **passed in `USER`**. Name the guard to sort **first**: a red after eight greens
+gets read as a flake.
+
+**Honest limits.** This cannot pin a tool-call parameter, and it cannot catch a wrong-but-*plausible*
+namespace — it catches the **default**, which is the mistake that actually happens. A project that knows
+its namespace sets `EXPECTEDNAMESPACE` and gets equality. And the positive control matters: assert the
+forbidden namespace **exists**, or a pass could mean the name was meaningless.
+
 ### 5.10 Message class design — `%Persistent` must be leftmost, and no compile will tell you it is not
 
 An interop message class needs `%Persistent` **as its leftmost superclass** to get its own storage
