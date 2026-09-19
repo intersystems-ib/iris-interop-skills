@@ -455,6 +455,8 @@ def main():
                     "shipped name — do not rename it: reference it as-is, and read it with "
                     "docs_introspect(class_name=...) or iris_doc(mode=get). This rule only covers "
                     "classes you write. If it fired on one of those, report it.\n\n"
+                    "Convention: give the renamed class `/// Convention: CONV-Q4X` as its first "
+                    "doc comment, so the rename is auditable.\n\n"
                     "Load Skill(iris-interop-skills:component-map) for the "
                     "task->component->type map." % (nm, seg, seg, NONSTD[seg])
                 )
