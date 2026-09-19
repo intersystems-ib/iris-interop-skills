@@ -419,6 +419,69 @@ def prod(*chunks):
             '<Production Name="Demo.Production">' + "".join(chunks) + "</Production>\n}\n}")
 
 
+# ── #331 / #332 ─────────────────────────────────────────────────────────────────────────────
+#
+# CR-15 and the comment leak. The two NEGATIVE-turned-POSITIVE cases carry the weight: before
+# code_only(), a `none_of` escape was satisfied by a COMMENT, so a hand BP documented as "unlike a
+# BPL, this class ..." switched off the very criterion written for it. That phrasing is not a freak
+# case, it is what someone writing a deliberate hand BP actually types.
+_BP_HEAD = "Class Demo.BP.FanOut Extends Ens.BusinessProcess\n{\n"
+_SEND = '    Set tSC = ..SendRequestAsync("BO.Target", tReq)\n'
+_ONRESP = "Method OnResponse(request, ByRef response, callrequest, callresponse, pCompletionKey) As %Status\n{\n    Quit $$$OK\n}\n"
+
+def _cr(src, cid):
+    return any(h.startswith(cid + " ") for h in _cp.checks_for(src))
+
+
+print("\n#332  CR-15 fires on a hand BP with SendRequestAsync and no OnResponse")
+print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
+
+for _label, _src, _want in [
+    # POSITIVE: the measured shape. Ens.BusinessProcess.OnResponse is
+    # `Quit $$$EnsError($$$NotImplemented)`, so every reply is #5003.
+    ("hand BP, SendRequestAsync, no OnResponse",
+     _BP_HEAD + "Method OnRequest(request, ByRef response) As %Status\n{\n" + _SEND + "    Quit $$$OK\n}\n}", True),
+    # NEGATIVE: overrides OnResponse. The whole point of the criterion is satisfied.
+    ("hand BP that DOES override OnResponse",
+     _BP_HEAD + "Method OnRequest(request, ByRef response) As %Status\n{\n" + _SEND + "    Quit $$$OK\n}\n" + _ONRESP + "}", False),
+    # NEGATIVE: a BPL generates its own OnResponse -- measured, its body opens
+    # `If %compiledclass.Name="Ens.BusinessProcessBPL" Quit $$$OK`.
+    ("a BPL subclass",
+     "Class Demo.BP.Flow Extends Ens.BusinessProcessBPL\n{\n" + _SEND + "}", False),
+    # NEGATIVE: no async call at all -- a synchronous BP has no replies to handle.
+    ("hand BP using SendRequestSync only",
+     _BP_HEAD + '    Set tSC = ..SendRequestSync("BO.Target", tReq, .tRsp)\n}', False),
+    # THE LEAK, as a POSITIVE. A comment naming BPL must NOT exempt the class.
+    ("hand BP whose COMMENT mentions Ens.BusinessProcessBPL",
+     "/// Unlike Ens.BusinessProcessBPL, this class is written by hand on purpose.\n"
+     + _BP_HEAD + "Method OnRequest(request, ByRef response) As %Status\n{\n" + _SEND + "    Quit $$$OK\n}\n}", True),
+    # THE LEAK AGAIN, on the other escape: a comment mentioning OnResponse is not an override.
+    ("hand BP whose COMMENT mentions OnResponse",
+     _BP_HEAD + "/// A real one would need Method OnResponse here.\n"
+     + "Method OnRequest(request, ByRef response) As %Status\n{\n" + _SEND + "    Quit $$$OK\n}\n}", True),
+]:
+    check(_label, _want, _cr(_src, "CR-15"))
+
+print("\n#331  a comment can no longer TRIGGER a criterion either")
+print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
+
+for _label, _src, _want in [
+    # NEGATIVE: CR-5 needs Ens.Rule.Definition AND MSH:9. With MSH:9 only in prose it must not
+    # fire -- measured on the bank, this was a live false positive on routing-rule-fanout.cls.
+    ("CR-5 with MSH:9 only in a comment",
+     "/// Routing on MSH:9 is the case this file does NOT use.\n"
+     "Class Demo.RUL.Fan Extends Ens.Rule.Definition\n{\n}", False),
+    # POSITIVE control: the same criterion still fires when MSH:9 is in the rule itself.
+    ("CR-5 with MSH:9 in the rule body",
+     "Class Demo.RUL.Fan Extends Ens.Rule.Definition\n{\n"
+     '<when condition=\'HL7.{MSH:9.1}="ADT"\'/>\n}', True),
+]:
+    check(_label, _want, _cr(_src, "CR-5"))
+
+# code_only is line-based on purpose: a trailing // must not truncate the line before it.
+check("a trailing // does not cut the code before it", True,
+      "SendRequestAsync(" in _cp.code_only('    Do ..SendRequestAsync("x")  // reply handled below\n'))
+
 print("\n#180  CR-6 fires on the wiring, and stays quiet when nothing is wired")
 print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
 

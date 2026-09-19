@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stop gate: "before declaring done" needs a point at which done is declared.
 
-The plugin specifies a final compliance pass, defines fourteen criteria for it, and tells the
+The plugin specifies a final compliance pass, defines fifteen criteria for it, and tells the
 model to run it before declaring the work finished. Measured over 206 runs that produced
 authored `.cls`, the `conformance-reviewer` agent was spawned **0 times** — while
 `interop-builder`, whose instruction lives in the SessionStart hook, was spawned 79 times.
@@ -610,7 +610,7 @@ def main():
         block(
             "REVIEW",
             "The conformance pass has not run. This session authored {} interop class(es) and "
-            "every one is on disk, but nothing has checked them against the fourteen criteria.\n\n"
+            "every one is on disk, but nothing has checked them against the fifteen criteria.\n\n"
             "Run it now:\n"
             "  Agent(subagent_type=\"iris-interop-skills:conformance-reviewer\")\n"
             "    — the full pass; re-verifies tests through the real iris_test rather than "
