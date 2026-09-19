@@ -144,7 +144,10 @@ things in it bind work planned from this map:
 
 - **Gate 0 runs first and can cancel the rest.** If bundled `references/`/`assets/` files are never
   opened, no A/B on progressive disclosure can show anything — a null would be uninterpretable. The
-  peer session already measured Haiku at **0 opens** across 3 Ejercicio-3 runs.
+  Gate 0 has since been measured and **FAILED for both models** — `references/` + `assets/` is 1
+  pickup in 44 across Haiku 4.5 and Sonnet 4.6, with no difference between them. The matrix is
+  cancelled by the pre-registration's own rule. Table and consequences:
+  `BestPractices/AB-PREREGISTRATION.md` §"VERDICT".
 - **A before/after across 1.41.0 → 1.110.0 measures a release train, not a change.** Do not attribute
   a delta to one restructuring across that gap.
 - **Before inlining a capability, check that its failure actually happens.** v1.110.0 inlined the
