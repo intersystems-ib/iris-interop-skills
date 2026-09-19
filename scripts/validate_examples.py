@@ -652,6 +652,30 @@ def tier1() -> bool:
     r.check("C18", "every .cls bundled in skills/*/assets carries a /// Rule: header and one class",
             asset_bad)
 
+    # ── C19 ───────────────────────────────────────────────────────────────────────────────
+    # A skill reaches the example bank by an absolute `${CLAUDE_PLUGIN_ROOT}/...` path, and until now
+    # NOTHING checked that the path resolves. C17 catches a dead §"Heading" citation inside the
+    # prose; this is the same defect one layer over, pointing out of the skill at a file.
+    #
+    # It is cheap and it is the natural moment to add it: #343-a added 14 of these paths by hand in
+    # this same release, taking the cited count from 54 to 68 of 169, and a typo in any of them would
+    # have been a pointer to nothing -- indistinguishable from a working one to every reader, and
+    # exactly the shape that makes a model conclude the example does not exist.
+    #
+    # Rename or move an example and this fires, which is the point: the bank's README is reconciled
+    # by C4, but a skill citing the old name was unguarded in both directions.
+    plugin_refs, dangling = 0, []
+    for md in skill_markdown():
+        for m in re.finditer(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\s`)'\"]+)", read(md)):
+            target = m.group(1).rstrip(".,;")
+            plugin_refs += 1
+            if not (REPO / target).exists():
+                dangling.append(f"{repo_rel(md)} -> ${{CLAUDE_PLUGIN_ROOT}}/{target} does not exist")
+    r.check("C19", "every ${CLAUDE_PLUGIN_ROOT} path a skill cites resolves on disk", dangling)
+    # A clean C19 means nothing if it scanned no paths at all.
+    if not plugin_refs:
+        r.check("C19-control", "C19 actually found plugin-root references to check", ["found 0"])
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
