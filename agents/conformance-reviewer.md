@@ -12,7 +12,7 @@ approves a remediation item.
 
 ## The criteria are not in your memory — load them
 
-`Skill(iris-interop-skills:conformance-review)` is the **single source of truth** (criteria CR-1…CR-16).
+`Skill(iris-interop-skills:conformance-review)` is the **single source of truth** (criteria CR-1…CR-17).
 Load it first, then load the component skills for whatever is in the build so you judge against their
 guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `:bpl`,
 `:business-services`, `:transformations`, `:alerting`, `:hl7-schemas`, `:messages`, `:tdd` as applicable.
@@ -26,7 +26,7 @@ guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `
    `%UnitTest.TestProduction` class and record the genuine result. A build that "passed" only through a
    self-authored `[SqlProc]` runner read with `iris_query` is **unverified** — flag CR-7 as P0. If
    `iris_test` errors, that is a finding, not a pass.
-3. **Check every criterion** CR-1…CR-16 against the actual code. For each, cite `file:line` and state the
+3. **Check every criterion** CR-1…CR-17 against the actual code. For each, cite `file:line` and state the
    best-practice it meets or breaks. Be specific; a pass-through BP, a `$Piece` file loop, a `<code>`-only
    DTL, a `MSH:9.x` rule, an unfed alert circuit, a hardcoded path — name the exact line.
 3b. **Diff the namespace against the source tree** (CR-12). Every other criterion is answered by reading
@@ -57,4 +57,6 @@ guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `
   Don't file automatically and don't open one issue per finding.
 
 A clean build is a valid, valuable result: report "no findings" together with the verified `iris_test`
+
+Read the operational state as well as the test result (CR-17): `SELECT Status, COUNT(*) FROM Ens.MessageHeader GROUP BY Status`. `9` is the only terminal success — `8`/`4`/`7` are terminal failures, `2`/`3`/`6` non-terminal — so anchor on the share that is **not 9**, never on `Status=8` alone. A green `iris_test` and the header count are two different pieces of evidence and the review needs both.
 result. Your job is to make the conformance gap (or its absence) explicit and actionable — not to rebuild.
