@@ -73,19 +73,10 @@ CHECKS = [
     ("CR-1", "pass-through BP instead of a MessageRouter rule",
      [r"Extends\s*[\s(][^{]*Ens\.BusinessProcess\b", r"\.Transform\(", r"SendRequestAsync\("],
      [r"Ens\.BusinessProcessBPL"]),
-    # CR-15 COMPLEMENTS CR-1 rather than duplicating it. CR-1 says "do not write a BP to route";
-    # it has legitimate exceptions, and when someone writes a hand BP WITH reason there is still
-    # nothing telling them OnResponse is mandatory. Confirmed at the source: Ens.BusinessProcess's
-    # own OnResponse body is `// Subclass responsibility  Quit $$$EnsError($$$NotImplemented)`, and
-    # $$$NotImplemented renders as `ERROR #5003: Not implemented`. So a hand BP that calls
-    # SendRequestAsync with the DEFAULT pResponseRequired=1 and does not override OnResponse fails
-    # on EVERY reply. Not a style opinion: a guaranteed runtime failure.
-    #
-    # Ens.BusinessProcessBPL is exempt because it GENERATES its own OnResponse -- measured, its body
-    # begins `If %compiledclass.Name="Ens.BusinessProcessBPL" Quit $$$OK` followed by generated code.
-    ("CR-15", "hand BP calls SendRequestAsync but overrides no OnResponse — #5003 at every reply",
-     [r"Extends\s*[\s(][^{]*Ens\.BusinessProcess\b", r"SendRequestAsync\("],
-     [r"Method\s+OnResponse\b", r"Ens\.BusinessProcessBPL"]),
+    # CR-15 lives in STRUCTURAL, not here — see the block below. It COMPLEMENTS CR-1 rather
+    # than duplicating it: CR-1 says "do not write a BP to route" and has legitimate exceptions,
+    # and when someone writes a hand BP WITH reason there is still nothing telling them that
+    # OnResponse is then mandatory.
     ("CR-2", "hand-rolled file parser instead of a RecordMap",
      [r"Extends\s*[\s(][^{]*Ens\.BusinessService\b", r"EnsLib\.File\.InboundAdapter", r"(\$Piece\(|\.ReadLine\()"],
      []),
@@ -214,12 +205,180 @@ def cr10_hardcoded_path_in_runtime_component(src):
     return bool(RUNTIME_SUPER.search(src))
 
 
+# -------------------------------------------------------------------------------- CR-15
+# CR-15 began in CHECKS as two regexes and moved here the moment it was escalated to the
+# Stop gate (#331), because a criterion that BLOCKS cannot be wrong about pResponseRequired.
+#
+# Measured on IRIS for Health 2026.1 (three hand BPs in one production, one message each):
+#
+#   pResponseRequired   OnResponse   Event Log                             reached the BO
+#   default (1)         absent       ERROR #5003 / <Ens>ErrBPTerminated    yes
+#   explicit 0          absent       clean                                 yes
+#   default (1)         present      clean                                 yes
+#
+# Row 2 is why this is no longer a regex. `SendRequestAsync`'s signature is
+# `pResponseRequired:%Boolean=1`, so passing 0 is a legal fire-and-forget call: no reply is
+# ever delivered, OnResponse is never invoked, and the class is correct without it. The
+# file-level escape a regex would need -- "the text 0 appears in a SendRequestAsync call" --
+# is satisfied by ONE such call in a class that also makes a default one, so it buys a false
+# negative on a real defect to avoid a false positive. Per call site, neither is necessary.
+#
+# Every row above DELIVERED to the operation. That is the other half of the finding: the
+# circuit works, so an end-to-end test passes and the only evidence is in the Event Log.
+
+def _call_args(src, open_idx):
+    """Top-level, comma-split arguments of the call whose `(` is at `open_idx`.
+
+    Returns None when the parentheses never balance; callers treat that as "unknown" rather
+    than as "no arguments", so an unparseable call can never be read as a proven default.
+
+    Only parentheses nest here. `[` and `]` are deliberately NOT treated as brackets: in
+    ObjectScript they are the `contains` and `follows` OPERATORS, so counting them would
+    unbalance every call whose argument tests `tMsg [ "x"`.
+    """
+    depth, i, n = 0, open_idx, len(src)
+    cur, args, instr = [], [], False
+    while i < n:
+        ch = src[i]
+        if instr:
+            if ch == '"':
+                if i + 1 < n and src[i + 1] == '"':
+                    cur.append('""')       # "" is an escaped quote, not the end of the string
+                    i += 2
+                    continue
+                instr = False
+            cur.append(ch)
+            i += 1
+            continue
+        if ch == '"':
+            instr = True
+            cur.append(ch)
+            i += 1
+            continue
+        if ch == "(":
+            depth += 1
+            if depth > 1:
+                cur.append(ch)
+            i += 1
+            continue
+        if ch == ")":
+            depth -= 1
+            if depth == 0:
+                args.append("".join(cur))
+                return args
+            cur.append(ch)
+            i += 1
+            continue
+        if ch == "," and depth == 1:
+            args.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(ch)
+        i += 1
+    return None
+
+
+def sendrequestasync_sites(src):
+    """One verdict per `SendRequestAsync(` call in `src`: does that call require a response?
+
+    "required" is the only PROVABLE state -- the third argument is absent, elided, or the
+    literal 1, so pResponseRequired is 1 and a reply is guaranteed. "optional" is the literal
+    0. Everything else (a variable, a macro, an expression, an unbalanced call) is "unknown",
+    because whether it evaluates to 0 at run time is not decidable from this file.
+    """
+    out = []
+    for m in re.finditer(r"SendRequestAsync\s*\(", src):
+        args = _call_args(src, m.end() - 1)
+        if args is None:
+            out.append("unknown")
+            continue
+        third = args[2].strip() if len(args) >= 3 else ""
+        if third == "" or third == "1":
+            out.append("required")         # absent, elided, or explicit -- pResponseRequired is 1
+        elif third == "0":
+            out.append("optional")
+        else:
+            out.append("unknown")
+    return out
+
+
+HAND_BP = re.compile(r"Extends\s*[\s(][^{]*Ens\.BusinessProcess\b")
+BPL_BP = re.compile(r"Ens\.BusinessProcessBPL")
+HAS_ONRESPONSE = re.compile(r"Method\s+OnResponse\b")
+# `Class X Extends Y [ Abstract ]` -- the keyword list, not a method's.
+ABSTRACT_CLASS = re.compile(r"(?im)^\s*Class\s+[\w.%]+[^{]*\[[^\]\n]*\bAbstract\b")
+
+
+def cr15_verdict(src):
+    """"provable" | "possible" | "clear" for one class's source.
+
+    provable  at least one SendRequestAsync call in this class leaves pResponseRequired at 1
+              and nothing overrides OnResponse. This is the state measured above as failing on
+              every reply, and the only one the Stop gate blocks on.
+    possible  a hand BP with no OnResponse whose every SendRequestAsync call passes a
+              pResponseRequired this file cannot evaluate. Worth an advisory; never a block.
+    clear     not a hand BP, a BPL, overrides OnResponse, Abstract, or every call site
+              provably passes 0.
+
+    Ens.BusinessProcessBPL is exempt because it GENERATES its own OnResponse -- measured, the
+    generated body begins `If %compiledclass.Name="Ens.BusinessProcessBPL" Quit $$$OK`.
+
+    KNOWN BLIND SPOT, written down because a criterion that reads as complete is the one that
+    stops people checking. `Abstract` is exempt because an abstract class is never a
+    production item and so cannot fail at run time -- but a CONCRETE subclass of it extends
+    the base, not `Ens.BusinessProcess`, so this function never sees the subclass and cannot
+    tell whether it supplied OnResponse. Cross-file is the reviewer agent's job, not a
+    single-file hook's.
+    """
+    body = code_only(src)
+    if not HAND_BP.search(body) or BPL_BP.search(body):
+        return "clear"
+    if HAS_ONRESPONSE.search(body) or ABSTRACT_CLASS.search(body):
+        return "clear"
+    sites = sendrequestasync_sites(body)
+    if "required" in sites:
+        return "provable"
+    if "unknown" in sites:
+        return "possible"
+    return "clear"
+
+
+def cr15_missing_onresponse(src):
+    """The ADVISORY threshold: nudge on doubt, because a false positive costs one warning.
+
+    The Stop gate calls cr15_verdict directly and blocks only on "provable", because there a
+    false positive costs the credibility of the gate.
+    """
+    return cr15_verdict(src) != "clear"
+
+
 STRUCTURAL = [
     ("CR-6", "HL7 flow wired into a GENERIC EnsLib.MsgRouter.RoutingEngine",
      cr6_generic_router_hosting_hl7),
     ("CR-10", "hardcoded absolute path in a runtime component (a Setting exists for it)",
      cr10_hardcoded_path_in_runtime_component),
+    ("CR-15", "hand BP calls SendRequestAsync but overrides no OnResponse — #5003 at every reply",
+     cr15_missing_onresponse),
 ]
+
+
+def all_hits(src):
+    """Every criterion that fires for one class's source -- text and structural alike.
+
+    main() and the testsuite must agree about what "fires" means. Before this each assembled
+    the list itself and only main()'s copy knew about STRUCTURAL, so a criterion moved from
+    CHECKS to STRUCTURAL silently left the tests testing nothing.
+    """
+    hits = list(checks_for(src))
+    for cid, label, fn in STRUCTURAL:
+        try:
+            fired = fn(src)
+        except Exception:
+            fired = False          # never break a write on a parser bug
+        if fired:
+            hits.append("%s (%s)" % (cid, label))
+    return hits
 
 
 # --- dedup latch ---------------------------------------------------------------- #217
@@ -288,14 +447,7 @@ def main():
     if not src:
         return
 
-    hits = list(checks_for(src))
-    for cid, label, fn in STRUCTURAL:
-        try:
-            fired = fn(src)
-        except Exception:
-            fired = False          # never break a write on a parser bug
-        if fired:
-            hits.append("%s (%s)" % (cid, label))
+    hits = all_hits(src)
     if not hits:
         return
 
@@ -325,7 +477,8 @@ def main():
                 "terminates the process with `<Ens>ErrBPTerminated ... ERROR #5003: Not implemented`. "
                 "The circuit can still deliver, so end-to-end tests pass and the only evidence is in "
                 "the Event Log. Either override OnResponse, or use EnsLib.MsgRouter.RoutingEngine, "
-                "which has nothing to implement.")
+                "which has nothing to implement. This one is NOT only advisory: if it is still "
+                "true when you stop, the Stop gate blocks (#331).")
     if any(h.startswith("CR-1 ") for h in hits):
         msg += (" CR-1 specifically: a hand BP is not just less idiomatic — it obliges you to "
                 "implement OnResponse, and without it SendRequestAsync terminates the process with "

@@ -132,7 +132,11 @@ def stop(tpath, cwd, **extra):
         return "CRASH: " + (p.stderr.strip().splitlines()[-1][:120] if p.stderr.strip() else "rc")
     if not p.stdout.strip():
         return "ALLOW"
-    return "BLOCK/orphan" if "CR-12" in p.stdout else "BLOCK/no-review"
+    if "IIS-STOP-CR12" in p.stdout:
+        return "BLOCK/orphan"
+    if "IIS-STOP-CR15" in p.stdout:
+        return "BLOCK/cr15"
+    return "BLOCK/no-review"
 
 
 def clear(t):
@@ -430,7 +434,10 @@ _SEND = '    Set tSC = ..SendRequestAsync("BO.Target", tReq)\n'
 _ONRESP = "Method OnResponse(request, ByRef response, callrequest, callresponse, pCompletionKey) As %Status\n{\n    Quit $$$OK\n}\n"
 
 def _cr(src, cid):
-    return any(h.startswith(cid + " ") for h in _cp.checks_for(src))
+    # all_hits, not checks_for: CR-15 moved from CHECKS to STRUCTURAL when it was escalated
+    # (#331), and reading only checks_for would have turned these six cases into no-ops that
+    # still printed "ok". all_hits is what main() itself calls.
+    return any(h.startswith(cid + " ") for h in _cp.all_hits(src))
 
 
 print("\n#332  CR-15 fires on a hand BP with SendRequestAsync and no OnResponse")
@@ -461,6 +468,169 @@ for _label, _src, _want in [
      + "Method OnRequest(request, ByRef response) As %Status\n{\n" + _SEND + "    Quit $$$OK\n}\n}", True),
 ]:
     check(_label, _want, _cr(_src, "CR-15"))
+
+# --------------------------------------------------------------------------------------
+print("\n#331  pResponseRequired is read PER CALL SITE, because CR-15 now blocks")
+print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
+
+# CR-15 was two regexes while it was advisory. Escalating it to the Stop gate made one
+# question load-bearing: `SendRequestAsync`'s signature is `pResponseRequired:%Boolean=1`, so
+# passing 0 is a legal fire-and-forget call that never invokes OnResponse. Measured on IRIS
+# for Health 2026.1, three hand BPs in one production, one message each:
+#
+#   pResponseRequired   OnResponse   Event Log                             reached the BO
+#   default (1)         absent       ERROR #5003 / <Ens>ErrBPTerminated    yes
+#   explicit 0          absent       clean                                 yes
+#   default (1)         present      clean                                 yes
+#
+# Row 2 is a class a regex would have BLOCKED. And the file-level escape a regex would need
+# ("a 0 appears in a SendRequestAsync call") is satisfied by one such call in a class that also
+# makes a default one -- the "0 AND a default call" row below, which is a real defect that a
+# file-level escape would have waved through. Per call site, neither error is necessary.
+#
+# COVERAGE: these are text judgements about one file. Two rows are pinned to a live
+# measurement (marked MEASURED); the rest are constructed shapes, and none of them is evidence
+# about how often the criterion fires in real work.
+
+def _hbp(body, extra=""):
+    return "Class Demo.BP.X Extends Ens.BusinessProcess%s\n{\n%s\n}\n" % (extra, body)
+
+_MT = "Method OnRequest(r As Ens.Request, Output p As Ens.Response) As %Status\n{\n@BODY@\n}"
+
+def _M(body):
+    return _MT.replace("@BODY@", body)
+
+for _label, _src, _want in [
+    ("MEASURED: default third arg -> #5003",
+     _hbp(_M(' Quit ..SendRequestAsync("BO.Sink", r)')), "provable"),
+    ("MEASURED: explicit 0 -> clean, must not block",
+     _hbp(_M(' Quit ..SendRequestAsync("BO.Sink", r, 0)')), "clear"),
+    ("explicit 1",
+     _hbp(_M(' Quit ..SendRequestAsync("BO.Sink", r, 1)')), "provable"),
+    # `f(a, b, , k)` elides the third argument, which means the default, which is 1.
+    ("elided third arg is still the default",
+     _hbp(_M(' Quit ..SendRequestAsync("BO.Sink", r, , "key")')), "provable"),
+    # The row a file-level `none_of` regex gets WRONG: one exempt call does not exempt the file.
+    ("0 AND a default call in one class",
+     _hbp(_M(' Do ..SendRequestAsync("A", r, 0)\n Quit ..SendRequestAsync("B", r)')), "provable"),
+    # Undecidable from this file -> advisory, never a block.
+    ("variable third arg is not decidable",
+     _hbp(_M(' Quit ..SendRequestAsync("A", r, tNeedReply)')), "possible"),
+    ("macro third arg is not decidable",
+     _hbp(_M(' Quit ..SendRequestAsync("A", r, ..#WANTREPLY)')), "possible"),
+    ("OnResponse present",
+     _hbp((_M(' Quit ..SendRequestAsync("A", r)')) + "\n" + _ONRESP), "clear"),
+    # An Abstract class is never a production item, so it cannot fail at run time. The blind
+    # spot this leaves (a concrete subclass extends the BASE, so it never matches HAND_BP) is
+    # written down in cr15_verdict's docstring rather than papered over.
+    ("Abstract base is never instantiated",
+     _hbp(_M(' Quit ..SendRequestAsync("A", r)'), extra=" [ Abstract ]"), "clear"),
+    ("no SendRequestAsync at all", _hbp(_M(" Quit $$$OK")), "clear"),
+    ("a BPL generates its own OnResponse",
+     "Class Demo.BP.F Extends Ens.BusinessProcessBPL\n{\nXData BPL {}\n}", "clear"),
+    # The parser, in the two ways ObjectScript breaks a naive comma split.
+    ("a comma inside a quoted argument",
+     _hbp(_M(' Quit ..SendRequestAsync("A,B", r, 0)')), "clear"),
+    # `[` is the CONTAINS operator, not a bracket: counting it would unbalance the call.
+    ("the contains operator inside an argument",
+     _hbp(_M(' Quit ..SendRequestAsync($Select(r.Body [ "x":"A",1:"B"), r, 0)')), "clear"),
+    ("a nested call whose own arg is 0",
+     _hbp(_M(' Quit ..SendRequestAsync("A", ..Build(r, 0))')), "provable"),
+]:
+    check(_label, _want, _cp.cr15_verdict(_src))
+
+# An unbalanced call must read as "unknown", never as "no arguments" -- which would make it
+# provable, i.e. would turn a parse failure into a block.
+check("an unbalanced call is unknown, not provable", "possible",
+      _cp.cr15_verdict(_hbp(' Quit ..SendRequestAsync("A", r')))
+check("_call_args signals None when unbalanced", True, _cp._call_args('f(a, b', 1) is None)
+# positive control for the line above: the same parser on a BALANCED call returns the args,
+# so "is None" is reading a real distinction rather than a function that always fails.
+check("_call_args splits a balanced call", "a|b",
+      "|".join(a.strip() for a in (_cp._call_args('f(a, b)', 1) or [])))
+
+# --------------------------------------------------------------------------------------
+print("\n#331  the Stop gate BLOCKS on a provable CR-15, and only on a provable one")
+print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
+
+# The escalation itself. An advisory PostToolUse warning was measured being read,
+# acknowledged and stepped over (#331: two flagged classes shipped, 16 ErrBPTerminated in the
+# resulting production), so the criterion needs a check at the moment work is declared done.
+#
+# COVERAGE: this proves the branch fires, latches, and prefers the file on disk. It does not
+# prove a model obeys it -- that needs the eval pass in #102, same as CR-12.
+
+_w15 = tempfile.mkdtemp()
+os.makedirs(os.path.join(_w15, "src", "Demo", "BP"), exist_ok=True)
+
+def _write15(name, src):
+    fp = os.path.join(_w15, "src", "Demo", "BP", name + ".cls")
+    with open(fp, "w") as fh:
+        fh.write(src)
+    return fp
+
+_BAD = "Class Demo.BP.Bad Extends Ens.BusinessProcess\n{\n" + (_M(' Quit ..SendRequestAsync("BO.S", r)')) + "\n}\n"
+_GOOD = "Class Demo.BP.Good Extends Ens.BusinessProcess\n{\n" + (_M(' Quit ..SendRequestAsync("BO.S", r)')) + "\n" + _ONRESP + "}\n"
+_FIRE = "Class Demo.BP.Fire Extends Ens.BusinessProcess\n{\n" + (_M(' Quit ..SendRequestAsync("BO.S", r, 0)')) + "\n}\n"
+
+_write15("Bad", _BAD)
+_write15("Good", _GOOD)
+_write15("Fire", _FIRE)
+
+def _put15(cls, body):
+    return {"mode": "put", "name": cls + ".cls", "content": body}
+
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Bad", _BAD))])
+clear(_t)
+check("provable CR-15 blocks", "BLOCK/cr15", stop(_t, _w15))
+check("same offender next turn is latched", "ALLOW", stop(_t, _w15))
+
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Good", _GOOD))])
+clear(_t)
+check("OnResponse present -> not the CR-15 branch", "BLOCK/no-review", stop(_t, _w15))
+
+# The whole reason for the call-site analysis: this class is CORRECT and must not be blocked.
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Fire", _FIRE))])
+clear(_t)
+check("pResponseRequired=0 must not block", "BLOCK/no-review", stop(_t, _w15))
+
+# A reviewed session is not exempt: CR-15 is a proof, not a nudge, so it outranks the review.
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Bad", _BAD)),
+                 rec(-200, "Agent", {"subagent_type": "iris-interop-skills:conformance-reviewer"})])
+clear(_t)
+check("a review does not excuse a provable CR-15", "BLOCK/cr15", stop(_t, _w15))
+
+# SOURCE SELECTION, both directions. The file on disk wins over the content that was put --
+# otherwise fixing the file and not re-putting it leaves a demand that cannot be satisfied.
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Good", _BAD.replace("Demo.BP.Bad", "Demo.BP.Good")))])
+clear(_t)
+check("disk (fixed) beats put content (broken)", "BLOCK/no-review", stop(_t, _w15))
+
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Bad", _GOOD.replace("Demo.BP.Good", "Demo.BP.Bad")))])
+clear(_t)
+check("disk (broken) beats put content (fixed)", "BLOCK/cr15", stop(_t, _w15))
+
+# CR-12 is a precondition, not a peer: a class with no file cannot be read, so the orphan
+# branch must come first rather than this one guessing from the namespace copy.
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Nowhere", _BAD.replace("Demo.BP.Bad", "Demo.BP.Nowhere")))])
+clear(_t)
+check("an orphan is CR-12 first, not CR-15", "BLOCK/orphan", stop(_t, _w15))
+
+# ---- the reason text ----
+# Same reasoning as #169: no grep can express "does not hand the agent a one-character
+# bypass", so the pin is on the exact strings. pResponseRequired=0 IS a documented exemption
+# (conformance-review/SKILL.md), and it must NOT appear here: naming it in a denial turns a
+# semantic decision -- request/reply vs fire-and-forget -- into the cheapest way out.
+_t = transcript([rec(-300, "iris_doc", _put15("Demo.BP.Bad", _BAD))])
+clear(_t)
+_r15 = stop_reason(_t, _w15)
+check("positive control — the CR-15 branch fired", True, _r15.startswith("[IIS-STOP-CR15] CR-15"))
+check("names the offending class", True, "Demo.BP.Bad" in _r15)
+check("names the runtime failure, not the criterion", True, "ERROR #5003: Not implemented" in _r15)
+check("names the OnResponse override as the fix", True, "Method OnResponse(request As Ens.Request" in _r15)
+check("names the RoutingEngine alternative", True, "EnsLib.MsgRouter.RoutingEngine" in _r15)
+check("says why a green flow proves nothing", True, "the data arrives" in _r15)
+check("does NOT hand over pResponseRequired=0", False, "pResponseRequired=0" in _r15)
 
 print("\n#331  a comment can no longer TRIGGER a criterion either")
 print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
