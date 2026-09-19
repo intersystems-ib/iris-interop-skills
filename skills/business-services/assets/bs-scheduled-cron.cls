@@ -27,6 +27,10 @@
 Class Demo.BS.NightlyExtract Extends Ens.BusinessService
 {
 
+Parameter SETTINGS = "TargetConfigNames:Basic";
+
+Property TargetConfigNames As %String(MAXLEN = 1000);
+
 /// The link to the adapter. A typo here is silent.
 Parameter ADAPTER = "Demo.ADP.SchedulerAdapter";
 
@@ -38,7 +42,7 @@ Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %Registered
     Set tReq.EventType = "NEW"
 
     // Async: a scheduled service should not hold the poll open waiting for downstream work.
-    Quit ..SendRequestAsync("Router.Censo", tReq)
+    Quit ..SendRequestAsync(..TargetConfigNames, tReq)
 }
 
 }
