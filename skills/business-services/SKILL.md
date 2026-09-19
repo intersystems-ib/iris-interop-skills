@@ -204,9 +204,14 @@ validator accepts, fixed-width, building one programmatically, generating the `.
 class, testing the parser, and FTP/FTPS — is in
 [references/recordmap.md](references/recordmap.md).
 
-## REST inbound
+## REST inbound — three routes, and they are not interchangeable
 
-See [references/rest-csp.md](references/rest-csp.md).
+- **The adapter's own port** (`EnsLib.HTTP.InboundAdapter`) and **a hand-written `%CSP.REST`
+  dispatcher**: [references/rest-csp.md](references/rest-csp.md).
+- **Spec-first** — one Swagger 2.0 document generates the dispatcher and an implementation stub:
+  [references/rest-spec-first.md](references/rest-spec-first.md). Before you start: the key must be
+  `swagger: "2.0"`; an OpenAPI **3.0** document compiles **clean and generates nothing**, so check
+  `.disp` and `.impl` exist rather than trusting the compile.
 
 ## Testing / how to verify
 
