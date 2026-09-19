@@ -156,40 +156,6 @@ Prefer Async unless there is a specific reason to wait. Sync ties up a BS pool s
 
 `TargetConfigNames` is a **comma-separated list of component names** (typically the Message Router or directly a BO). Best practice: each BS has its own dedicated Message Router as target — don't share routers across services. Keeps routing logic isolated and traceable.
 
-## OnInit settings validation
-
-`OnInit()` runs once when the production starts the BS. Use it to fail loud on misconfiguration —
-but hand control to the base class first:
-
-```objectscript
-Method OnInit() As %Status
-{
-    Set tSC = ##super()                 // MANDATORY on a prebuilt EnsLib.* service
-    Quit:$$$ISERR(tSC) tSC
-
-    If ..TargetConfigNames="" Quit $$$ERROR($$$EnsErrGeneral,"TargetConfigNames is required")
-    If ..RequiredField="" Quit $$$ERROR($$$EnsErrGeneral,"RequiredField is required")
-    Quit $$$OK
-}
-```
-
-The user-stated principle: a BS that needs a setting should refuse to start if the setting is missing, not silently swallow nulls and fail at first message.
-
-> **`OnInit()` without `##super()` on a prebuilt service — silent, and it destroys the input.**
-> Symptom: the BS picks the file up and deletes it, **0 messages, 0 Event Log entries, component
-> green in the Portal**. There is no error text anywhere; that is the whole difficulty. The base
-> `OnInit` is the only place the parser state is initialised — verified on IRIS for Health 2026.1,
-> `EnsLib.RecordMap.Service.Base` declares both `OnInit` and `recordMapFull`, and
-> `EnsLib.HL7.Service.Standard` declares both `OnInit` and `%Parser`.
->
-> Applies to subclasses of **prebuilt** `EnsLib.*.Service.*` and `EnsLib.*.Operation.*`. A direct
-> subclass of `Ens.BusinessService` that declares `Parameter ADAPTER` has **no** such obligation —
-> its inherited `OnInit()` does nothing by default (ESQL §6.5 "Initializing the Adapter"), so
-> `##super()` there adds nothing.
->
-> Put `##super()` FIRST rather than `Quit ##super()` last: the validation then runs against a fully
-> initialised host, and the base `%Status` is propagated instead of discarded.
-
 ## Common pitfalls
 
 - **`##class(Pkg.BS.X).%New()` to test the service directly** → a BS does not instantiate. `Ens.BusinessService` declares no `%New`; a subclass returns `""`, and the error surfaces a line later as `<INVALID OREF>`. See `tdd` §"Pitfalls specific to Interop TDD".
@@ -197,7 +163,7 @@ The user-stated principle: a BS that needs a setting should refuse to start if t
 - **Hand-rolled CSV parser** → use Record Mapper. Hand-rolled parsing fails on quoted fields, embedded delimiters, encoding edge cases.
 - **Sending Sync when Async would do** → blocks pool slots, kills throughput.
 - **Skipping `OnInit` validation** → bugs surface at first message instead of at production start.
-- **An `OnInit()` override on a prebuilt `EnsLib.*` service that never calls `##super()`** → the base class never initialises the parser (`..recordMapFull`, `..%Parser`), so the service starts green, eats and deletes its input, and emits nothing at all — no message, no Event Log entry, no error. See §"OnInit settings validation". Not applicable to a plain `Ens.BusinessService` + `Parameter ADAPTER` subclass.
+- **An `OnInit()` override on a prebuilt `EnsLib.*` service that never calls `##super()`** → the base class never initialises the parser (`..recordMapFull`, `..%Parser`), so the service starts green, eats and deletes its input, and emits nothing at all — no message, no Event Log entry, no error. See [references/oninit-validation.md](references/oninit-validation.md). Not applicable to a plain `Ens.BusinessService` + `Parameter ADAPTER` subclass.
 - **Multiple targets in one chain** → if you fan out to multiple operations, route through a Message Router; don't list them in `TargetConfigNames` for orchestration.
 - **Pool size of 1 for high-volume sources** → set Pool Size to expected concurrency. (Default `PoolSize=1` is correct for everything until you measure a bottleneck — don't raise it preemptively.)
 - **Diagnosing an FTPS `Unexpected SSL EOF` as a TLS problem** → it is often a failed `LIST *.csv` against a server that doesn't glob. Set `MLSD=1` — and then rewrite `FileSpec` as a regex (see the FTPS section below).
@@ -208,20 +174,15 @@ The user-stated principle: a BS that needs a setting should refuse to start if t
 A delimited or fixed-width file intake is a **RecordMap**, never a hand-written parser
 (that is conformance criterion CR-2).
 
-**`fieldSeparator` is the trap that costs the most attempts, and its error names the wrong thing.**
-For `type="delimited"` the attribute must be **absent**. Writing the obvious `fieldSeparator=","`
-gives:
+**A broken RecordMap compiles CLEAN.** Every wrong shape in this section compiles with zero errors;
+the error comes only from `EnsLib.RecordMap.Generator.GenerateObject`. Generate before you trust a
+green compile.
 
-```
-ERROR <EnsRecordMap>ErrInvalidRecordProp: Invalid value for property 'fieldSeparator' in Record of type delimited
-```
-
-That reads as *"your value is malformed"* and actually means *"this property must not be set for
-this type at all"*.
-
-**The class compiles CLEAN with it** — measured both ways, the error comes only from
-`GenerateObject`, never the compiler. A green compile is not evidence the map is valid. The separator goes in `<Separators>`, one `<Separator>` per nesting level —
-one element for a flat CSV. Minimum correct shape, copy this:
+For `type="delimited"` the `fieldSeparator` attribute must be **absent** — the separator goes in
+`<Separators>`, one `<Separator>` per nesting level, one element for a flat CSV. Writing
+`fieldSeparator=","` gives `<EnsRecordMap>ErrInvalidRecordProp: Invalid value for property
+'fieldSeparator'`, which reads as *"your value is malformed"* and means *"this property must not be
+set for this type at all"*. Minimum correct shape:
 
 ```xml
 <Record xmlns="http://www.intersystems.com/Ensemble/RecordMap"
@@ -234,11 +195,33 @@ one element for a flat CSV. Minimum correct shape, copy this:
 </Record>
 ```
 
+**That `xmlns` on `<Record>` is the failure that actually stops a build here, and only one URI
+works.** `http://www.intersystems.com/Ensemble/RecordMap` is the `NAMESPACE` parameter on all eleven
+`EnsLib.RecordMap.Model.*` classes; `http://www.intersystems.com/recordmap` is **not** accepted on the
+element. A wrong URI leaves every child unresolved, and the parser reports whichever child it reaches
+first — so one defect wears three faces and only one of them says "namespace":
+
+| wrong URI on `<Record>`, and… | error |
+|---|---|
+| `<Separators>` is the first child | `#6237 Unexpected tag in XML input: Separators` |
+| `<Field>` is the first child | `#6235 Unexpected namespace for tag: Field` |
+| nothing resolved, so the collection is empty | `#5661 Collection property 'Separators' is required` |
+
+`#6235` blames `Field` when the field definitions are fine. Two things make it cheap to fix, both
+measured on 2026.1:
+
+- **Omitting `xmlns` altogether generates fine**, with or without the header. If you cannot recall
+  the URI, leave the attribute out; a *wrong* one fails, a *missing* one does not.
+- **The `XData RecordMap [ XMLNamespace = "…" ]` bracket is inert.** A wrong URI there generates
+  clean, and a bracket that *matches* a wrong element URI still fails. When the error mentions a
+  namespace, the bracket is not the thing to compare.
+
 Five more, each of which costs a compile:
 
 | What gets written | What the schema wants |
 |---|---|
 | `fieldSeparator=","` or `separator=","` | omit it entirely; use `<Separators>` |
+| `type="fixedWidth"` | `fixedwidth`, all lowercase — the `VALUELIST` is `,delimited,fixedwidth`; camelCase gives `#6260 Datatype validation failed for attribute, type` |
 | `<Field type="%String"/>` | `datatype="%String"` |
 | `<Field>` outside `<Record>` | every `<Field>` nested inside `<Record>`; a `<Record>` with none fails `#5661 Collection property '…Record::Contents' is required` |
 | `<RecordMap>` as the root element | the root element is `<Record>` |
@@ -479,6 +462,12 @@ None of it is needed for a standard file, HL7 or REST intake.
 
 Cheat-sheet moved to [references/sql-dialect.md](references/sql-dialect.md) — it is a SQL
 topic, not an inbound-service one.
+
+## Failing loud on misconfiguration
+
+Validating settings in `OnInit()` so a bad configuration fails at production start:
+[references/oninit-validation.md](references/oninit-validation.md). A hardening pattern —
+not needed to get an intake working.
 
 ## See also
 

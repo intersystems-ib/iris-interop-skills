@@ -116,15 +116,29 @@ map's own name (`MyApp.RecordMap.Censo` → `MyApp.RecordMap.Censo.Record`), or 
 (`MyApp.RecordMap.Invoice` → `MyApp.Record.Invoice`). `name` is the record's identifier; it commonly
 mirrors either the map class or `targetClassname`.
 
-**On `xmlns`**: the `XMLNamespace` on the `XData` header is what matters. Repeating it as
-`xmlns=` on `<Record>` is optional — hand-written maps routinely omit it and generate fine, and
-the generator adds it when it rewrites the block, which is why classes read back from IRIS show
-it. Both `http://www.intersystems.com/recordmap` and
-`http://www.intersystems.com/Ensemble/RecordMap` are accepted.
+**On `xmlns`** — measured on 2026.1 through `GenerateObject`, and the earlier text here had it
+backwards. The `xmlns` on the **`<Record>` element** is what matters; the `XData` header bracket is
+**inert**.
+
+| element `xmlns` | `XData` bracket | generates |
+|---|---|---|
+| `…/Ensemble/RecordMap` | same | **yes** |
+| *omitted* | either, or absent entirely | **yes** |
+| `…/Ensemble/RecordMap` | `…/recordmap` (mismatched) | **yes** — the bracket is inert |
+| `…/recordmap` | `…/recordmap` (matched) | **no** — `#6237` / `#6235` |
+
+So: `http://www.intersystems.com/Ensemble/RecordMap` is the only URI accepted **on the element** — it
+is the `NAMESPACE` parameter on all eleven `EnsLib.RecordMap.Model.*` classes. Omitting `xmlns`
+generates fine, so when in doubt leave it out. `http://www.intersystems.com/recordmap` is accepted
+only in the bracket, where nothing is checked — which is why "both are accepted" looked true: it was
+only ever tried in the position that cannot fail.
 
 ### Fixed-width instead of delimited
 
-`type="fixedWidth"` — **camelCase**. No `<Separators>`; every `<Field>` carries `position` (1-based,
+`type="fixedwidth"` — **all lowercase**, matching the `VALUELIST` `,delimited,fixedwidth` on
+`EnsLib.RecordMap.Model.DataType.RecordType`. `fixedWidth` gives `#6260 Datatype validation failed
+for attribute, type` (measured; this file previously asserted camelCase). No `<Separators>`; every
+`<Field>` carries `position` (1-based,
 absolute within the record) and `width`. A production-shaped invoice record — absolute offsets, a
 600-char line, a trailing `FILLER` — with identifiers genericised:
 
@@ -132,9 +146,9 @@ absolute within the record) and `width`. A production-shaped invoice record — 
 Class MyApp.RecordMap.Invoice Extends EnsLib.RecordMap.RecordMap
 {
 
-XData RecordMap [ XMLNamespace = "http://www.intersystems.com/recordmap" ]
+XData RecordMap [ XMLNamespace = "http://www.intersystems.com/Ensemble/RecordMap" ]
 {
-<Record name="MyApp.Record.Invoice" type="fixedWidth" recordTerminator="&#10;" targetClassname="MyApp.Record.Invoice">
+<Record name="MyApp.Record.Invoice" type="fixedwidth" recordTerminator="&#10;" targetClassname="MyApp.Record.Invoice">
   <Field name="TipoReg"       datatype="%String" position="1"   width="3"  />
   <Field name="NumFactura"    datatype="%String" position="4"   width="15" />
   <Field name="NumAlbaran"    datatype="%String" position="19"  width="15" />
