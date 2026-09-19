@@ -197,6 +197,8 @@ its siblings.
 | §11.5 | OAuth 2.0 + LDAP server-side broker — a **subclass** of `%OAuth2.Server.Validate` | `ch11_security/oauth2-server-validate-ldap.cls` |
 | §11.7 | SSL/TLS trusted CA chain build (`openssl s_client -servername`) ⚠️ | `ch11_security/ssl-trusted-ca-chain.sh` |
 | §11.13 | Executable check for §11.7 step 1 — `VerifyPeer` via a `New $Namespace` hop to `%SYS` | `ch11_security/ssl-config-verifypeer-assert.cls` |
+| §11.14 | Client-side PKCE: IRIS's only PKCE method is Private, so verifier and base64url challenge are yours | `ch11_security/oauth2-client-pkce.cls` |
+| §11.14 | Oracle: a cross-checked digest vector, the three illegal Base64 characters, and the challenge/verifier mix-up | `ch11_security/tdd-oauth2-client-pkce.cls` |
 | §11.13 | Oracle: every verdict, the live read, and what dropping `New $Namespace` costs | `ch11_security/tdd-ssl-verifypeer.cls` |
 | §12.6 | Resend vs edit-and-resend — clone the body first, or the original message is rewritten | `ch12_monitoring/resend-edit-and-resend.cls` |
 | §12.6 | Oracle: two headers over one body row, and an edit visible through the original | `ch12_monitoring/tdd-resend-edit-and-resend.cls` |

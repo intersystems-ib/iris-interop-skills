@@ -88,6 +88,17 @@ Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch11_security/oaut
 
 Authorization Code + PKCE — never `client_credentials` or implicit. See `fhir` for the FHIR Façade context.
 
+> **Two things that sentence leaves out.** (1) **IRIS's only PKCE method is Private.**
+> `%SYS.OAuth2.Authorization` has 16 methods; exactly one is named for PKCE — `MakeCodeVerifier()` — and
+> calling it from your code raises `<PRIVATE METHOD>`. No public method there takes a challenge or a
+> verifier, so you generate the verifier and compute `base64url(SHA256(verifier))` **unpadded** yourself,
+> and pass `code_challenge` / `code_challenge_method` through the `&properties` array that
+> `GetAuthorizationCodeEndpoint` and `MakeAuthorizationCodeURL` both accept. Plain `Base64Encode` is wrong
+> three ways: `+`, `/` and `=` are all illegal in a `code_challenge`.
+> (2) **A server that never verifies the challenge still issues a token** — the flow completes, a token
+> comes back, and the protection is absent. PKCE is a proof the *server* checks; confirm it is required
+> and verified there. See deliverable §11.14 and `examples/ch11_security/oauth2-client-pkce.cls`.
+
 ## SSL/TLS — build the trusted CA chain
 
 To enforce strict server-certificate validation on an IRIS client SSL configuration:
