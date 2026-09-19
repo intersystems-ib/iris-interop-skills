@@ -237,5 +237,24 @@
     "ch07_alerting/bo-fail-on-demand.cls",
     "ch11_security/saml2-invoke-request.cls",
     "ch11_security/ssl-config-verifypeer-assert.cls"
+  ],
+  "_casing_comment": "Prose-vs-quoted-literal casing collisions. C21 ratchets this: a NEW pair fails, a drop only prints. Most recorded entries are noise (`ADAPTER` vs `Adapter`); the point is that a new one gets looked at, which is when content is promoted out of references/. Computed by casing_collisions(), the same function C21 calls.",
+  "casing_collisions": [
+    "BestPractices/BestPractices_Interop_IRIS.md :: prose `ADAPTER` vs literal \"Adapter\"",
+    "BestPractices/BestPractices_Interop_IRIS.md :: prose `Batch` vs literal \"batch\"",
+    "BestPractices/BestPractices_Interop_IRIS.md :: prose `PatientId` vs literal \"PatientID\"",
+    "BestPractices/BestPractices_Interop_IRIS.md :: prose `String` vs literal \"STRING\"",
+    "BestPractices/BestPractices_Interop_IRIS.md :: prose `adapter` vs literal \"Adapter\"",
+    "BestPractices/BestPractices_Interop_IRIS.md :: prose `escape` vs literal \"ESCAPE\"",
+    "BestPractices/COVERAGE-MAP.md :: prose `ADAPTER` vs literal \"Adapter\"",
+    "BestPractices/COVERAGE-MAP.md :: prose `Table` vs literal \"table\"",
+    "BestPractices/COVERAGE-MAP.md :: prose `adapter` vs literal \"Adapter\"",
+    "skills/business-services/SKILL.md :: prose `fixedwidth` vs literal \"fixedWidth\"",
+    "skills/business-services/references/recordmap.md :: prose `Quote` vs literal \"quote\"",
+    "skills/business-services/references/recordmap.md :: prose `fixedWidth` vs literal \"fixedwidth\"",
+    "skills/business-services/references/rest-csp.md :: prose `preauth` vs literal \"Preauth\"",
+    "skills/conformance-review/SKILL.md :: prose `password` vs literal \"Password\"",
+    "skills/messages/SKILL.md :: prose `String` vs literal \"STRING\"",
+    "skills/soap-bo/SKILL.md :: prose `ADAPTER` vs literal \"Adapter\""
   ]
 }

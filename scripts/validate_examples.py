@@ -782,6 +782,33 @@ def tier1() -> bool:
         r.check("C20-control", "the tdd-/fixture exemption still matches files",
                 ["matched 0 -- the naming convention changed and C20 is now measuring the test tier"])
 
+    # ── C21 ───────────────────────────────────────────────────────────────────────────────
+    # See casing_collisions() for why the authoritative side is narrow and why this is a ratchet.
+    collisions = casing_collisions()
+    recorded_cc = _bl.get("casing_collisions")
+    grew_cc = []
+    if recorded_cc is None:
+        grew_cc.append("no `casing_collisions` list in examples_baseline.json, so this ratchet is "
+                       "measuring nothing -- run --update-baseline after a green gate")
+    else:
+        fresh_cc = [c for c in collisions if c not in set(recorded_cc)]
+        if fresh_cc:
+            grew_cc.append(
+                f"{len(collisions)} prose-vs-literal casing collision(s), baseline "
+                f"{len(recorded_cc)} -- {len(fresh_cc)} new. A quoted code literal in the same file "
+                f"contradicts the prose: check which spelling IRIS accepts before assuming the prose "
+                f"is right, then fix it or re-record deliberately.")
+            grew_cc += [f"    NEW: {c}" for c in fresh_cc[:8]]
+    r.check("C21", "no new prose claim contradicts a code literal quoted in the same file (ratchet)",
+            grew_cc)
+    if recorded_cc is not None and len(collisions) < len(recorded_cc):
+        print(f"          note: casing collisions down to {len(collisions)} from {len(recorded_cc)} "
+              f"-- progress; re-record with --update-baseline")
+    # A detector that matches nothing at all reports "ok" forever. It found 16 when written.
+    if not collisions:
+        r.check("C21-control", "the casing detector still matches something",
+                ["matched 0 -- the enum/equality regexes no longer fire, so C21 is inert"])
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
@@ -1582,6 +1609,61 @@ def update_external_baseline() -> None:
           f"{len(dangling)} known dangling item ref(s) -> {EXTERNAL_BASELINE.name}")
 
 
+# ── C21 support ────────────────────────────────────────────────────────────────────────────
+# A prose assertion that contradicts a code literal quoted in the SAME file. Born from a real
+# defect: `references/recordmap.md` quoted the IRIS validator as `fixedwidth` on line 93 and
+# then asserted `type="fixedWidth"` -- **camelCase** on line 127, with the broken spelling in
+# its own example. It cited the authority thirty lines before contradicting it, and nothing
+# noticed for the file's whole life.
+#
+# THE AUTHORITATIVE SIDE IS NARROW ON PURPOSE. Only a literal in an ENUMERATION or EQUALITY
+# position counts -- a VALUELIST/DISPLAYLIST member, or `= "literal"`. Those are where IRIS
+# states its legal value set. Measured: every quoted string in every fence gives 36 hits of
+# which ~34 are noise (`ADAPTER` vs `Adapter`, `String` vs `STRING` -- genuinely different
+# things); restricting to enum/equality gives 16.
+#
+# STILL A RATCHET, NOT AN EQUALITY, because 16 is mostly noise too and this check cannot tell
+# "names the wrong form to warn you" from "asserts the wrong form" -- the corrected
+# recordmap.md trips it deliberately. What it catches is a NEW collision, which is worth a
+# look precisely when content is being promoted from references/ into a skill body.
+#
+# WHAT IT DOES NOT CATCH: the namespace defect found in the same file the same night. That one
+# needed a live GenerateObject run. This check is for the class of claim that is refutable from
+# the file's own contents, and for no other.
+_C21_FENCE = re.compile(r"```.*?```", re.S)
+_C21_VALLIST = re.compile(r'(?:VALUELIST|DISPLAYLIST)\s*=\s*"([^"]+)"')
+_C21_EQ = re.compile(r'[=\[]\s*"([A-Za-z][A-Za-z0-9_.%]{4,})"')
+_C21_TICK = re.compile(r'`([^`\n]{1,120})`')
+_C21_IDENT = re.compile(r'[A-Za-z][A-Za-z0-9_.%]{4,}')
+
+
+def casing_collisions() -> list[str]:
+    """ONE function, called by C21 and by --update-baseline both, so the check and its baseline
+    can never be computed two different ways."""
+    out = []
+    for path in skill_markdown() + sorted(REPO.glob("BestPractices/*.md")):
+        src = read(path)
+        fences = _C21_FENCE.findall(src)
+        prose = _C21_FENCE.sub(" ", src)
+        auth: set[str] = set()
+        for blob in fences + [s for s in _C21_TICK.findall(prose) if '"' in s]:
+            for vl in _C21_VALLIST.findall(blob):
+                auth |= {tok for tok in vl.split(",") if len(tok) >= 5}
+            auth |= {m for m in _C21_EQ.findall(blob) if len(m) >= 5}
+        prose_toks: set[str] = set()
+        for span in _C21_TICK.findall(prose):
+            prose_toks |= {m for m in _C21_IDENT.findall(span) if len(m) >= 5}
+        by_lower: dict[str, set[str]] = {}
+        for a in auth:
+            by_lower.setdefault(a.lower(), set()).add(a)
+        rel = path.relative_to(REPO).as_posix()
+        for tok in prose_toks:
+            for variant in by_lower.get(tok.lower(), set()):
+                if variant != tok:
+                    out.append(f"{rel} :: prose `{tok}` vs literal \"{variant}\"")
+    return sorted(set(out))
+
+
 def update_baseline() -> None:
     sources = []
     for f in artefacts():
@@ -1594,6 +1676,7 @@ def update_baseline() -> None:
     for f in skill_assets():
         sources += class_names(read(f))
     unpointed = unpointed_subjects()
+    casing = casing_collisions()
     BASELINE.write_text(json.dumps({
         "_comment": "Classes expected to compile clean. Any of these failing is a "
                     "regression and fails the build. Update only with a verified run.",
@@ -1605,9 +1688,15 @@ def update_baseline() -> None:
                               "rather than the first eight of the existing debt. Computed by "
                               "unpointed_subjects(), the same function C20 calls.",
         "unpointed_subjects": unpointed,
+        "_casing_comment": "Prose-vs-quoted-literal casing collisions. C21 ratchets this: a NEW "
+                           "pair fails, a drop only prints. Most recorded entries are noise "
+                           "(`ADAPTER` vs `Adapter`); the point is that a new one gets looked at, "
+                           "which is when content is promoted out of references/. Computed by "
+                           "casing_collisions(), the same function C21 calls.",
+        "casing_collisions": casing,
     }, indent=2) + "\n", encoding="utf-8")
     print(f"baseline recorded: {len(sources)} classes, {len(unpointed)} unreachable subject "
-          f"example(s) -> {BASELINE.name}")
+          f"example(s), {len(casing)} casing collision(s) -> {BASELINE.name}")
 
 
 def main() -> int:
