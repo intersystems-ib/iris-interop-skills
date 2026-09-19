@@ -1980,6 +1980,69 @@ That is what decides where the aggregation step can live at all.
   `examples/ch05_bpl_dtl/utl-bpl-sync-audit.cls`,
   `examples/ch05_bpl_dtl/tdd-bpl-sync-audit.cls`
 
+### 5.24 A message carrying the same data twice: fill both, and never read the collection as a scalar
+
+A modern producer sends a typed collection; an older consumer still reads a delimited string. The message
+ends up carrying both, and a transform is the only thing keeping them in step. Three measured failures sit
+on that path, in increasing order of how much they cost.
+
+**One: the unfilled side is silently empty.** Fill only `SupplyList`, save, read the legacy property:
+
+| read | value |
+|---|---|
+| `msg.Supplies` | `""`, length 0 — no error, no log entry |
+| `msg.SupplyList.Count()` | `2` — the data is there, on the other property |
+
+So a legacy Business Operation doing `$Piece(msg.Supplies, "|", 1)` gets an empty field and carries on.
+
+**Two, and worse: the collection read as a scalar is not empty.** A consumer that reaches for the typed
+property as if it were the string gets an **OREF**:
+
+```
+$Piece(msg.SupplyList, "|", 1)   ->   41@%Collection.ListOfDT
+```
+
+A guard written as `if value '= ""` **passes** on that, and `41@%Collection.ListOfDT` travels downstream as
+data. Empty is recoverable; an OREF in a vendor feed is a support call.
+
+**Three: the legacy representation is lossy, and silently so.** An item that itself contains the delimiter
+cannot be expressed. Measured, `["PEN|LATEX", "GAUZE"]` serialises to
+
+```
+PEN|LATEX|GAUZE       -> read back as THREE items, from two
+```
+
+Nothing raises. A transform that bridges the two representations must therefore **reject** such an item
+rather than emit a string that round-trips to different data. `$$$ThrowStatus` inside a DTL `<code>` block
+does that: measured, `Transform()` returns the error and leaves the target unset.
+
+**The bridge has one gotcha.** `$ListToString` will not take the collection:
+
+```
+$ListToString(msg.SupplyList, "|")               RAISES <LIST>
+$ListToString(msg.SupplyList.Serialize(), "|")   "PEN|LATEX"
+```
+
+`Serialize()` is what turns the collection into the `$List` that `$ListToString` wants.
+
+**And one guard NOT to write.** `$select(<collection>.Count()=0:"", 1:...)` around that call is inert:
+measured, `Serialize()` of an empty collection is `""` and `$ListToString("")` is `""`. It was in the first
+draft of the example, and deleting it left the suite green — which is how it was found. A check no mutation
+can break is a check that does nothing; the delimiter collision is the one that earns its place.
+
+**Finally, treat the shape as temporary.** Two properties holding one fact can disagree and nothing will
+tell you they have. Carry the legacy property only while its consumer exists, and note that its `MAXLEN`
+is a hard ceiling on how many items can be expressed at all.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: the dual-representation
+  message saved and read back, the OREF rendering captured, `$ListToString` tried both ways, the collision
+  case serialised, and `$$$ThrowStatus` in a DTL `<code>` block confirmed to fail the transform.
+- **Validity.** Still valid.
+- **Severity.** High — one path is silently empty, the other silently a plausible wrong value.
+- **Example.** `examples/ch05_bpl_dtl/msg-dual-representation.cls`,
+  `examples/ch05_bpl_dtl/dtl-fill-both-representations.cls`,
+  `examples/ch05_bpl_dtl/tdd-fill-both-representations.cls`
+
 ### 5.23 Asserting a BPL ran: `$IsObject(resp)` passes on a process that failed every call
 
 `tdd`'s gated snippet asserted a BPL had worked with exactly two lines:
