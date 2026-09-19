@@ -64,6 +64,7 @@ BANNED = [
     (r'ADAPTER\s*=\s*"EnsLib\.RecordMap\.Service\.', "that is a Business Service, not an adapter -- Extend it instead"),
     (r"\$SYSTEM\.Semaphore\.(Signal|Wait)\b", "%SYSTEM.Semaphore has no Signal/Wait -- use Increment/Decrement on an instance"),
     (r"\b%SYS\.TaskSuper\b", "internal-only superclass with no OnTask -- subclass %SYS.Task.Definition"),
+    (r"\bNumDaysToKeep\b", "no such property anywhere -- the purge task setting is NumberOfDaysToKeep"),
     (r"\bEns\.Rule\.Definition\b.*\bExtends\b.*\bRule\b\.", "rule classes are <Pkg>.RUL.<Name>"),
     (r"[A-Z]:\\\\|[A-Z]:\\", "hardcoded absolute Windows path -- parametrise it as a Setting"),
     (r"\bINTEGRACIONS>", "leftover namespace prompt from a customer transcript"),
