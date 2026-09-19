@@ -28,6 +28,28 @@ XData SearchSpec [ XMLNamespace = "http://www.intersystems.com/EnsSearchTable" ]
   `PropType="String:25"` fail with `ErrDatatypeValidationFailed`. **Omitting the attribute
   entirely also works and is the safe default.** (`DateTime` / `Numeric` are unverified against
   that catalogue — don't reach for them without checking.)
+- **The registration row OUTLIVES the class, so a rename leaves an orphan.** Deleting a search
+  table class does NOT deregister its properties: the `Ens_Config.SearchTableProp` row survives.
+  Measured — create, delete the class, query the catalogue, the row is still there. Declare the same
+  `PropName` from a differently-named class and you get
+
+  ```
+  <EnsSearchTable>PropCollision: SearchTable property collision: Property 'X' in class 'New'
+  cannot override the definition from class 'Old'
+  ```
+
+  where **`Old` no longer exists**. That is the expensive part: the error names a class that is not
+  in the namespace and not on disk, so it reads as a dictionary or export problem and sends you into
+  `%Dictionary` / `^oddDEF` after a class nobody can find. Nothing is wrong with the class you just
+  wrote. Delete the orphan row instead:
+
+  ```sql
+  DELETE FROM Ens_Config.SearchTableProp WHERE ClassDerivation LIKE 'Old.Class.Name~%'
+  ```
+
+  `ClassDerivation` is `<Class>~<ExtentSuperclass>`, so the `LIKE` prefix is how you scope it to the
+  class you removed. Renaming a search table is therefore a new registration **plus** a cleanup, not
+  a rename. See §2.12.
 - **A search table indexes nothing until it is assigned** — and only messages received from that
   point on are indexed. Nothing back-indexes existing messages (same caveat as in the query section
   above).
