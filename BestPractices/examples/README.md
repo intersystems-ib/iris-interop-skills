@@ -60,6 +60,10 @@ its siblings.
 | §1.18 | Sibling: the run — `RecoverProduction()` returns OK from Stopped | `ch01_production/tdd-production-lifecycle.cls` |
 | §1.19 | MLLP production — the Host/Adapter split, with three defaults overridden | `ch02_hl7v2/production-hl7-mllp.cls` |
 | §1.20 | Scheduled work via `%SYS.Task.Definition` — the dispatch line, and why not `%SYS.TaskSuper` | `ch01_production/task-definition-scheduled-bs.cls` |
+| §1.21 | Fixture: a RecordMap with `%Integer` and `%Date` fields, to show what the type does and does not do | `ch01_production/recordmap-typed-fields-fixture.cls` |
+| §1.21 | The message a validating transform produces — raw text, a verdict, and a boolean beside it | `ch01_production/msg-censo-validated.cls` |
+| §1.21 | Validate per record in the DTL: flag and route, never reject by omission | `ch01_production/dtl-censo-validate-flags.cls` |
+| §1.21 | Oracle: pins parse-vs-validate per datatype, the unchecked field count, and the flagging transform | `ch01_production/tdd-censo-validate-flags.cls` |
 | §1.20 | Scheduling the purge task — `NumberOfDaysToKeep`, and `TypesToPurge` defaulting to events | `ch01_production/purge-task-schedule.cls` |
 | §1.20 | Oracle: the spelling with a positive control, the two silent defaults, and a real task round-trip | `ch01_production/tdd-scheduled-task.cls` |
 | §1.19 | Its rule (a `production=` attribute pins a rule to one production) | `ch02_hl7v2/routing-rule-hl7-mllp.cls` |

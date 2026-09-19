@@ -97,7 +97,12 @@ XData CalcWsdl
 </definitions>
 }
 
-Method %OnAfterAllTests() As %Status
+/// `OnAfterAllTests`, NOT `%OnAfterAllTests`. The `%`-prefixed spelling shipped in v1.76.0 and was DEAD
+/// CODE: `%UnitTest.TestCase` declares the unprefixed names, so this teardown never ran. Nothing leaked,
+/// because the tests themselves call DropGenerated(), but the temp WSDL file survived every run and the
+/// method advertised a cleanup it did not perform. Found by grepping for the spelling after the same
+/// mistake broke §1.21's suite.
+Method OnAfterAllTests() As %Status
 {
     Do ..DropGenerated()
     Do ##class(%File).Delete(..#WSDLPATH)
