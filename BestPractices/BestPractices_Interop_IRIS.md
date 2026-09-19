@@ -4079,6 +4079,62 @@ in from a non-DICOM source parses rather than failing loudly.
 - **Example.** `examples/ch15_dicom/dicom-mwl-date-functionset.cls`, and the complete production under
   `examples/external/workshop-iris-dicom-interop/`.
 
+### 15.7 A C-FIND reply is N Pending then exactly one terminal status — including when there are zero rows
+
+A C-FIND response is a **sequence**, not a message:
+
+| reply | `CommandSet.Status` | meaning |
+|---|---|---|
+| match 1 … N | `65281` | Pending: Optional Keys Supported (`0xFF01`) |
+| terminal | `0` | Success — the query is complete |
+
+**The terminal message is sent whether or not there were any matches.** Zero rows is a complete, successful
+query, reported as one terminal Success with no Pending before it. A responder that returns early on an
+empty result set sends nothing at all, and the modality waits.
+
+**What going wrong looks like, and why it is expensive.** Omit the terminal message and every Pending was
+delivered successfully: the Event Log shows N successful sends, the production is green, the trace is full
+of completed sends. The modality is simply still waiting. **There is no error anywhere to find — the defect
+is an absence.**
+
+**The platform does not name these numbers.** Measured against `EnsDICOM.inc`:
+
+| macro | result |
+|---|---|
+| `$$$MsgTyp2Str` | **compiles clean** — the include *does* name command fields |
+| `$$$Pending` | `MPP5610 Referenced macro not defined` |
+| `$$$Success` | `MPP5610` |
+| `$$$PendingKeys` | `MPP5610` |
+| `$$$DICOMStatusPending` | `MPP5610` |
+
+So the include translates the *command field* and says nothing about the *status*. The vendored workshop
+process writes the literal with a comment beside it —
+`Set tSC=pDocOut.SetValueAt(65281,"CommandSet.Status")` — and that is the best available. Put the two
+numbers in named parameters so they are written once; that is the most a project can do when the platform
+offers no macro.
+
+**65281 is `0xFF01`.** DICOM has two Pending statuses: `0xFF00` (matches continuing) and `0xFF01` (matches
+continuing, some optional keys unsupported). The workshop uses `0xFF01`, which is the honest choice when the
+query did not honour every requested key.
+
+**Test "not Pending", not "equals Success".** A refusal (`0xA700`) or a failure (`0xC000`) also ends the
+query. A responder that only ever *sends* `0xFF01` can treat everything else as terminal, but one that
+*receives* replies must accept **both** `0xFF00` and `0xFF01` as Pending — the oracle records that
+asymmetry rather than leaving it implied.
+
+- **The zero-row case is the only one that catches the real defect.** Measured by mutation: guarding the
+  terminal reply on `pRowCount > 0` is caught by the zero-row test and by nothing else, because 1 row and N
+  rows both still look correct.
+- **Two compile traps met writing this.** `Include EnsDICOM` must precede the `Class` statement — inside the
+  class body it is `#5559`. And a `/* … */` inside a `///` header line is also `#5559`: the class parser
+  counts those blocks even in documentation comments.
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: five macro-compile probes, the
+  sequence run for 0, 1 and 5 rows, and the vendored `WorkListProcess` dispatch loop read.
+- **Validity.** Still valid.
+- **Severity.** High — the failure produces no error, only a modality that never finishes.
+- **Example.** `examples/ch15_dicom/bp-mwl-findresponse-sequence.cls`,
+  `examples/ch15_dicom/tdd-mwl-findresponse-sequence.cls`
+
 ### 15.6 DICOM query/retrieve is a quartet, not a duplex pair — and the vendored snapshot's own reply leg dangles
 
 §15.5 shows the duplex **pair**: one service, one operation, each naming the other. That is right for
