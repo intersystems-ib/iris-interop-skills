@@ -11,6 +11,7 @@ Everything specific to transforming HL7 v2: discovering symbolic field names, th
 - `<code>` block vs `<assign>` element
 - Pipe-string ↔ list collection
 - Subtransform pattern for HL7 repeating segments
+- The WRITE side: `targetDocType`, and why `REPORTERRORS` decides whether you hear about it
 - Subtransforms over `EnsLib.HL7.Segment` — declare `sourceDocType`
 - `<foreach>` over top-level repeating segments
 
@@ -277,3 +278,35 @@ to the `SegCount` + `seg.Name` iteration above, which needs neither a count nor 
 Prefer `<foreach>` when the rest of the transform needs no `<code>` block; reach for the
 ObjectScript loop when it already has one.
 
+## The WRITE side: `targetDocType`, and why `REPORTERRORS` decides whether you hear about it
+
+`sourceDocType` tells the transform how to READ. Nothing in it tells the transform how to WRITE, and
+a target path the target schema does not map is **dropped**. Measured on IRIS for Health 2026.1 —
+three DTLs, all `create='copy'`, each assigning `"zz"` to `target.{ZAL:1}` on a `2.5:ADT_A01`:
+
+| `Parameter REPORTERRORS` | `targetDocType` | what `Transform()` returns | `ZAL:1` written? |
+|---|---|---|---|
+| default (`0`) | `2.5:ADT_A01` | **`$$$OK` — reports SUCCESS** | **no** |
+| `1` | `2.5:ADT_A01` | `<Ens>ErrGeneral: Path 'ZAL' is not mapped in schema for DocType '2.5:ADT_A01'` | **no** |
+| `1` | *absent* | `<Ens>ErrGeneral: Cannot recognize path before DocType is set` | **no** |
+
+Four things follow, and three of them are the opposite of the obvious reading:
+
+- **`SetValueAt` DOES return the error.** Called directly on the message it answers
+  `Path 'ZAL' is not mapped in schema for DocType '2.5:ADT_A01'`. The silence is not the API's.
+- **The generated `<assign>` DISCARDS that status** when `REPORTERRORS` is at its default `0`. That is
+  where the green comes from: `Transform()` returns `$$$OK` for a transform that wrote nothing.
+- **`REPORTERRORS = 1` buys VISIBILITY, not success.** Row 2 still did not write the field. The
+  setting decides whether you find out, never whether it works.
+- **A *present but standard* `targetDocType` is no protection.** Row 1 declares
+  `targetDocType='2.5:ADT_A01'` and still drops the Z-segment, because that schema does not map
+  `ZAL`. So the invariant is **not** "declare `targetDocType`" — it is "declare a `targetDocType`
+  whose schema actually maps every field you assign, and set `REPORTERRORS = 1` so you learn when it
+  does not".
+
+**All three compiled clean.** The DTL generator does not reject an unmapped target path at compile
+time, which is the whole reason this reaches run time. A green compile says nothing here.
+
+So writing to a Z-segment means a **custom category** that declares it, named in `targetDocType`
+(`MyCat_2.5:ADT_A01`), plus `Parameter REPORTERRORS = 1`. And the same holds for a segment-level
+subtransform: give it the doctype for the segment it produces, not just the one it consumes.
