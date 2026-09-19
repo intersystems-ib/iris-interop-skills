@@ -211,6 +211,66 @@ if not sizes:
     failures.append("S7")
     print("  FAIL  S7  no SKILL.md was measured at all -- a clean pass here is vacuous")
 
+# S8 -- the PER-SKILL token ratchet. "Lines only" is the published rule and S7 enforces it, but it is
+# not the whole truth and the repo decided to stop pretending otherwise: measured, 14 of 20 skills
+# exceed the overview's "Under 5k tokens" Level-2 figure while every one of them passes the 500-line
+# rule. Enforcing 5k today would mean halving fourteen skills at once, so instead nothing may get
+# WORSE.
+#
+# PER SKILL, not a total, and that is the whole mechanism. A total would let one skill grow while
+# another shrinks, which is how the always-loaded cost creeps up unnoticed. Per skill, the remedy for
+# any growth is the behaviour the reorganisation was for: move the new material to references/, where
+# it costs nothing until read. The remaining issue queue (#339, #345, #347) all ADD content to large
+# skills, and this is what redirects those additions instead of quietly re-inflating what #337 fixed.
+#
+# chars/4 is a conventional estimate, not a tokeniser. That is fine for a ratchet -- it only has to be
+# the SAME estimate on both sides of a comparison, and it is computed once here and recorded from the
+# same code path.
+SKILLS_BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills_baseline.json")
+
+_recorded = {}
+if os.path.exists(SKILLS_BASELINE):
+    try:
+        _recorded = _json.load(open(SKILLS_BASELINE)).get("skill_body_tokens") or {}
+    except Exception:
+        _recorded = {}
+
+grew_tok = []
+if not _recorded:
+    # An inert ratchet reports "ok", which is the silent pass this repo keeps being bitten by.
+    grew_tok.append("no scripts/skills_baseline.json, so this ratchet is measuring nothing -- "
+                    "record it with: python3 scripts/validate_skills.py --record-sizes")
+else:
+    for name, lines, words, tk in sizes:
+        was = _recorded.get(name)
+        if was is None:
+            grew_tok.append("{}: not in the baseline ({} tokens) -- a NEW skill must be recorded "
+                            "deliberately".format(name, tk))
+        elif tk > was:
+            grew_tok.append("{}: ~{} body tokens, baseline ~{} (+{}) -- move the new material to "
+                            "skills/{}/references/<topic>.md, where it costs nothing until read, or "
+                            "re-record deliberately".format(name, tk, was, tk - was, name))
+check("S8", "no SKILL.md body grew its always-loaded token cost (per-skill ratchet)", grew_tok)
+
+if _recorded:
+    _shrank = [(n, tk, _recorded[n]) for n, l, w, tk in sizes
+               if n in _recorded and tk < _recorded[n]]
+    for n, tk, was in sorted(_shrank, key=lambda x: x[1] - x[2]):
+        print("          note: {} down to ~{} tokens from ~{} -- progress; re-record with "
+              "--record-sizes".format(n, tk, was))
+
+if "--record-sizes" in sys.argv:
+    with open(SKILLS_BASELINE, "w") as _fh:
+        _json.dump({
+            "_comment": "Estimated always-loaded body tokens (chars/4) per SKILL.md. S8 ratchets "
+                        "this per skill: growth fails, a drop only prints. The ENFORCED line budget "
+                        "is S7's 500; this exists because 14 of 20 skills exceed the overview's 5k "
+                        "token figure and the debt must not grow while it is worked down.",
+            "skill_body_tokens": {n: tk for n, l, w, tk in sorted(sizes)},
+        }, _fh, indent=2)
+        _fh.write("\n")
+    print("\n  skill sizes recorded: {} skills -> {}".format(len(sizes), os.path.basename(SKILLS_BASELINE)))
+
 over_tok = sorted((s for s in sizes if s[3] > TOKEN_ADVISORY), key=lambda s: -s[3])
 if over_tok:
     print("\n  NOTE: {} of {} skills exceed the overview's \"Under 5k tokens\" Level-2 figure "
