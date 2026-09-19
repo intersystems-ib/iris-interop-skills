@@ -167,7 +167,10 @@ Design driver: match expressions (a FHIRPath subset). Example: filter `Patient.i
 Setup pattern:
 
 - Docker-based deployment recommended for early evaluation.
-- Populate via `HS.HC.FHIRSQL.Utils.Setup` in the `HSLIB` namespace.
+- Populate via `HS.HC.FHIRSQL.Utils.Setup` in the `HSLIB` namespace — but **not** as `Setup(path)`.
+  Measured, `Setup` takes **three** parameters (`dir`, `pNamespace`, `pStrategyClass`) and returns
+  **void**; its `dir` default is an InterSystems *build* path, and **`LoadFHIRData(ns, dir, …)` is the
+  method whose `dir` names data**. Assigning either return value raises `<COMMAND>`. See §4.13.
 - Admin UI at `/csp/fhirsql/index.csp`.
 
 Verify GA status against current IRIS for Health release notes — this was originally introduced as an early-access feature.

@@ -100,6 +100,8 @@ its siblings.
 | §4.11 | FHIR DTL over a QuickStreamId — `<assign>`ing the id is a reference copy; the body needs a `<code>` block | `ch04_fhir/dtl-fhir-redact-quickstream.cls` |
 | §4.12 | Refuse a Bundle that is not a `transaction` — `batch` is accepted by the server and is not atomic | `ch04_fhir/fhir-bundle-transaction-guard.cls` |
 | §4.12 | Oracle: seven type values, plus a drift alarm on the shipped `DefaultBundleProcessor` branching | `ch04_fhir/tdd-fhir-bundle-transaction-guard.cls` |
+| §4.13 | Existence test by dictionary lookup — a call-through to a missing method compiles clean | `ch04_fhir/fhirsql-setup-existence-test.cls` |
+| §4.13 | Oracle: five `#5373` compile probes, the FHIR SQL signature drift alarm, and the two comma guards | `ch04_fhir/tdd-fhirsql-setup-existence.cls` |
 | §4.11 | BP that edits a FHIR payload — `$IsObject(%OpenId(...))` not `%ExistsId`, and one new stream per request | `ch04_fhir/bp-fhir-request-quickstream.cls` |
 | §4.11 | Oracle: no payload property, `%ExistsId` lies, `%Save()` does not flush | `ch04_fhir/tdd-fhir-quickstream-payload.cls` |
 | §5.1 | BS that exposes a SOAP service | `ch05_bpl_dtl/soap-business-service.cls` |
