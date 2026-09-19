@@ -4079,6 +4079,73 @@ in from a non-DICOM source parses rather than failing loudly.
 - **Example.** `examples/ch15_dicom/dicom-mwl-date-functionset.cls`, and the complete production under
   `examples/external/workshop-iris-dicom-interop/`.
 
+### 15.6 DICOM query/retrieve is a quartet, not a duplex pair — and the vendored snapshot's own reply leg dangles
+
+§15.5 shows the duplex **pair**: one service, one operation, each naming the other. That is right for
+store-and-forward and wrong for query/retrieve.
+
+**Why it is not a pair.** C-FIND and C-MOVE are separate conversations, and the images a C-MOVE asks for
+do not return on the C-MOVE association — the peer opens a **new** association and does C-STORE back to
+you. Read from the vendored workshop production's 17 items, the legs are:
+
+| leg | items | what it is |
+|---|---|---|
+| C-FIND | `QueryService` → `DICOM Query Process` | query in, matched, answered |
+| C-MOVE | `MoveService` → `DICOM Move Process` | retrieve request in, accepted |
+| C-STORE **in** | `DICOM Store In` → `DICOM Store Process` | the images **arriving** — a third leg |
+| outbound | `DICOM TCP Out` (duplex: `DICOM Query Process`) | the association IRIS opens |
+
+Wire "query/retrieve" as one service/operation pair and C-FIND works while the C-MOVE's instances have no
+inbound item to land on. The peer's C-STORE association is refused and the only symptom is that nothing
+arrives.
+
+**There are two item-reference settings here, not one.** `DuplexTargetConfigName` is the platform's
+service/operation-to-process partner. `OperationDuplexName` is the workshop's **own** convention for the
+process-to-operation direction — measured, **zero** classes on the instance declare such a property; its
+BPs carry `Parameter SETTINGS = "OperationDuplexName"` plus a matching `Property`. A project-defined
+setting still names an item, so a dangling value breaks the same way.
+
+**And the vendored snapshot has a broken round trip.** Its five `DuplexTargetConfigName` values: four
+resolve, and
+
+```
+item `DICOM Store DCM TCP Out`   DuplexTargetConfigName="DICOM STOWRS Process"   NO SUCH ITEM
+```
+
+The item that exists is **`DICOM StowRs Handler`** — a rename near-miss in both the casing *and* the final
+word, so even a case-insensitive check would not match. Combined with
+`DICOM StowRs Handler`'s own `OperationDuplexName="DICOM Store DCM TCP Out"` (which does resolve), the
+STOW-RS leg can **send and never receive**: the handler reaches its operation, and the operation's return
+path names nothing.
+
+**A `<Setting>` value is a string, so nothing compiles wrong.** Tier 2b compiled that snapshot clean for as
+long as it has been vendored. **Tier 2b now scans the vendored tree** for item references that name no item
+and fails on any **new** one, with this defect recorded in `scripts/external_baseline.json` under
+`known_dangling` — it is a read-only mirror, so it is recorded rather than edited. The check was
+positive-controlled by injecting a second dangling value into the snapshot (restored, sha-verified): it
+reported `NEW` and failed the tier. C8 and this scan now share one `ITEM_REF_SETTINGS` constant so the bank
+and the mirror cannot drift apart.
+
+**What C8 still cannot do, and the oracle covers.** C8 checks that a name resolves — one direction. A pair
+where `BS.A` names `BP.B` while `BP.B`'s partner is something else satisfies C8 and still breaks. Note the
+check is "every name **resolves**", not "every pair is symmetric": a process legitimately names no partner,
+because it is reached *by* its partner.
+
+- **A note on reading item settings.** `Ens_Config.Item` is a queryable table, but **`Ens.Config.Setting`
+  has no SQL projection** — `SELECT … FROM Ens_Config.Setting` is `SQLCODE -30, Table 'ENS_CONFIG.SETTING'
+  not found`. A join written that way returned `""` for every item and the suite reported *"four items
+  carry a DuplexTargetConfigName, found 0"*, which reads as a wiring defect and was a missing table. Walk
+  `##class(Ens.Config.Item).%OpenId(id).Settings` instead.
+- **Not asserted from inside IRIS, deliberately.** The upstream defect is guarded on the host, because the
+  gate container has no bind mount of the repo (`docker inspect` reports no mounts) — an IRIS-side test
+  reading that file could only fail environmentally or be skipped.
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19.
+- **Validity.** Still valid.
+- **Severity.** High — wired as a pair, the retrieve leg silently has nowhere to land.
+- **Example.** `examples/ch15_dicom/production-dicom-query-retrieve.cls`,
+  `examples/ch15_dicom/bp-dicom-leg.cls`,
+  `examples/ch15_dicom/tdd-dicom-query-retrieve.cls`
+
 ### 15.5 Registering DICOM associations from OnStart — and the verify step that makes it worth doing
 
 An association context is **data in the namespace**, not part of the production definition. It is not

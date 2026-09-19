@@ -52,6 +52,23 @@ BASELINE = Path(__file__).resolve().parent / "examples_baseline.json"
 EXTERNAL = REPO / "BestPractices" / "external"
 EXTERNAL_BASELINE = Path(__file__).resolve().parent / "external_baseline.json"
 
+# Settings whose VALUE names another item in the same production. Shared by C8 (the bank) and
+# dangling_item_refs (the vendored tree) so the two cannot drift apart.
+#
+# OperationDuplexName is NOT a platform setting: measured, ZERO classes on the instance declare such a
+# property. It is the DICOM workshop's own convention -- its BPs carry
+# `Parameter SETTINGS = "OperationDuplexName"` plus a matching Property -- and `dicom:148` documents it
+# as the Process-to-Operation direction. A project-defined setting still names an item, so a dangling
+# value fails the same way, and leaving it unchecked is how the vendored tree's broken STOW-RS round trip
+# stayed invisible: the handler reaches its operation, and the operation's return path names nothing.
+ITEM_REF_SETTINGS = (
+    "TargetConfigNames",
+    "BadMessageHandler",
+    "JGService",
+    "DuplexTargetConfigName",
+    "OperationDuplexName",
+)
+
 ARTEFACT_SUFFIXES = (".cls", ".xml", ".sh")
 TIPOS = ("BS", "BP", "BO", "DT", "DTS", "RUL", "MSG", "DAT", "ADP", "UTL", "HL7")
 
@@ -256,7 +273,7 @@ def tier1() -> bool:
     # Covers .xml artefacts too: the alert-circuit production is XML, which tier 2 skips
     # entirely, so it is the one place a dangling name would never be compiled at all.
     CLASS_SETTINGS = ("BusinessRuleName", "RecordMap")
-    ITEM_SETTINGS = ("TargetConfigNames", "BadMessageHandler", "JGService", "DuplexTargetConfigName")
+    ITEM_SETTINGS = ITEM_REF_SETTINGS
     shipped = {cn for f in files if f.suffix == ".cls" for cn in class_names(read(f))}
     dangling = []
     for f in files:
@@ -990,6 +1007,36 @@ def external_classes() -> dict[str, tuple[str, str]]:
     return out
 
 
+def dangling_item_refs(files) -> list[str]:
+    """Item-reference settings that name no <Item> in their own production.
+
+    The same rule C8 applies to the bank, factored out so the vendored tree can be held to it too.
+    A <Setting> value is a STRING, so nothing here is a compile error -- tier 2b compiles the
+    upstream snapshot clean with a duplex partner that does not exist.
+    """
+    ITEM_SETTINGS = ITEM_REF_SETTINGS
+    out: list[str] = []
+    for f in sorted(files):
+        if f.suffix not in (".cls", ".xml"):
+            continue
+        text = read(f)
+        if "<Production " not in text:
+            continue
+        items = set()
+        for attrs in re.findall(r"<Item\s+([^>]*)>", text):
+            m = re.search(r'(?<![A-Za-z])Name="([^"]+)"', attrs)
+            if m:
+                items.add(m.group(1))
+        for name, value in re.findall(r'Name="([^"]+)">([^<]+)</Setting>', text):
+            if name not in ITEM_SETTINGS:
+                continue
+            for raw in value.split(","):
+                v = raw.strip()
+                if v and v not in items:
+                    out.append(f'{repo_rel(f)} -> {name}="{v}"')
+    return out
+
+
 def tier2_external() -> bool:
     """Compile the vendor reference tree that no tier used to touch.
 
@@ -1083,6 +1130,30 @@ def tier2_external() -> bool:
         print(msg)
 
     print(f"\nTier 2b: {'the external tree still compiles' if ok else 'FAILED'}\n")
+    # ── the vendored tree's DANGLING ITEM REFERENCES ──────────────────────────────────────
+    # Tier 1 deliberately does not touch this tree (see external_baseline.json's comment), and a
+    # <Setting> value is a string, so a duplex partner that does not exist compiles clean here.
+    # The upstream snapshot HAS one: `DICOM Store DCM TCP Out` names `DICOM STOWRS Process`, while
+    # the item that exists is `DICOM StowRs Handler` -- a rename near-miss in both the casing and
+    # the final word, so even a case-insensitive check would not match it. It is someone else's
+    # repo, so it is RECORDED rather than fixed; what fails the gate is a NEW one appearing.
+    found = dangling_item_refs(EXTERNAL.rglob("*"))
+    known = set(json.loads(read(EXTERNAL_BASELINE)).get("known_dangling", [])) \
+        if EXTERNAL_BASELINE.exists() else set()
+    fresh = [d for d in found if d not in known]
+    stale = sorted(known - set(found))
+    if found:
+        print(f"  dangling item refs      : {len(found)} ({len(found) - len(fresh)} known upstream)")
+        for d in found:
+            print(f"      {'NEW  ' if d in fresh else 'known'} {d}")
+    if stale:
+        print(f"  recorded but no longer present: {len(stale)} -- re-record with --update-baseline")
+        for d in stale:
+            print(f"      gone  {d}")
+    if fresh:
+        print(f"  FAILED: {len(fresh)} NEW dangling item reference(s) in the vendored tree")
+        ok = False
+
     return ok
 
 
@@ -1209,6 +1280,7 @@ def update_snippet_baseline(clean: list[str] | None = None) -> None:
 
 def update_external_baseline() -> None:
     names = sorted(external_classes())
+    dangling = dangling_item_refs(EXTERNAL.rglob("*"))
     EXTERNAL_BASELINE.write_text(json.dumps({
         "_comment": "Vendor reference tree under BestPractices/external. Compiled by tier 2b, and "
                     "deliberately NOT subject to tier 1 -- none of these files carries a "
@@ -1216,8 +1288,14 @@ def update_external_baseline() -> None:
                     "failure means the mirror and this IRIS version disagree; re-sync upstream "
                     "rather than editing the file.",
         "expected_clean": names,
+        "_dangling_comment": "Item-reference settings in the vendored tree that name no item in "
+                             "their own production. Upstream defects, recorded because this tree is "
+                             "a read-only mirror. A NEW one fails tier 2b; fix it upstream or "
+                             "re-sync, and only then re-record.",
+        "known_dangling": dangling,
     }, indent=2) + "\n", encoding="utf-8")
-    print(f"external baseline recorded: {len(names)} classes -> {EXTERNAL_BASELINE.name}")
+    print(f"external baseline recorded: {len(names)} classes, "
+          f"{len(dangling)} known dangling item ref(s) -> {EXTERNAL_BASELINE.name}")
 
 
 def update_baseline() -> None:
