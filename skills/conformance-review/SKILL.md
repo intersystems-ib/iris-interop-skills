@@ -1,6 +1,6 @@
 ---
 name: conformance-review
-description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. For ANY review, audit, or quality/conformance check of interop work, read THIS skill FIRST — the criteria (CR-1…CR-16) live here, not in the router or the build skills, and a review run without them is graded incomplete. Use after building/modifying components, before declaring done, or whenever the user asks whether the implementation is correct, idiomatic, or per best practices. The `conformance-reviewer` plugin agent (an agent, not a skill — with no agent tool, reading this file IS the review) and the `conformance-prescan` hook both check against this file. Triggers EN: review, audit, conformance, best practices, is this correct, is this idiomatic, code review, quality check, check my production, validate the implementation, ready to ship. Triggers ES: revisar, auditar, auditoría, conformidad, buenas prácticas, está bien implementado, es correcto, cumple, revisión, control de calidad.
+description: Review an already-built IRIS Interoperability production against the iris-interop best-practice criteria AFTER implementation + TDD, and report what does not conform with the canonical fix. For ANY review, audit, or quality/conformance check of interop work, read THIS skill FIRST — the criteria (CR-1…CR-17) live here, not in the router or the build skills, and a review run without them is graded incomplete. Use after building/modifying components, before declaring done, or whenever the user asks whether the implementation is correct, idiomatic, or per best practices. The `conformance-reviewer` plugin agent (an agent, not a skill — with no agent tool, reading this file IS the review) and the `conformance-prescan` hook both check against this file. Triggers EN: review, audit, conformance, best practices, is this correct, is this idiomatic, code review, quality check, check my production, validate the implementation, ready to ship. Triggers ES: revisar, auditar, auditoría, conformidad, buenas prácticas, está bien implementado, es correcto, cumple, revisión, control de calidad.
 ---
 
 # IRIS Interoperability — Conformance Review
@@ -8,7 +8,7 @@ description: Review an already-built IRIS Interoperability production against th
 > **This file is the review.** However you arrived here — the Skill tool, a native-skill search,
 > or reading `skills/conformance-review/SKILL.md` directly — this document is self-contained:
 > follow its workflow and check its criteria. Do NOT run an interop review from the router or the
-> build skills alone; they do not carry the criteria, and a review without CR-1…CR-16 misses the
+> build skills alone; they do not carry the criteria, and a review without CR-1…CR-17 misses the
 > checks this plugin exists to make.
 
 > **A Stop hook enforces this pass.** When a session has written classes into IRIS, it blocks
@@ -47,8 +47,10 @@ re-plan from scratch and it never rewrites silently.
    `.RUL`/`.MSG`/Tests). Read them from disk and/or via the IRIS MCP (`iris_doc`, `iris_production_item`).
 2. **Load the relevant skills** so you judge against their guidance, not memory: `iris-interop-skills:interop`
    (router/naming), plus the component skills in play (`:bpl`, `:business-services`, `:transformations`,
-   `:alerting`, `:hl7-schemas`, `:messages`, `:tdd`).
-3. **Check every criterion below** (CR-1…CR-16) against the actual code. Cite `file:line` and the exact
+   `:alerting`, `:hl7-schemas`, `:messages`, `:tdd`), plus **`:message-search-debug`** — step 4d
+   below needs it, and it was missing from this list, which is why no review ever read the
+   operational state.
+3. **Check every criterion below** (CR-1…CR-17) against the actual code. Cite `file:line` and the exact
    best-practice it meets or breaks.
 3b. **Re-check the criteria that depend on WIRING, not just on the classes you changed.** Some
    violations are created by an edit to a *different* component than the one that ends up wrong —
@@ -110,6 +112,23 @@ re-plan from scratch and it never rewrites silently.
 
    And `Ens_Config.Item` **is** a queryable table: `interop` said otherwise until v1.24.0, and that
    claim is why this step had no worked example for as long as it did.
+4d. **Count the traffic** (CR-17). A green `iris_test` and the message table are **two different
+   pieces of evidence and you need both**: the test proves the path the test walked, and nothing else.
+
+   ```
+   SELECT Status, COUNT(*) FROM Ens.MessageHeader GROUP BY Status
+   SELECT TOP 10 TargetConfigName, COUNT(*) FROM Ens.MessageHeader WHERE Status = 8
+     GROUP BY TargetConfigName ORDER BY 2 DESC
+   ```
+
+   **Anchor on the total, not on a list of bad codes.** `9` (Completed) is the only terminal success,
+   so the question is "what share is **not 9**" — a review that greps for `Status=8` lets Discarded,
+   Suspended and Aborted read clean. The nine codes and what each one means at rest:
+   [references/message-status.md](references/message-status.md).
+
+   Report the split as a fraction of the total and name the worst `TargetConfigName`. Any non-`9`
+   share above zero contradicts a green test and has to be either explained or reported.
+
 5. **Emit the report** (severity-tagged) → **a scoped remediation plan** → offer to **apply the safe
    fixes** (P0/P1 with an unambiguous canonical fix) only after the user confirms. Leave defensible
    choices as notes, not edits.
@@ -127,7 +146,7 @@ re-plan from scratch and it never rewrites silently.
 - **P2** — idiomatic gap that works but loses tooling/robustness (declarative vs procedural; missing alerts).
 - **P3** — cosmetic / naming / hardcoded paths.
 
-## Criteria (CR-1 … CR-16)
+## Criteria (CR-1 … CR-17)
 
 Items marked **⚙ pre-scannable** are also detected mechanically by the `conformance-prescan` hook from a
 single file's text; the rest need the agent's cross-file/semantic judgment.
@@ -151,6 +170,7 @@ single file's text; the rest need the agent's cross-file/semantic judgment.
 | **CR-14** ⚙ | **P1** | A subclass of a **prebuilt** `EnsLib.*.Service.*` / `EnsLib.*.Operation.*` whose `OnInit()` override never calls `##super()`. The base `OnInit` is the only place the host's parser state is initialised (`..recordMapFull`, `..%Parser`); without it the component starts green, consumes and **deletes** its input, and emits no message and no Event Log entry — a green run that proves nothing happened. Mechanical: the class extends `EnsLib\..*\.(Service\|Operation)\.` **and** the file contains no `##super`. Does **not** apply to a direct `Ens.BusinessService`/`Ens.BusinessOperation` subclass with `Parameter ADAPTER` — its inherited `OnInit()` does nothing by default (ESQL). | Make `Set tSC = ##super()  Quit:$$$ISERR(tSC) tSC` the first statement of the override, then validate. | `business-services` |
 | **CR-15** ⚙ | **P1** | A hand-written `Ens.BusinessProcess` that calls `SendRequestAsync()` and overrides **no** `OnResponse()`. Measured at the source: `Ens.BusinessProcess.OnResponse` is `// Subclass responsibility  Quit $$$EnsError($$$NotImplemented)`, and `$$$NotImplemented` renders as `ERROR #5003: Not implemented` — so with the default `pResponseRequired = 1` **every reply** terminates the process with `<Ens>ErrBPTerminated ... #5003`. The circuit can still deliver, so end-to-end tests pass and the only evidence is in the Event Log, which is exactly where nobody looks once the data has arrived. **Complements CR-1 rather than duplicating it:** CR-1 says do not code routing as a BP and has legitimate exceptions; when a hand BP is written *with* reason, CR-15 is the obligation that comes with it. Does **not** apply to `Ens.BusinessProcessBPL`, which generates its own `OnResponse` (`If %compiledclass.Name="Ens.BusinessProcessBPL" Quit $$$OK` then generated code), nor to an `[ Abstract ]` base, which is never a production item. **ENFORCED: the Stop hook BLOCKS on this**, but only where a call site provably leaves `pResponseRequired` at `1` — a call passing `0` is fire-and-forget, never invokes the callback, and is exempt (measured; §5.12). A class mixing both kinds of call is still blocked on the default one. | Override `OnResponse(request, ByRef response, callrequest, callresponse, pCompletionKey)` — see §5.12 for the callback signatures and for the *other* half of this trap, `pResponseRequired = 0`, where the callback never runs at all and the process completes green. Or use `EnsLib.MsgRouter.RoutingEngine`, which has nothing to implement. | `bpl` |
 | **CR-16** ⚙ | **P0** | A **secret value written into a versioned file** — as a literal, in a comment, in a `.md`, or in a "how to recreate the credential" recipe. The mechanism rule (credentials live in `Ens.Config.Credentials`, referenced by name) is already in `business-operations`; this is the **repository** rule, which is a different thing and was missing. Measured: 2 of 2 bench variants got the mechanism right and leaked anyway — one put the password in a `///` comment showing how to call the setup method and again in the on-call document, the other base64'd a literal `user:pass` pair in three files. In both, a line of the *same file* correctly said the value must never be committed. The writing rule was learned; the repository rule did not exist. Detected on four shapes, each measured at 0 false positives over 267 repo files: a literal `user:pass` inside `Base64Encode(`, a literal passed to `SetupCredential`/`SetCredential`/`CreateCredential`, and a non-empty `<Setting Name="Password">`. The broad form — anything named `password` assigned a literal — was measured at **7 of 7 false positives** (all `Password = pPassword`, the correct pattern) and is deliberately not used. | Pass the value as a parameter at run time, or set it once in the Portal. Reference the credential **by name** from the item (`<Setting Name="Credentials">MyCred</Setting>`). A recreation recipe names the credential ID and where it lives, never its value. If a secret has already been committed, rotating it is the fix — deleting the line is not, because git keeps it. | `security` |
+| **CR-17** | **P1** | **The review never read the operational state.** A production with a fifth of its traffic dead passes every other criterion, because the only verdict the workflow asked for was `iris_test` — and a test proves the path the test walked. Measured: 2 of 2 bench variants declared all 60 steps complete while `Ens.MessageHeader` held **77 of 344 headers in Status=8 (22%)** in one and **39 plus 2 stuck in Queued** in the other, with the same dominant cause on three different days. Neither review counted a single header — not because the model could not (`message-search-debug` explains the codes correctly) but because the workflow never asked and that skill was not in step 2's load list. **Anchor on the total:** from the platform's own `Ens.DataType.MessageStatus`, `9` is the only terminal success, `8`/`4`/`7` are terminal failures and `2`/`3`/`6` are non-terminal, so a check that greps for `Status=8` lets Discarded, Suspended and Aborted read clean. | Run step 4d's two queries. Report the non-`9` share as a fraction of the total and name the worst `TargetConfigName`. Any share above zero is either explained in the report or is a finding. **Not** a finding: a BO failing on a real unique constraint — `business-operations` says auditing that as a defect is wrong, because the constraint *is* the contract. The finding is that nobody counted. | `message-search-debug` |
 
 ## Output template
 
@@ -158,6 +178,7 @@ single file's text; the rest need the agent's cross-file/semantic judgment.
 ## Conformance review — <production/scope>
 Tests (real iris_test): <PASS n/n | FAIL | NOT-RUN/ERROR ⇒ CR-7>
 Destination (CR-13): <db.schema.table | path | endpoint the tests wrote to> — <matches the task | MISMATCH>
+Traffic (CR-17): <n> of <total> headers not Status=9 — <worst TargetConfigName> — <explained | FINDING>
 
 ### Findings
 - [CR-x][Pn] <title> — <file:line>
