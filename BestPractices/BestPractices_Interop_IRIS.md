@@ -920,8 +920,32 @@ extent won. Two silent zeros and one over-count; none of them raises anything.
 **Three consequences of that shared extent**, all measured:
 
 - **Prop names are namespace-global.** Two search tables declaring the same `PropName` with
-  different paths fail at compile with `<EnsSearchTable>PropCollision`. Loud, and therefore fine —
-  but prop names need a prefix if more than one search table will ever exist.
+  different paths fail at compile with `<EnsSearchTable>PropCollision`, and prop names therefore need
+  a prefix if more than one search table will ever exist.
+
+  **Loud, but only fine while both classes still exist.** The registration row OUTLIVES the class.
+  Measured: create a search table with a prop, `iris_doc(mode=delete)` the class, and the
+  `Ens_Config.SearchTableProp` row is still there — `ZZQ362.ST.A~EnsLib.HL7.SearchTable`. Declare the
+  same `PropName` from a new class and the collision names the **deleted** one:
+
+  ```
+  <EnsSearchTable>PropCollision: SearchTable property collision: Property 'ZzqShared' in class
+  'ZZQ362.ST.B' cannot override the definition from class 'ZZQ362.ST.A'
+  ```
+
+  `ZZQ362.ST.A` is not in the namespace and not on disk, so the message sends you looking for a class
+  that is not there — `%Dictionary`, `^oddDEF`, a stale export. Nothing is wrong with the class you
+  just wrote. **The fix is to delete the orphan row**, which is the one place this repo reaches into
+  an `Ens_Config` table directly:
+
+  ```sql
+  DELETE FROM Ens_Config.SearchTableProp WHERE ClassDerivation LIKE 'Old.Class.Name~%'
+  ```
+
+  This is why renaming a search table is not a rename: it is a new registration plus an orphan.
+  `scripts/validate_examples.py` carries the same deletion for exactly this reason — staging a
+  SearchTable snippet under a new name would otherwise fail the next run on a class the run deleted
+  itself.
 - **A name matching a vendor prop is silently reused.** Declaring `PropName="PatientID"` binds to the
   vendor's `PropId 4` and your path is ignored. No error.
 - **PropIds are assigned namespace-wide** and are not stable across environments. Resolve by `Name`.
