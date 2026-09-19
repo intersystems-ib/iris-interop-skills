@@ -40,12 +40,8 @@ iris_execute(namespace="HSLIB", code="Do ##class(HS.Util.Installer.Foundation).I
 
 Then the FHIR server itself, per HXFHIRINS section 2.3.1:
 
-```objectscript
- Set $namespace = "<NS>"
- Do ##class(HS.FHIRServer.Installer).InstallNamespace()
- Do ##class(HS.FHIRServer.Installer).InstallInstance("/csp/healthshare/<ns>/fhir/r4",
-     "HS.FHIRServer.Storage.JsonAdvSQL.InteractionsStrategy", $lb("hl7.fhir.r4.core@4.0.1"))
-```
+The class that does it, compiled by the gate so its three `HS.*` signatures cannot rot:
+[references/foundation-install.md](references/foundation-install.md).
 
 Two things that surprise people afterwards: `Install()` also creates a
 `<NS>PKG.FoundationProduction`, so a production you did not write shows up in
