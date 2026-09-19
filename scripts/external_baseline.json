@@ -20,5 +20,9 @@
     "DICOM.Msg.WorkListReq",
     "DICOM.Production",
     "DICOM.Util"
+  ],
+  "_dangling_comment": "Item-reference settings in the vendored tree that name no item in their own production. Upstream defects, recorded because this tree is a read-only mirror. A NEW one fails tier 2b; fix it upstream or re-sync, and only then re-record.",
+  "known_dangling": [
+    "BestPractices/external/workshop-iris-dicom-interop/iris/src/DICOM/Production.cls -> DuplexTargetConfigName=\"DICOM STOWRS Process\""
   ]
 }
