@@ -136,6 +136,40 @@ For production interop hosts, prefer `Locked Down` when operationally feasible. 
 
 `Locked Down` disables more services by default and requires explicit enablement of each used CSP application, REST endpoint, etc. — more setup work, smaller attack surface.
 
+### The value never goes in the tree — a separate rule from where it lives
+
+`business-operations` already says credentials belong in `Ens.Config.Credentials`, referenced by
+name from the item. That is the **mechanism** rule and it is not this one. This is the
+**repository** rule: the value is never written into a versioned file. Not a literal, not a
+comment, not a `.md`, not a "how to recreate the credential if it is lost" recipe.
+
+They are genuinely different rules, and the measurement shows why stating only the first is not
+enough. Across two bench variants, **both got the mechanism right and leaked the value anyway**:
+
+| where it leaked | what the same file also said |
+|---|---|
+| a `///` comment showing how to call the setup method | five lines down: "the password is passed as a parameter and never written in the repo" |
+| the on-call operations `.md`, in a recreation recipe | 249 lines earlier: "encrypted in IRIS — not in git; ask the responsible team" |
+| a base64'd literal `user:pass` pair, in three files | the production XML's own comment: "the password goes in the `CocinaJDBC` credential, never in this XML" |
+
+Every one of those files contained the correct rule about **writing documents** and still committed
+the secret. The rule about the **repository** did not exist anywhere, so it was never applied.
+
+**If a secret is already committed, rotating it is the fix. Deleting the line is not** — git keeps
+every version, so the value stays reachable in history for anyone who can clone. Change the value
+first, then remove the literal.
+
+What to write instead:
+
+- pass the value as a **parameter** at run time, or set it once in the Portal;
+- reference the credential **by name**: `<Setting Name="Credentials">MyCred</Setting>`;
+- a recreation recipe names the credential **ID and where it lives**, never its value;
+- an empty `<Setting Name="Password"></Setting>` is the correct placeholder, and the criterion below
+  deliberately does not fire on it.
+
+This is conformance criterion **CR-16**, and `conformance_prescan` flags it on write — the only
+criterion that also runs on `.md` files, because one of the two measured leaks was in one.
+
 ## Least privilege for an interop endpoint's service user
 
 The principal an external caller authenticates as is the one account whose credentials live outside

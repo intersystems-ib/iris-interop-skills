@@ -353,6 +353,43 @@ def cr15_missing_onresponse(src):
     return cr15_verdict(src) != "clear"
 
 
+# -------------------------------------------------------------------------------- CR-16
+# A secret VALUE written into a versioned file. The mechanism rule -- credentials live in
+# Ens.Config.Credentials and are referenced by name -- is already in business-operations, and both
+# measured bench variants got that right. They leaked anyway, and this is the rule that was missing:
+# the value never goes in the tree. Not a literal, not a comment, not a `.md`, not a recreation recipe.
+#
+# DELIBERATELY SEES COMMENTS, unlike the CHECKS list. `all_hits` hands STRUCTURAL predicates the RAW
+# source while CHECKS go through code_only(), and for once that asymmetry is what is wanted: one of
+# the two measured leaks was a `///` comment showing how to call the setup method, and the other was
+# a `.md` on-call document. Strip the comments here and the criterion misses the exact shapes it
+# exists for.
+#
+# FOUR NARROW SHAPES, NOT ONE BROAD ONE, and the difference was measured over 267 repo files:
+#
+#   literal user:pass inside Base64Encode(            0 false positives
+#   literal passed to Setup/Set/CreateCredential(     0 false positives
+#   non-empty <Setting Name="Password">               0 false positives
+#   ANYTHING named password assigned a literal        7 of 7 FALSE POSITIVES
+#
+# That last row is why the obvious detector is not used: all seven were `Password = pPassword` or
+# `pwd = os.environ.get(...)`, which is the CORRECT pattern. A criterion that fires on the right
+# answer teaches people to ignore it.
+#
+# The empty-value form `<Setting Name="Password"></Setting>` is the placeholder idiom and must not
+# fire, hence the `(?!</)` -- without it `\S` matches the `<` of the closing tag.
+SECRET_IN_TREE = re.compile(
+    r'Base64Encode\(\s*"[^"\s:]+:[^"\s]+"'
+    r'|(?:SetupCredential|SetCredential|CreateCredential)\(\s*[\'"][^\'"]{3,}[\'"]'
+    r'|<Setting[^>]*Name="(?:Password|CredentialsPassword)"[^>]*>\s*(?!</)\S',
+    re.I)
+
+
+def cr16_secret_in_versioned_file(src):
+    """True when a secret VALUE appears in the file, including in a comment."""
+    return bool(SECRET_IN_TREE.search(src))
+
+
 STRUCTURAL = [
     ("CR-6", "HL7 flow wired into a GENERIC EnsLib.MsgRouter.RoutingEngine",
      cr6_generic_router_hosting_hl7),
@@ -360,6 +397,8 @@ STRUCTURAL = [
      cr10_hardcoded_path_in_runtime_component),
     ("CR-15", "hand BP calls SendRequestAsync but overrides no OnResponse — #5003 at every reply",
      cr15_missing_onresponse),
+    ("CR-16", "a secret VALUE is written into a versioned file — rotate it, do not just delete the line",
+     cr16_secret_in_versioned_file),
 ]
 
 
@@ -441,13 +480,25 @@ def main():
         return
     ti = data.get("tool_input", {}) or {}
     path = ti.get("file_path") or ti.get("path") or ""
-    if not str(path).lower().endswith(".cls"):
+    low = str(path).lower()
+
+    # CR-16 is the ONLY criterion that runs on a non-.cls file, and the scoping is deliberate.
+    # One of the two measured leaks was in a `.md` on-call document, so a .cls-only filter cannot
+    # see it. Widening the filter for EVERY criterion would be the wrong fix: CR-1's and CR-5's
+    # patterns would start matching prose that merely discusses a BP or an MSH:9 route, and an
+    # advisory that fires on documentation is one people turn off.
+    md_only = low.endswith(".md")
+    if not (low.endswith(".cls") or md_only):
         return
     fpath, src = read_source(ti)
     if not src:
         return
 
-    hits = all_hits(src)
+    if md_only:
+        hits = (["CR-16 (a secret VALUE is written into a versioned file — rotate it, do not just "
+                 "delete the line)"] if cr16_secret_in_versioned_file(src) else [])
+    else:
+        hits = all_hits(src)
     if not hits:
         return
 
@@ -483,6 +534,15 @@ def main():
         msg += (" CR-1 specifically: a hand BP is not just less idiomatic — it obliges you to "
                 "implement OnResponse, and without it SendRequestAsync terminates the process with "
                 "#5003 on every reply (see CR-15).")
+    if any(h.startswith("CR-16") for h in hits):
+        msg += (" CR-16 specifically: DELETING THE LINE IS NOT THE FIX. Git keeps every version, so "
+                "once a secret is committed the only remedy is to ROTATE it — change the value in "
+                "the Portal or wherever it lives, then remove the literal. Pass it as a parameter "
+                "at run time and reference the credential by NAME from the item "
+                "(`<Setting Name=\"Credentials\">MyCred</Setting>`). A recreation recipe names the "
+                "credential ID and where it lives, never its value. Measured: 2 of 2 bench runs had "
+                "the mechanism right and leaked the value anyway, each in a file that elsewhere said "
+                "not to.")
     if any(h.startswith("CR-7") for h in hits):
         msg += (" CR-7 specifically: test results count only from the real iris_test tool, "
                 "never from a [SqlProc] that returns \"PASS\".")
