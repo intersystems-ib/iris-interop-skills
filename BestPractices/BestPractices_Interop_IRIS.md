@@ -1255,6 +1255,64 @@ storage. Same wiring either way.
 - **Severity.** High — the namespace prerequisite is invisible until nothing resolves.
 - **Example.** `examples/ch04_fhir/production-fhir-facade.cls`
 
+### 4.12 `Bundle.type` decides whether all-or-nothing applies, and `batch` satisfies the prose while breaking the guarantee
+
+`skills/fhir` said "Send the Bundle as a transaction so all-or-nothing semantics apply server-side" and
+said nothing about `batch`. The sentence is true and insufficient: a `batch` Bundle satisfies every part of
+it a reader would check, and gets none of the atomicity.
+
+**The two are indistinguishable except by `type`.** Measured with `%DynamicObject`, no server involved:
+
+```
+{"resourceType":"Bundle","type":"batch","entry":[...]}
+    resourceType = Bundle      entry.%Size() = 1
+```
+
+Same `resourceType`, same `entry` array, same resources. "Is it a Bundle?" and "does it have entries?" both
+pass.
+
+**What the difference actually is**, read from the shipped `HS.FHIRServer.DefaultBundleProcessor` on this
+instance:
+
+| method | what it contains |
+|---|---|
+| `ProcessBundle` | `If (tBundleType="transaction") { Set isTransaction = 1 }` … `} elseif (tBundleType="batch") {` |
+| `ProcessBundle` | `If (tBundleType="transaction") \|\| (tBundleType="batch") {` — the only two accepted |
+| `ProcessBundle` | `$$$ThrowFHIR($$$HSFHIRErrInvalidBundleTypeForTransaction, tBundleType, $$$OutcomeIs(400, "error", "invalid"))` |
+| `ExecuteBundleMain` | `// For transaction, if an interaction fails then quit, perform TROLLBACK,` |
+| `ExecuteBundleMain` | `if (pBundleType = "transaction") { … }` — and **no** `pBundleType = "batch"` equivalent |
+
+Three consequences, all of which reach the caller:
+
+1. **Only `transaction` and `batch` reach the processor.** `collection`, `document`, `message`,
+   `searchset`, `history`, `transaction-response` are rejected with an OperationOutcome and **HTTP 400**.
+   That failure is loud and fine.
+2. **`isTransaction` is 1 only for `transaction`.** `batch` is accepted with it 0.
+3. **The rollback is guarded by that flag.** A failed entry in a `batch` leaves the entries that already
+   succeeded in place. The response is `200` with a `batch-response` carrying per-entry statuses — so a
+   caller that checks the outer HTTP status concludes the whole Bundle was applied.
+
+**So validate `Bundle.type` before sending, and stop there.** The guard's job is one comparison. Do **not**
+re-implement transaction semantics in your own code: the server has them, and a second implementation is a
+second thing to get wrong and to keep in step.
+
+Distinguish the three refusals, because they need different fixes: `batch` (accepted, not atomic), a
+missing `type` (400), and any other value (400). A single "invalid Bundle" message sends the reader to the
+wrong place.
+
+- **Not measured behaviourally, and stated as such.** No FHIR endpoint is configured in the gate namespace
+  (`HS_FHIRServer.ServiceConfigData` does not exist there — SQLCODE −30), so a failing `transaction` was
+  never posted and rolled back here. The table above is **read from the shipped implementation**, not
+  executed. `tdd-fhir-bundle-transaction-guard.cls` asserts that implementation text, so an IRIS upgrade
+  that changes the branching fails a test rather than quietly invalidating this section.
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: `%DynamicObject` parsing of
+  both Bundle shapes; `HS.FHIRServer.DefaultBundleProcessor.ProcessBundle` and `.ExecuteBundleMain`
+  implementations read from `%Dictionary.CompiledMethod`; the guard run against seven type values.
+- **Validity.** Still valid.
+- **Severity.** High — the wrong type is accepted silently and leaves partial data.
+- **Example.** `examples/ch04_fhir/fhir-bundle-transaction-guard.cls`,
+  `examples/ch04_fhir/tdd-fhir-bundle-transaction-guard.cls`
+
 ### 4.11 The FHIR payload is a stream id, and every way of touching it fails quietly
 
 §4.10 ends on one clause — "a DTL over a FHIR payload works on the Request's `QuickStreamId`, not on

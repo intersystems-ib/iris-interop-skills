@@ -98,6 +98,8 @@ its siblings.
 | §4.10 | FHIR Facade production wiring (Foundation namespace prerequisite; Facade vs Repository is one ClassName) | `ch04_fhir/production-fhir-facade.cls` |
 | §4.10 | Routing rule for the FHIR Facade — msgClass on HS.FHIRServer.Interop.Request | `ch04_fhir/routing-rule-fhir.cls` |
 | §4.11 | FHIR DTL over a QuickStreamId — `<assign>`ing the id is a reference copy; the body needs a `<code>` block | `ch04_fhir/dtl-fhir-redact-quickstream.cls` |
+| §4.12 | Refuse a Bundle that is not a `transaction` — `batch` is accepted by the server and is not atomic | `ch04_fhir/fhir-bundle-transaction-guard.cls` |
+| §4.12 | Oracle: seven type values, plus a drift alarm on the shipped `DefaultBundleProcessor` branching | `ch04_fhir/tdd-fhir-bundle-transaction-guard.cls` |
 | §4.11 | BP that edits a FHIR payload — `$IsObject(%OpenId(...))` not `%ExistsId`, and one new stream per request | `ch04_fhir/bp-fhir-request-quickstream.cls` |
 | §4.11 | Oracle: no payload property, `%ExistsId` lies, `%Save()` does not flush | `ch04_fhir/tdd-fhir-quickstream-payload.cls` |
 | §5.1 | BS that exposes a SOAP service | `ch05_bpl_dtl/soap-business-service.cls` |

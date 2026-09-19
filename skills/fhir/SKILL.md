@@ -130,7 +130,16 @@ The canonical shape sent from a mobile client to a FHIR Façade is a single FHIR
 - One `Patient` resource carrying the per-program identifier.
 - A collection of `Observation` resources (one per measurement).
 
-Send the Bundle as a transaction so all-or-nothing semantics apply server-side.
+Send the Bundle as a **`transaction`**, and validate `Bundle.type` before sending — `batch` is accepted by the server and is **not** atomic.
+
+> **`batch` satisfies this sentence and breaks the guarantee.** Read from IRIS's shipped
+> `HS.FHIRServer.DefaultBundleProcessor`: `ProcessBundle` accepts **only** `transaction` and `batch`
+> (anything else throws `InvalidBundleTypeForTransaction` with **HTTP 400**), it sets `isTransaction = 1`
+> **only** for `transaction`, and `ExecuteBundleMain`'s `TROLLBACK` is guarded by that same test. So a
+> failing entry in a `batch` leaves the already-successful entries committed, and the response is a
+> `batch-response` whose per-entry statuses a caller checking only the outer HTTP code will miss.
+> A `batch` Bundle is otherwise **identical** — same `resourceType`, same `entry` array. Only `type`
+> distinguishes them. See deliverable §4.12 and `examples/ch04_fhir/fhir-bundle-transaction-guard.cls`.
 
 ## FHIR version
 
