@@ -2842,6 +2842,68 @@ the production to assert that the circuit fires and carries the right text.
 
 ---
 
+### 6.21 Driving `EnsLib.SQL.OutboundAdapter` headless: `Connect()` is the entry point, `OnInit()` is a trap
+
+To check a DSN, a credential set or a driver before any interop item exists, you can build the adapter
+directly. The order that looks right — `%New()`, `OnInit()`, then work — does not work, and it fails in
+the least helpful way available.
+
+**`OnInit()` raises rather than returning.** Measured with no production running:
+
+| `JGService` | result |
+|---|---|
+| untouched (the default) | **raises** `<INVALID OREF>` at `initAdapterJG+2^EnsLib.JavaGateway.Common.1` |
+| assigned `""` | the **same** raise — assigning the default changes nothing |
+| assigned a name | returns a `%Status`: `<Ens>ErrGeneral: No Config Item found for '...' in Production '...'` |
+
+Two things make this expensive. It **raises**, so `$$$ISERR(tSC)` never sees it and the exception unwinds
+past error handling written for a status. And the location names `EnsLib.JavaGateway.Common` — not your
+Business Operation, not `EnsLib.SQL.OutboundAdapter`, and not the `JGService` setting that caused it. The
+empty value is both the worse failure *and* the default, so the reportable status is the one you have to
+opt into.
+
+**`Connect()` needs none of it.** It returns a `%Status`, names the DSN that failed, and for ODBC never
+touches the Java Gateway. So the headless order is `%New()` → `Connect()` → `Do ..Disconnect()`.
+
+**The DSN text alone picks the driver stack**, measured:
+
+| `DSN` | route | failure when unconfigured |
+|---|---|---|
+| `PlainName` | ODBC | `#6022 Gateway failed: SQLConnect` … `SQLState (IM002)` *Data source name not found* |
+| `jdbc:x://h/d` | JDBC | `Unable to connect with empty JDBCDriver setting value` |
+
+A `jdbc:` prefix goes to JDBC and then needs `JDBCDriver`; anything else is an ODBC DSN name that must be
+registered with the host's driver manager. **`DSN = "FHIRTEST"` does not mean "the local namespace"** — it
+means an ODBC DSN of that name, and it fails with IM002 if none is registered.
+
+**`Disconnect` is void, and that is the second trap.** Measured on both `EnsLib.SQL.Common` and
+`EnsLib.SQL.OutboundAdapter`, `ReturnType` is empty, while `Connect` and `ExecuteQuery` both return
+`%Library.Status`:
+
+```
+Do ..Disconnect()          on a never-connected adapter: returns normally, Connected = 0
+Set tSC = ..Disconnect()   RAISES <COMMAND>
+```
+
+The mistake is natural precisely because every *other* method here returns a status — and nothing catches
+it at compile time either, for the reason §6.20 gives.
+
+**`ExecuteQuery` before a successful connect** returns a status wrapping someone else's crash:
+`<Ens>ErrException: <INVALID OREF>ExecuteQueryParmArray+4^EnsLib.SQL.Common.1`. Check the `Connect`
+status yourself; the adapter will not.
+
+**And one thing the error text will lie about.** `OnInit()`'s status names a production (`in Production
+'X'`) even when none is running — that is the last *configured* production, read from config. It is not
+evidence that anything is up.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: the three `JGService` states,
+  both DSN routes, `Disconnect` via `Do` and via `Set`, and `ExecuteQuery` unconnected — all run, with the
+  production confirmed stopped (`IsProductionRunning() = 0`) for the `OnInit` matrix.
+- **Validity.** Still valid.
+- **Severity.** High — the natural call order raises an exception naming nothing the caller wrote.
+- **Example.** `examples/ch06_adapters/sql-adapter-headless-probe.cls`,
+  `examples/ch06_adapters/tdd-sql-adapter-headless.cls`
+
 ### 6.20 `%SOAP.WSDL.Reader.Process`: the measured signature, and why a typed `#Dim` is not a gate
 
 `soap-bo` records the signature with "Verified on IRIS-for-Health 2026.1". A version-pinned claim in

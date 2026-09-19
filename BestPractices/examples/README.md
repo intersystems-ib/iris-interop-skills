@@ -168,6 +168,8 @@ its siblings.
 | §6.19 | Oracle: real SOAP POSTs, positive control first; mutation 1 reopens the hole for an uncredentialed caller | `ch06_adapters/tdd-soap-onprewebmethod-deny.cls` |
 | §6.20 | `%SOAP.WSDL.Reader.Process` behind one call site — a typed `#Dim` documents, it does not gate | `ch06_adapters/soap-wsdl-reader-generate.cls` |
 | §6.20 | Oracle: the formal spec from the dictionary, a generation run from a local file, and the `MakeBusinessOperation` differential | `ch06_adapters/tdd-wsdl-reader-signature.cls` |
+| §6.21 | Headless SQL connection probe via `[SqlProc]` — `Connect()` not `OnInit()`, and `Do` not `Set` on `Disconnect` | `ch06_adapters/sql-adapter-headless-probe.cls` |
+| §6.21 | Oracle: pins raise-vs-status for both `JGService` states, both DSN routes, and `Disconnect`'s void return | `ch06_adapters/tdd-sql-adapter-headless.cls` |
 | §6.18 | Oracle: the wrong class compiles and dies at run time, and both escape routes are refused | `ch06_adapters/tdd-path-from-setting.cls` |
 | §6.17 | The production wiring both modes, with the FQCN item-name exception | `ch06_adapters/production-soap-inbound.cls` |
 | §6.17 | Sibling: the run — which target the setting belongs on, and why | `ch06_adapters/tdd-soap-inbound-targets.cls` |
