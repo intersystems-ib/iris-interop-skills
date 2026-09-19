@@ -61,13 +61,20 @@ Class MyApp.BS.PatientCensusFromCSV Extends Ens.BusinessService
 
 Parameter ADAPTER = "EnsLib.File.InboundAdapter";
 
-Parameter SETTINGS = "RequiredField:Basic";
+Parameter SETTINGS = "TargetConfigNames:Basic,RequiredField:Basic";
 
 Property TargetConfigNames As %String(MAXLEN = 1000);
 
 Property RequiredField As %String;
 
+/// EVERY Property OnInit requires must be in SETTINGS. A Property absent from SETTINGS does not
+/// appear in the Portal's settings panel, so an operator cannot re-point the service without
+/// hand-editing the production XML — and this class's OnInit *requires* TargetConfigNames.
+/// Declaring one and not the other is the shape the bank runs copied.
 /// Validate settings, and fail loud at startup rather than at first message.
+/// NOTE: "at startup" holds for an adapter-driven service like this one. On a PoolSize="0" passive
+/// BS there is no actor to start, so OnInit runs at the FIRST REQUEST instead — see
+/// references/rest-csp.md.
 /// On a PREBUILT EnsLib service you would call ##super() FIRST — the base OnInit is the only
 /// place the parser state is initialised. Here the inherited Ens.BusinessService.OnInit does
 /// nothing by default (ESQL §6.5 "Initializing the Adapter"), so there is nothing to chain to.

@@ -66,10 +66,25 @@ Parameter ADAPTER;
 Parameter SERVICEINPUTCLASS = "MyApp.MSG.SomeRequest";
 Parameter SERVICEOUTPUTCLASS = "Ens.Response";
 
+/// The destination is a SETTING, never a literal. A hardwired target cannot be re-pointed without
+/// a code change and a recompile, and it is invisible in the Portal — the same class of defect as
+/// declaring the Property and leaving it out of SETTINGS.
+Parameter SETTINGS = "TargetConfigNames:Basic";
+
+Property TargetConfigNames As %String(MAXLEN = 1000);
+
+/// A PoolSize="0" passive BS has no actor, so OnInit runs at the FIRST REQUEST, not at production
+/// start. The guard is still worth having — it just is not a startup check here.
+Method OnInit() As %Status
+{
+    If ..TargetConfigNames = "" Quit $$$ERROR($$$EnsErrGeneral, "TargetConfigNames is required")
+    Quit $$$OK
+}
+
 Method OnProcessInput(pInput As MyApp.MSG.SomeRequest, Output pOutput As Ens.Response) As %Status
 {
     Set pOutput = ##class(Ens.Response).%New()
-    Set tSC = ..SendRequestAsync("Router.MyRouter", pInput)
+    Set tSC = ..SendRequestAsync(..TargetConfigNames, pInput)
     If $$$ISERR(tSC) Quit tSC
     Quit $$$OK
 }
@@ -77,6 +92,37 @@ Method OnProcessInput(pInput As MyApp.MSG.SomeRequest, Output pOutput As Ens.Res
 ```
 
 Declared in the production XML with `PoolSize="0"` (no scheduled actor — the REST handler creates an instance on demand via `Ens.Director.CreateBusinessService("BS.RestEntry", .bs)` and calls `bs.ProcessInput(req, .resp)` directly).
+
+**`ProcessInput` returns a `%Status` and the handler must read it.** It is the return value, not
+`pOutput`, that says whether the message was accepted:
+
+```objectscript
+Class MyApp.REST.Intake Extends %CSP.REST
+{
+
+ClassMethod Accept() As %Status
+{
+    Set tSC = ##class(Ens.Director).CreateBusinessService("BS.RestEntry", .tService)
+    If $$$ISERR(tSC) Quit tSC
+
+    Set tReq = ##class(MyApp.MSG.SomeRequest).%New()
+    Set tReq.Payload = %request.Content.Read()
+
+    // THE RETURN VALUE is what says the message was accepted, not pResponse.
+    Set tSC = tService.ProcessInput(tReq, .tResponse)
+    If $$$ISERR(tSC) {
+        Set %response.Status = ..#HTTP500INTERNALSERVERERROR
+        Quit tSC
+    }
+    Set %response.Status = ..#HTTP202ACCEPTED
+    Quit $$$OK
+}
+
+}
+```
+
+Discard that status and the endpoint answers `202 Accepted` for a message the production rejected —
+the caller is told it was queued and nothing was.
 
 `PoolSize="0"` + no adapter = "passive" BS: it doesn't poll anything, it sits in the production as a dispatch point with Visual Trace coverage. This is the canonical pattern for REST inbound, message-queue consumers that already dispatch from outside Ens, or anything where the source isn't an Ens-supported transport.
 

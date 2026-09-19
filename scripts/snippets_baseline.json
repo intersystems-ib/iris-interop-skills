@@ -18,6 +18,7 @@
     "MyApp.MSG.PersonReq",
     "MyApp.MSG.SomeRequest",
     "MyApp.Productions.MainProduction",
+    "MyApp.REST.Intake",
     "MyApp.RUL.Orders",
     "MyApp.RecordMap.Censo",
     "MyApp.RecordMap.Invoice",
