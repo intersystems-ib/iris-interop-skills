@@ -122,9 +122,17 @@
 | ✅ | **Custom inbound adapter** (the corrections' "belongs in wave 1" item, proposed by no wave row) — `adp-scheduler-inbound-adapter.cls` + `bs-scheduled-cron.cls` + `tdd-inbound-adapter-dispatch.cls` under §5.2. Confirmed first: `Ens.InboundAdapter` had **0 hits** in `skills/` and 0 in the bank. Adapter executed and mutation-checked — dispatch removed → `dispatched=0` with `sc=OK`; schedule check removed → fires always. Found on the way: an `Ens.BusinessService` subclass **cannot be `%New()`d** (returns `""`, silently), and `BusinessHost` accepts a non-BS stand-in, which is what makes the adapter testable at all | v1.18.0 |
 | ⬜ | everything else below | — |
 
-**Bank as of v1.15.0: 47 compile-gated classes, 50 artefacts. Tier 1: 9 checks. Tier 3: 29 fences
-staged, 28 clean (1 illustrative placeholder), plus 19 bare members and 33 loose fragments that no
-tier compiles — the last two ratcheted by C9 rather than described in prose. Tier 2b: 19/19 external. Tier 1 is **10** checks as of v1.21.0.**
+**Counts are NOT restated here. Run the gate.**
+
+    python3 scripts/validate_examples.py --compile    # artefacts, tier-1 checks, fences, bare/loose
+    python3 scripts/validate_skills.py                # skill checks, sizes, the token figure
+
+This paragraph used to carry them — "47 compile-gated classes, 50 artefacts, Tier 1: 9 checks,
+Tier 3: 29 fences, 19 bare / 33 loose" — dated `as of v1.15.0`, with a later `Tier 1 is 10 checks as
+of v1.21.0` **appended** rather than replacing it. By v1.109.0 every figure was wrong (169 compiled,
+107 bank artefacts, 20 tier-1 checks, 36 fences, 17 bare / 32 loose) and the appending is the tell:
+a number nobody asserts rots, and the fix is to stop restating it. That is the same defect C9 exists
+to catch, which is why C9's own counts live in `scripts/snippets_baseline.json` and not in prose.
 **Wave 0 is complete.**
 
 ## Two systemic caveats — read before planning from any wave
@@ -155,7 +163,23 @@ the full-coverage version.
 
 ## The waves
 
-## Verdict
+## Verdict — the ORIGINAL AUDIT, 2026-09-18. Superseded; kept for why the waves exist
+
+> **Read this as history, not as state.** Every count below was true when the 12-agent audit ran and
+> is false now — and it contradicts the progress ledger directly above it, which is the authority.
+> The most visible example: this section calls four `BusinessRuleName` values dangling, and the
+> ledger's first two rows record those rules written in **v1.14.0**. For live numbers run the gate
+> (above). For what has landed, read the ledger.
+>
+> What changed, as of v1.109.0: **169** compile-gated classes, not 43 — 106 in the bank plus **63**
+> moved into `skills/*/assets` in v1.102.0. **18 of 20** skills cite at least one example, not 14,
+> and no skill cites zero. The waves are complete: every `S`-row built or explicitly declined
+> (**S51** per Y1, the gap did not exist; **S58** per Y7). Wave 0 is complete. The "59 missing or
+> ungated samples" is the figure the waves were sized against, and it is spent.
+>
+> It is kept verbatim below because it is the argument for the waves — the reasoning is still sound
+> even where the numbers have moved, and deleting it would leave the wave tables with no stated
+> justification.
 
 The bank is **43 compile-gated classes across 9 chapters, cited by 14 of 20 skills** — and six skills (`component-map`, `conformance-review`, `dicom`, `interop`, `lookup-tables`, `report-issue`) cite **zero** bank examples, while four more cite exactly one. Measured against what the skills actually prescribe, coverage is thinner than the file count suggests: **59 distinct canonical samples are missing or ungated**, 16 of them P0. The shape of the gap is consistent and is the shape this repo's own history warns about — the gate is green on the wrong things. Four of the five gated productions set `BusinessRuleName` to a rule class **that does not exist anywhere in the repo** (`Example.RUL.AdtRouting`, `Example.RUL.CensoRouting`, `Example.RUL.FhirRouting`, `Example.Alerting.RUL.AlertRouter`; only `Example.RUL.OrderRouting` ships) and tier 2 compiles all four clean, because a setting value is a string. All four message classes in the bank extend `Ens.Request` alone — the exact form the `messages` skill calls necessary-but-not-sufficient — so the vetted model teaches the shared-extent shape. Zero bank artefacts contain `SearchTableClass`, `ResponseTimeout`, `docCategory`, `..Lookup(`, `TSTART`, or `MAXLEN = ""`; `FailureTimeout` appears once and only in the one file tier 2 skips; `##super` appears once and only in the comment explaining when you *don't* need it. The two largest security/alerting artefacts (§7.1 alert circuit, §11.5 OAuth+LDAP, 207 lines of auth code) are indexed in the README and compiled by nothing, because `validate_examples.py:448` skips every non-`.cls`. **Wave 0 below is free and should ship first: nine of those items are text or rename fixes, not samples at all.**
 
