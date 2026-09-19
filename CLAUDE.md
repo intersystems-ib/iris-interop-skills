@@ -191,10 +191,13 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
     longer a special case. Third time in three days that a scope-limited lookup was read as
     absence — see the "check it against the running instance" convention above, and note that
     *which namespace* is part of "the running instance".
-  - **DICOM** — defers to the vendored MIT snapshot under
-    `BestPractices/external/workshop-iris-dicom-interop/`, which is a real working production. That
-    was a deliberate choice before this pass and it still holds; a thin hand-written duplicate
-    would be worse than a pointer to a complete one.
+  - **DICOM** — the vendored MIT snapshot under
+    `BestPractices/external/workshop-iris-dicom-interop/` is still the canonical END-TO-END reference,
+    and tier 2b compiles it. But "DICOM defers entirely to the snapshot" stopped being true in wave 4:
+    `examples/ch15_dicom/` now carries **10 compile-gated artefacts** for the narrower measured traps
+    (§15.4-§15.7), each with its `%UnitTest` sibling, and `dicom` cites them. A thin hand-written
+    duplicate of the whole workshop would still be worse than pointing at it; a gated sample of one
+    trap is not a duplicate.
 - **A grep gate guards a spelling, not the rule it is named after — say so at the gate** (#151).
   Verifying a home-grown check in both directions (S5 was) proves that one known-bad input reaches
   its failure path. It does not prove the check recognises every violation of the constraint. Where

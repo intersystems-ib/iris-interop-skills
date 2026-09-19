@@ -413,6 +413,30 @@ For all of the above: IRIS DICOM docs + the vendored sample + the upstream
 - `fhir` — `ImagingStudy` / `DiagnosticReport` for DICOM→FHIR.
 - `security` — TLS configuration for DIMSE mutual auth.
 
+## Worked examples in this repo — compile-gated, and not the vendored snapshot
+
+The snapshot below is a whole working production and stays the canonical end-to-end reference. These
+are the narrower measured traps, each compiled by CI on every release, each with its subject example
+and its `%UnitTest` sibling:
+
+- **Modality Worklist date parsing** (§15.4) — `$ZDATEH(value, 5)` and the error trap that stops one
+  bad date aborting the whole C-FIND:
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/dicom-mwl-date-functionset.cls`, tested by
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-dicom-mwl-date.cls`
+- **Registering associations from `OnStart`** (§15.5) — and the verify step that makes it worth doing:
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/production-dicom-onstart-associations.cls` with
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/utl-dicom-association-registrar.cls`, tested by
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-dicom-onstart-associations.cls`
+- **Query/retrieve is a quartet, not a duplex pair** (§15.6) — and the vendored snapshot's own reply
+  leg dangles, which is why tier 2b now ratchets it:
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/production-dicom-query-retrieve.cls` with
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/bp-dicom-leg.cls`, tested by
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-dicom-query-retrieve.cls`
+- **A C-FIND reply is N Pending then exactly one terminal status** (§15.7) — including when there are
+  zero matches, where a responder that returns early sends nothing at all:
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/bp-mwl-findresponse-sequence.cls`, tested by
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-mwl-findresponse-sequence.cls`
+
 ## Reference
 
 - **Local snapshot (canonical):** `${CLAUDE_PLUGIN_ROOT}/BestPractices/external/workshop-iris-dicom-interop/` (frozen, MIT, see `UPSTREAM.md` for SHA)

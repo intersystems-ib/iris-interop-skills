@@ -116,3 +116,14 @@ Before bulk-resending: verify **idempotency** on the downstream BO. A non-idempo
 duplicates — fix that first or use a manual loop with deduplication logic in the BP. The blast radius
 here is the whole filter, so the idempotency question above is not optional at this scale.
 
+## Worked examples in this repo
+
+All four are compiled by CI on every release, and together they are the whole §12.6 circuit — the
+point of the fixture is that resend and edit-and-resend share one body row, so an edit rewrites the
+history of the original send too:
+
+- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/resend-edit-and-resend.cls` — the two APIs side by side
+- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/production-resend-fixture.cls` — the production that makes the shared-body
+  behaviour observable
+- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/bo-message-sink.cls` — the sink the resent messages land in
+- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/tdd-resend-edit-and-resend.cls` — the `%UnitTest` that pins it
