@@ -166,6 +166,61 @@ if not _stated:
 
 check("S6", "shipped descriptions state the real hook count (#167)", bad_hookcount)
 
+# S7 -- the 500-line discipline was won BY HAND and nothing held it (#355, finishing #337).
+#
+# v1.91.0-v1.93.0 brought 20 of 20 SKILL.md under the published limit one file at a time. Not one
+# check measured size, so the next edit could have put them straight back and CI would have said
+# nothing. A budget nobody asserts rots -- the same reason C9 exists in validate_examples.
+#
+# THE RULE IS LINES, and that is a decision, not an oversight. Anthropic's authoring guidance states
+# "Keep SKILL.md body under 500 lines for optimal performance" three separate times, including in its
+# own checklist. That is the rule this gate enforces.
+#
+# THE OTHER BUDGET IS REPORTED AND NOT ENFORCED, deliberately. The Skills overview also gives Level 2
+# a cost of "Under 5k tokens", which is a different unit and a much harder bar: measured at the
+# conventional chars/4 estimate, 14 of 20 skills exceed it, tdd worst at ~9.2k. #355 put that figure
+# at ONE skill by counting WORDS (tdd 5,471 w) -- but words are not tokens, and for this content they
+# run about 0.6x, so a word count understates the token cost by roughly 40% and misses thirteen
+# skills. Enforcing 5k tokens would mean halving most of the plugin, which is a programme and not a
+# gate change, so this prints the number instead of failing on it. It cannot rot while it is printed.
+#
+# The line count is of the BODY, not the file: frontmatter is Level 1 metadata, always loaded, and
+# already governed by its own 1,024-character cap on `description`.
+LINE_BUDGET = 500
+TOKEN_ADVISORY = 5000
+
+oversize, sizes = [], []
+for path in skills:
+    name = os.path.basename(os.path.dirname(path))
+    text = open(path, encoding="utf-8").read()
+    fm = re.match(r"\A---\s*\n.*?\n---\s*(?:\n|$)", text, re.S)
+    body = text[fm.end():] if fm else text
+    lines = body.count("\n") + 1
+    est_tokens = len(body) // 4          # conventional rough estimate; not a tokeniser
+    sizes.append((name, lines, len(body.split()), est_tokens))
+    if lines > LINE_BUDGET:
+        oversize.append("{}: {} lines of body, budget {} -- split the mutually-exclusive part into "
+                        "references/<topic>.md and link it one level deep".format(
+                            name, lines, LINE_BUDGET))
+
+check("S7", "every SKILL.md body is within the published {}-line budget".format(LINE_BUDGET),
+      oversize)
+
+# Positive control for S7: if this list is empty the check above is measuring nothing.
+if not sizes:
+    failures.append("S7")
+    print("  FAIL  S7  no SKILL.md was measured at all -- a clean pass here is vacuous")
+
+over_tok = sorted((s for s in sizes if s[3] > TOKEN_ADVISORY), key=lambda s: -s[3])
+if over_tok:
+    print("\n  NOTE: {} of {} skills exceed the overview's \"Under 5k tokens\" Level-2 figure "
+          "(chars/4 estimate,\n  advisory only -- the ENFORCED rule is {} lines, see the S7 note in "
+          "this file):".format(len(over_tok), len(sizes), LINE_BUDGET))
+    for name, lines, words, tk in over_tok[:5]:
+        print("    {:<24} {:>4} lines  {:>5} words  ~{:>5} tokens".format(name, lines, words, tk))
+    if len(over_tok) > 5:
+        print("    ... and {} more".format(len(over_tok) - 5))
+
 print("\n  label space in use (S4 enumerates rather than filters — see #131):")
 for lab, who in sorted(labels.items(), key=lambda kv: -len(kv[1])):
     print("    {:>3}x  {:<16} {}".format(
