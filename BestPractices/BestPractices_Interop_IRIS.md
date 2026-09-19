@@ -1980,6 +1980,54 @@ That is what decides where the aggregation step can live at all.
   `examples/ch05_bpl_dtl/utl-bpl-sync-audit.cls`,
   `examples/ch05_bpl_dtl/tdd-bpl-sync-audit.cls`
 
+### 5.22 A collection's child table exists only if you ask — and `array` and `list` disagree on the default
+
+The projected name is `SCHEMA.Class_Property` — measured, `Example_MSG.ObsCollections_Codes`. That is the
+second thing to know. The first is that **whether the table exists at all depends on the collection
+type**, and the two defaults are opposite.
+
+Four properties on one class, only the declarations differing, projections read from
+`INFORMATION_SCHEMA.TABLES`:
+
+| declaration | child table | `element_key` |
+|---|---|---|
+| `list Of %String` | **none** | — |
+| `list Of %String(SQLPROJECTION = "table")` | yes | **integer** — the ordinal |
+| `array Of %String` | **yes, unasked** | **varchar** — the key |
+| `array Of %String(SQLPROJECTION = "table")` | yes | varchar |
+
+**`array` projects by default; `list` does not.** So a developer who met child tables on an `array`
+property, then wrote the obvious `SELECT` against a `list` one, gets
+
+```
+SQLCODE -30, Table 'SCHEMA.CLASS_PROPERTY' not found
+```
+
+which reads as a typo in a name that is in fact correct — the table was simply never projected. Loud,
+and still expensive: it cost one cohort a dozen round-trips.
+
+**Where a default `list` actually lives**: as a single `varchar` column on the **parent** table, holding
+the `$List`. Measured — the parent's columns were `ID`, `PatientId` and `Notes varchar`, with the
+projected collections absent from it. So the data is queryable but not relationally: `WHERE Notes [ 'x'`
+works, `JOIN` does not.
+
+**The child table's shape**, which decides how you join it: `<Parent>` (the parent id), `ID`, a column
+named after the property holding the element value, and `element_key`. Note the last one's **type
+differs** — `integer` for a list, `varchar` for an array — so a query written against one and pointed at
+the other compiles and then compares an integer to a string.
+
+**Which to use.** Add `SQLPROJECTION = "table"` when the collection is genuinely queried — reporting, a
+join, an aggregate. Leave it off when the collection is only read through the object, which is the
+common case for an interop message: each child table is another extent to purge, another set of indices,
+and another thing to keep in step.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: four variants compiled and
+  their projections read from `INFORMATION_SCHEMA`, then reproduced on the shipped bank class.
+- **Validity.** Still valid.
+- **Severity.** Medium — it fails loudly, but the name that fails is the correct name.
+- **Example.** `examples/ch05_bpl_dtl/msg-list-collection-child-table.cls`,
+  `examples/ch05_bpl_dtl/tdd-list-collection-projection.cls`
+
 ### 5.21 BPL `<scope>`: the fault handler that completes the process green
 
 `<scope>`, `<faulthandlers>`, `<catchall>`, `<compensationhandlers>` and `<compensate>` appeared
