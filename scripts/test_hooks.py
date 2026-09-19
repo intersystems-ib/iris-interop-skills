@@ -1086,6 +1086,117 @@ check("rank beats declaration order", True,
 check("no interop content is silent", "NOTHING", _route("what is the weather like today"))
 
 
+# --------------------------------------------------------------------------------------
+print("\n#336  the iris_execute rules read CODE, not comments")
+print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
+
+# Reported with a positive control, and reproduced exactly: the same trivial `write` was ALLOWED
+# on its own and DENIED with `// This comment mentions $SYSTEM.OBJ.Compile` above it. The gate's
+# own docstring says it "denies only high-confidence violations (no false positives on ordinary
+# code)", and this was a false positive on ordinary code.
+#
+# The incentive is what makes it worth fixing rather than working around: renaming the API in the
+# comment makes the call pass, so the workaround is to write a LESS accurate comment — a gate for
+# code quality pushing toward code that explains itself worse. It cost a real round trip.
+#
+# THE ALLOW DIRECTION IS THE LOAD-BEARING HALF, as the issue points out: every deny row below
+# already passed before the fix. A single-direction suite would have shipped this bug.
+#
+# COVERAGE: this exercises the four iris_execute rules through the hook. It says nothing about
+# the name/adapter/namespace rules above them, which never read the `code` string.
+
+def _exec_verdict(code):
+    """DENY / ADVISE / ALLOW for an iris_execute call — the three outcomes are distinct.
+
+    run_hook() collapses to DENY on any stdout, and rule (3d) writes stdout to ADVISE. Scoring an
+    advisory as a deny would make the (3d) rows below meaningless.
+    """
+    p = subprocess.run(
+        [sys.executable, GATE],
+        input=json.dumps({"tool_name": "mcp__iris-interop-dev__iris_execute",
+                          "tool_input": {"code": code, "namespace": "FHIRTEST"}}),
+        capture_output=True, text=True)
+    if p.returncode != 0 or p.stderr.strip():
+        return "CRASH: " + (p.stderr.strip().splitlines()[-1][:80] if p.stderr.strip() else "rc")
+    if not p.stdout.strip():
+        return "ALLOW"
+    h = json.loads(p.stdout)
+    h = h.get("hookSpecificOutput") or h
+    return "DENY" if "permissionDecisionReason" in h else "ADVISE"
+
+_W = 'write "X",!'
+
+for _label, _code, _want in [
+    # The issue's own pair, verbatim in substance.
+    ("issue control: no forbidden name anywhere", 'write "CONTROL_OK ",$ZVERSION,!', "ALLOW"),
+    ("issue case: the name only in a // comment",
+     '// This comment mentions $SYSTEM.OBJ.Compile and nothing else does.\n' + _W, "ALLOW"),
+    # Every ObjectScript comment form, since the reported one is only the first.
+    ("a trailing // comment on a code line", _W + '  // avoid $SYSTEM.OBJ.Compile here', "ALLOW"),
+    ("a ; comment (the classic form)", '; we do not use $SYSTEM.OBJ.Load\n' + _W, "ALLOW"),
+    ("a #; preprocessor comment", '#; $SYSTEM.OBJ.Import is banned\n' + _W, "ALLOW"),
+    ("a /* */ block spanning lines",
+     '/* $SYSTEM.OBJ.Compile\n   is what we avoid */\n' + _W, "ALLOW"),
+    # ...and the sibling rules the issue did not name, which had the same defect.
+    ("(3b) a comment naming ^oddDEF", '// never Set ^oddDEF directly\n' + _W, "ALLOW"),
+    ("(3b) a comment naming TextServices.SetText",
+     '// not %Compiler.UDL.TextServices.SetTextFromStream\n' + _W, "ALLOW"),
+
+    # ---- the deny direction must be untouched ----
+    ("$SYSTEM.OBJ.Compile, for real", 'Do $SYSTEM.OBJ.Compile("Demo.BO.X","ck")', "DENY"),
+    ("##class(%SYSTEM.OBJ).Load, for real",
+     'Do ##class(%SYSTEM.OBJ).Load("/tmp/x.cls","ck")', "DENY"),
+    ("TextServices.SetTextFromStream, for real",
+     'Do ##class(%Compiler.UDL.TextServices).SetTextFromStream("USER","A.B",s)', "DENY"),
+    ("Set ^oddDEF, for real", 'Set ^oddDEF("A.B",1)=1', "DENY"),
+    ("a real call on the line AFTER a comment",
+     '// a harmless note\nDo $SYSTEM.OBJ.Compile("Demo.X","ck")', "DENY"),
+
+    # THE HAZARD THE NAIVE FIX CREATES. Cutting each line at the first `//` truncates
+    # "http://example.org" and would hide the real call after it — turning this false positive
+    # into a false NEGATIVE in a deny gate, which is the worse trade. Same for `;` in a string.
+    ("a real call after a URL inside a string",
+     'Set u="http://example.org/a" Do $SYSTEM.OBJ.Compile("Demo.X","ck")', "DENY"),
+    ("a real call after a ; inside a string",
+     'Set d=$Piece(x,";",1) Do $SYSTEM.OBJ.Load("/tmp/y.cls")', "DENY"),
+    ("a real call after an escaped quote in a string",
+     'Set q="a""b" Do $SYSTEM.OBJ.Compile("Demo.X","ck")', "DENY"),
+]:
+    check(_label, _want, _exec_verdict(_code))
+
+# (3d) runs the other way: a comment could buy an EXEMPTION from the advisory. Narrower than it
+# looks, and measured rather than assumed — LIFECYCLE_OK needs the DOTTED form, so a bare mention
+# never exempted anything. The first draft of this claim said it did; a removal test said no.
+import interop_conformance_gate as _cg  # noqa: E402
+
+_dotted = ('// do NOT use ##class(Ens.Director).CleanProduction() here\n'
+           'Set x=##class(Ens.Director).GetProductionStatus(.p,.s)')
+_bare = ('// unlike CleanProduction, this only reads\n'
+         'Set x=##class(Ens.Director).GetProductionStatus(.p,.s)')
+check("a comment with the dotted form no longer exempts", False,
+      bool(_cg.LIFECYCLE_OK.search(_cg.strip_comments(_dotted))))
+check("...and it DID exempt before stripping (control)", True,
+      bool(_cg.LIFECYCLE_OK.search(_dotted)))
+check("a bare mention never exempted either way", False,
+      bool(_cg.LIFECYCLE_OK.search(_bare)))
+# The exemption must survive for a REAL lifecycle call, or (3d) becomes noise on the documented
+# remedy it exists to permit.
+check("a real CleanProduction call is still exempt", True,
+      bool(_cg.LIFECYCLE_OK.search(_cg.strip_comments('Do ##class(Ens.Director).CleanProduction()'))))
+check("(3d) still advises on a real hand-rolled probe", "ADVISE",
+      _exec_verdict('Set x=##class(Ens.Director).GetProductionStatus(.p,.s)'))
+
+# The stripper masks with SPACES and keeps newlines: CLASS_WRITE_BYPASS anchors on `(?:^|[\s:])`
+# and none of these patterns use re.M, so deleting text could join tokens across a removed
+# comment and change what the anchors see.
+check("masking preserves length", True,
+      len(_cg.strip_comments(_W + "  // x")) == len(_W + "  // x"))
+check("masking preserves newlines", 3,
+      _cg.strip_comments("// a\n/* b\n c */\n").count("\n"))
+check("a string containing // is untouched", True,
+      "http://example.org" in _cg.strip_comments('Set u="http://example.org"'))
+
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)

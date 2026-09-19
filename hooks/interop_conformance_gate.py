@@ -108,6 +108,77 @@ UNDERSCORE_MEMBER = re.compile(
 )
 
 
+def strip_comments(code):
+    r"""`code` with ObjectScript comments masked out, for matching the iris_execute rules against.
+
+    WHY THIS EXISTS (#336). The rules below matched the forbidden API names anywhere in the
+    submitted string, comments included -- so a comment that merely NAMED an API was refused.
+    Reproduced with a positive control: the same trivial `write` statement was allowed on its
+    own and denied with `// This comment mentions $SYSTEM.OBJ.Compile` above it.
+
+    That is the wrong incentive in a specific way: the workaround is to write a LESS accurate
+    comment. A gate whose purpose is code quality was pushing toward code that explains itself
+    worse, and it refused the legitimate case of documenting why the sanctioned path is used.
+    It cost a real round trip -- a probe that explained in a comment that it avoided
+    $SYSTEM.OBJ.Compile because of this gate was denied for saying so.
+
+    MASKS WITH SPACES, not by deleting, and keeps every newline. CLASS_WRITE_BYPASS's third
+    pattern anchors on `(?:^|[\s:])` and none of these use re.M, so deleting text could join two
+    tokens across a removed comment and change what the anchors see. Equal-length masking cannot.
+
+    QUOTE-AWARE, which is the whole reason this is a scanner and not a regex. The obvious
+    implementation cuts each line at the first `//`, and that corrupts `"http://example.org"` --
+    truncating a line at a URL inside a string would hide any real call AFTER it on that line,
+    turning this false positive into a false negative in a DENY gate, which is the worse trade.
+    Being quote-aware means trailing comments can be stripped too, with no such hazard.
+
+    Handles the three ObjectScript comment forms: `//` and `;` to end of line (`#;` leaves its
+    `#`, which matches nothing), and `/* */` blocks, which may span lines. `""` inside a string
+    is an escaped quote, not the end of it.
+
+    NOT the same function as conformance_prescan.code_only, deliberately. That one answers "what
+    is executable CLASS-MEMBER text" and is line-based because `///` doc comments dominate class
+    source; this one answers "what does this ObjectScript STATEMENT execute". Different inputs,
+    different right answers -- recorded here so the difference reads as a decision rather than as
+    two strippers that drifted apart.
+    """
+    out, i, n = [], 0, len(code)
+    instr = False
+    while i < n:
+        ch = code[i]
+        if instr:
+            out.append(ch)
+            if ch == '"':
+                if i + 1 < n and code[i + 1] == '"':
+                    out.append('"')        # "" is an escaped quote, still inside the string
+                    i += 2
+                    continue
+                instr = False
+            i += 1
+            continue
+        if ch == '"':
+            instr = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and code[i + 1] == "*":
+            end = code.find("*/", i + 2)
+            end = n if end < 0 else end + 2        # unterminated block masks to the end
+            for c in code[i:end]:
+                out.append("\n" if c == "\n" else " ")
+            i = end
+            continue
+        if (ch == "/" and i + 1 < n and code[i + 1] == "/") or ch == ";":
+            end = code.find("\n", i)
+            end = n if end < 0 else end
+            out.append(" " * (end - i))
+            i = end
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def mask_xdata(src):
     """Blank out XData bodies, keeping the line count.
 
@@ -270,9 +341,21 @@ def main():
         )
 
     # (3) iris_execute used to load/compile/import classes — bypasses iris_doc/iris_compile + this gate.
+    #
+    # #336: every rule in this block matches `scan`, never the raw `code`. The issue reported it
+    # for (3) and (3b); (3c) has the same defect, and in (3d) it runs the OTHER way — a comment
+    # could buy an EXEMPTION from the advisory. Fixing only the two that were reported would
+    # leave the siblings looking more trustworthy than they are.
+    #
+    # (3d)'s half is narrower than it first looks, and measured rather than assumed: LIFECYCLE_OK
+    # needs the DOTTED form, so `// unlike CleanProduction, this only reads` never exempted
+    # anything, while `// do NOT use ##class(Ens.Director).CleanProduction() here` did. The first
+    # draft of this comment claimed the bare mention was enough; a removal test — same string
+    # through the pattern with and without stripping — said otherwise.
     code = ti.get("code") if isinstance(ti.get("code"), str) else ""
+    scan = strip_comments(code)
     if code:
-        m = OBJ_BYPASS.search(code)
+        m = OBJ_BYPASS.search(scan)
         if m:
             deny(
                 "EXEC",
@@ -287,7 +370,7 @@ def main():
 
         # (3b) the other routes into the class dictionary — same bypass, different API (#110).
         for pattern, why in CLASS_WRITE_BYPASS:
-            m = pattern.search(code)
+            m = pattern.search(scan)
             if m:
                 deny(
                     "DICTW",
@@ -305,7 +388,7 @@ def main():
                 )
 
         # (3c) reading the class dictionary global instead of the supported APIs (#110).
-        m = DICT_GLOBAL.search(code)
+        m = DICT_GLOBAL.search(scan)
         if m:
             deny(
                 "DICTR",
@@ -328,9 +411,9 @@ def main():
             )
 
         # (3d) hand-rolled introspection that a typed tool answers. ADVISORY — never a deny.
-        if not LIFECYCLE_OK.search(code):
+        if not LIFECYCLE_OK.search(scan):
             for pattern, tool_call in INTROSPECT_REDIRECT:
-                m = pattern.search(code)
+                m = pattern.search(scan)
                 if m:
                     print(json.dumps({"hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
