@@ -46,7 +46,7 @@ MSG = (
     "iris_doc(mode=get) right after generating; "
     "(8) BEFORE DECLARING DONE, run the conformance pass — hand the finished production to "
     "Agent(subagent_type=\"iris-interop-skills:conformance-reviewer\"), or load "
-    "Skill(iris-interop-skills:conformance-review) and check the fifteen criteria inline. A Stop "
+    "Skill(iris-interop-skills:conformance-review) and check the sixteen criteria inline. A Stop "
     "hook enforces this: it blocks once if any class you put into IRIS has no file on disk "
     "(CR-12), if a hand Ens.BusinessProcess calls SendRequestAsync and overrides no OnResponse "
     "(CR-15 \u2014 measured: every reply then terminates with ERROR #5003), or if the pass never "

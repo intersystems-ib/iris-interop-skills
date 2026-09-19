@@ -1197,6 +1197,104 @@ check("a string containing // is untouched", True,
       "http://example.org" in _cg.strip_comments('Set u="http://example.org"'))
 
 
+# --------------------------------------------------------------------------------------
+print("\n#342  CR-16 — a secret VALUE in a versioned file")
+print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
+
+# Both bench variants got the MECHANISM right (credentials in Ens.Config.Credentials, referenced by
+# name) and leaked the value anyway — one in a `///` comment, one in an on-call `.md`, one as a
+# base64'd literal pair in three files. Every one of those files elsewhere stated the correct rule
+# about writing documents. So the criterion has to see comments and has to see .md.
+#
+# THE NARROW SHAPES ARE THE POINT. Measured over 267 repo files: the four shapes below are 0 false
+# positives, while the OBVIOUS detector — anything named `password` assigned a literal — is 7 of 7
+# false positives, all of them `Password = pPassword`, which is the correct pattern. A criterion that
+# fires on the right answer gets switched off, so the broad form is deliberately not used and the
+# rows below pin both directions.
+
+for _label, _src, _want in [
+    ("leak: literal user:pass inside Base64Encode",
+     'Do h.SetHeader("Authorization","Basic "_$SYSTEM.Encryption.Base64Encode("app:pw2026"))', True),
+    ("leak: literal passed to SetupCredential",
+     "Do ##class(D.UTL.B).SetupCredential(\"cocina_pwd_2026\")", True),
+    # the shape code_only() would hide — CR-16 gets RAW src for exactly this reason
+    ("leak: the same literal inside a /// comment",
+     "/// SELECT D_UTL.B_SetupCredential('cocina_pwd_2026')", True),
+    ("leak: non-empty <Setting Name=\"Password\">",
+     '<Setting Target="Adapter" Name="Password">pw2026</Setting>', True),
+
+    ("ok: password passed as a parameter", 'Set tProps("Password") = pPassword', False),
+    ("ok: the 7-of-7 false-positive shape, python", 'pwd = os.environ.get("IRIS_PASSWORD", "SYS")', False),
+    ("ok: credential referenced BY NAME",
+     '<Setting Target="Adapter" Name="Credentials">MyCred</Setting>', False),
+    ("ok: SetupCredential given a variable", 'Do ##class(D.UTL.B).SetupCredential(pPwd)', False),
+    ("ok: Base64 of a non-secret", 'Set x = $SYSTEM.Encryption.Base64Encode(tBody)', False),
+    # `\S` matches the `<` of the closing tag, so the placeholder idiom needs the (?!</) guard
+    ("ok: EMPTY Password setting is the placeholder idiom",
+     '<Setting Target="Adapter" Name="Password"></Setting>', False),
+]:
+    check(_label, _want, _cp.cr16_secret_in_versioned_file(_src))
+
+# The repo itself must stay clean, or the criterion is asserting nothing about this tree.
+#
+# THREE FILES ARE EXEMPT, by name and for one reason: they DEFINE, TEST or DOCUMENT the criterion,
+# so they necessarily contain the shapes it matches. Verified individually rather than assumed —
+# conformance_prescan.py:372 is the false-positive table in its own comment, test_hooks.py:1217/1222
+# are the fixtures four rows above, and conformance-review/SKILL.md:153 is the CR-16 row quoting the
+# pattern. None is a secret.
+#
+# Named explicitly and NOT pattern-matched: an allowlist is how a real leak hides, so it has to be
+# short enough to re-audit by eye and to break loudly if the criterion moves to another file.
+_CR16_SELF = {
+    os.path.join("hooks", "conformance_prescan.py"),      # the regex and its FP table
+    os.path.join("scripts", "test_hooks.py"),             # the fixtures above
+    os.path.join("skills", "conformance-review", "SKILL.md"),  # the CR-16 criterion row
+}
+import glob as _g
+_scanned = _leaks = 0
+for _f in _g.glob(os.path.join(ROOT, "**", "*"), recursive=True):
+    if not os.path.isfile(_f) or _f.split(".")[-1] not in ("cls", "md", "xml", "json", "py", "sh"):
+        continue
+    if ".git/" in _f or os.path.relpath(_f, ROOT) in _CR16_SELF:
+        continue
+    _scanned += 1
+    if _cp.cr16_secret_in_versioned_file(io.open(_f, encoding="utf-8", errors="replace").read()):
+        _leaks += 1
+        print("          - LEAK: {}".format(os.path.relpath(_f, ROOT)))
+check("no secret literal anywhere in the repo", 0, _leaks)
+check("...and the scan actually read files (control)", True, _scanned > 200)
+# If an exempt file stops containing the shapes, the exemption is stale and should be removed.
+check("every CR-16 self-exemption is still needed", 0,
+      len([_x for _x in _CR16_SELF
+           if not _cp.cr16_secret_in_versioned_file(
+               io.open(os.path.join(ROOT, _x), encoding="utf-8", errors="replace").read())]))
+
+# .md SCOPING: CR-16 runs on markdown, and nothing else does. Widening the filter for every
+# criterion would make CR-1 and CR-5 fire on prose that merely discusses a BP or an MSH:9 route.
+def _md_verdict(text):
+    import tempfile as _tf, subprocess as _sp
+    d = _tf.mkdtemp()
+    fp = os.path.join(d, "doc.md")
+    io.open(fp, "w", encoding="utf-8").write(text)
+    p = _sp.run([sys.executable, os.path.join(ROOT, "hooks", "conformance_prescan.py")],
+                input=json.dumps({"tool_input": {"file_path": fp},
+                                  "transcript_path": os.path.join(d, "t.jsonl")}),
+                capture_output=True, text=True)
+    if not p.stdout.strip():
+        return "silent"
+    c = json.loads(p.stdout)["hookSpecificOutput"]["additionalContext"]
+    return "CR-16" if "CR-16" in c else c[:30]
+
+check("a .md recreation recipe fires CR-16", "CR-16",
+      _md_verdict('**Recreate:** Do ##class(D.UTL.B).SetupCredential("cocina_pwd_2026")'))
+check("a clean .md stays silent", "silent",
+      _md_verdict("Reference the credential by name. Never commit the value."))
+# A .md that would trip a .cls-only criterion must NOT fire — that is the scoping working.
+check("a .md discussing a hand BP does not fire CR-1", "silent",
+      _md_verdict("A class that Extends Ens.BusinessProcess and calls SendRequestAsync( needs "
+                  "OnResponse. See CR-15."))
+
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)
