@@ -2,6 +2,7 @@
   "expected_clean": [
     "App.BS.Preauth",
     "Demo.UTL.EndpointRole",
+    "Demo.UTL.FhirInstall",
     "My.Tests.X",
     "MyApp.BO.WriteCensusToSQL",
     "MyApp.BS.DicomRest",
@@ -37,6 +38,6 @@
   ],
   "ungated": {
     "bare_members": 17,
-    "loose_fragments": 33
+    "loose_fragments": 32
   }
 }
