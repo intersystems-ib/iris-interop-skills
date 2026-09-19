@@ -159,7 +159,7 @@ prefer `..ConvertDateTime` in a DTL — it is in the picker, it round-trips thro
 and it needs no `<code>` block — but choose it knowing it will not refuse 31 February.
 
 Oracle for every row and both failure modes (run and mutation-checked):
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-convertdatetime-cheatsheet.cls`.
+`assets/tdd-convertdatetime-cheatsheet.cls`.
 
 ## Custom DTL functions via FunctionSet subclass
 
@@ -331,7 +331,7 @@ exactly the ones ObjectScript uses most:
 ```
 
 Worked example, compiled *and executed* against live IRIS 2026.1:
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/dtl-order-to-vendor.cls` (§5.7) —
+`assets/dtl-order-to-vendor.cls` (§5.7) —
 shows both escaping forms, and its header records the compile-order trap: `Transform` is built by
 a generator that resolves `sourceClass`/`targetClass` at generation time, so a DTL compiled in the
 same batch as its own message classes can fail with `#5001 <CLASS DOES NOT EXIST>` wrapped in

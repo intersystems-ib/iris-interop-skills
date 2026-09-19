@@ -50,7 +50,7 @@ Production XML excerpt for the alert circuit:
 ```
 
 A complete, **compiled** production with this wiring lives in
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch07_alerting/production-alert-circuit.cls`, with its
+`assets/production-alert-circuit.cls`, with its
 rule in `alert-routing-rule.cls`.
 
 It replaced an `.xml` export in 1.21.0, and the conversion is worth knowing about: because the file

@@ -53,7 +53,7 @@ Two things that surprise people afterwards: `Install()` also creates a
 schema separately (AFNS section 4, Management Portal → Health → *namespace* → Schema Documentation).
 
 Worked, compile-gated example of the interop wiring:
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch04_fhir/production-fhir-facade.cls`
+`assets/production-fhir-facade.cls`
 
 ## Decision tree — Façade vs Repository
 

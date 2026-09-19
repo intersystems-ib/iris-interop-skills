@@ -418,7 +418,7 @@ IRIS auto-escapes HL7 v2 special characters (`| ^ ~ \ &`) when **it** generates 
 
 Without escaping, a `|` inside a free-text field collapses the segment structure and the receiver gets a malformed message.
 
-Helper FunctionSet pattern (`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_hl7v2/hl7v2-escape-functionset.cls`) is portable — copy into your namespace, expose `FormataTextPerHL7v2(text)` and the inverse `DesformataTextDesdeHL7v2(text)`, call from BPs and DTLs.
+Helper FunctionSet pattern (`assets/hl7v2-escape-functionset.cls`) is portable — copy into your namespace, expose `FormataTextPerHL7v2(text)` and the inverse `DesformataTextDesdeHL7v2(text)`, call from BPs and DTLs.
 
 ## Pitfalls to surface
 

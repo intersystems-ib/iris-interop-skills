@@ -36,7 +36,7 @@ Set `EnsembleAutoStart = 0` (or its IRIS equivalent) on the freshly migrated ins
 
 `Ens.Config.Credentials` records contain passwords encrypted with the **instance key** of the source system. Standard backup-restore preserves the records but renders the passwords unreadable in the target instance.
 
-Pattern: write an ObjectScript utility that walks all `Ens.Config.Credentials` rows in the source, exports `(name, username, password)` to a file (treating the file as a secret), then re-imports them on the target. Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch13_migration/credentials-export-reimport.cls`.
+Pattern: write an ObjectScript utility that walks all `Ens.Config.Credentials` rows in the source, exports `(name, username, password)` to a file (treating the file as a secret), then re-imports them on the target. Worked example: `../assets/credentials-export-reimport.cls`.
 
 ### `Ens.<X>` package shadowing
 

@@ -40,10 +40,10 @@ is what the canonical pattern at the top of this skill shows — and then `##sup
 mandatory.
 
 > **Compiled worked examples** (gated by `validate_examples --compile`): the RecordMap
-> definition `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch01_production/recordmap-censo.cls`, wired into a complete production at
+> definition `../assets/recordmap-censo.cls`, wired into a complete production at
 > `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch01_production/production-censo-intake.cls`. For a genuine bare-adapter BS:
-> `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/bs-file-bare-adapter.cls`. For REST inbound:
-> `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/bs-rest-inbound.cls`.
+> `../assets/bs-file-bare-adapter.cls`. For REST inbound:
+> `../assets/bs-rest-inbound.cls`.
 
 ### Authoring the `XData RecordMap` block — the exact schema the validator accepts
 
