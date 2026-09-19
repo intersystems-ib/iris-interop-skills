@@ -1,6 +1,6 @@
 {
   "name": "iris-interop-skills",
-  "version": "1.77.0",
+  "version": "1.78.0",
   "description": "20 skills that steer Claude when building IRIS For Health Interoperability productions — a task→component map, messages, BS/BP/BO, BPL, DTL transformations, HL7 v2 schemas, SOAP/REST, FHIR, DICOM, lookup tables, alerting, security, production lifecycle, message search/debug, a TDD-first workflow, and a post-build conformance review. Start at the iris-interop router. Assumes an IRIS MCP server (iris-agentic-dev or iris-interop-dev) is available. Ships 11 hooks (SessionStart conventions bootstrap + a UserPromptSubmit topic router that names the skills the turn actually needs + 2 PreToolUse gates that block non-conformant writes, illegal identifiers, class loads/compiles smuggled through iris_execute, and namespace-only classes missing from src/ + 6 PostToolUse guards, one of which warns when a put or a production edit leaves src/ stale + 1 blocking Stop gate that refuses to finish until the conformance pass has run) + 4 agents (interop-builder, deploy-smoke-test, introspect-dont-guess, conformance-reviewer).",
   "author": {
     "name": "Pierre-Yves Duquesnoy",

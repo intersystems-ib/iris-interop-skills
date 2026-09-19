@@ -1980,6 +1980,64 @@ That is what decides where the aggregation step can live at all.
   `examples/ch05_bpl_dtl/utl-bpl-sync-audit.cls`,
   `examples/ch05_bpl_dtl/tdd-bpl-sync-audit.cls`
 
+### 5.23 Asserting a BPL ran: `$IsObject(resp)` passes on a process that failed every call
+
+`tdd`'s gated snippet asserted a BPL had worked with exactly two lines:
+
+```objectscript
+Do $$$AssertStatusOK(..SendRequest("BP.MyProcess", req, .resp, 1, 30))
+Do $$$AssertEquals($IsObject(resp), 1, "Got a response back")
+```
+
+Against the §5.21 defect — a `<catchall>` that records a fault and never propagates it — **both pass on a
+run where the only `<call>` failed.** Measured, the same failing input sent to two BPLs in one production:
+
+| target | fault handling | `SendRequest` | `$IsObject(resp)` | `response.StringValue` |
+|---|---|---|---|---|
+| `BP.SwallowedFault` | records, does not propagate | **`$$$OK`** | **1** | `caught: ERROR #5001: …` |
+| `BP.SwallowedFault` (happy input) | — | `$$$OK` | 1 | `none` |
+| `BP.ScopedOrder` | records **and** propagates (§5.21) | **ERROR** | — | — |
+
+The third row matters as much as the first: the propagating shape **is** caught by `$$$AssertStatusOK`
+alone. So the gap belongs to the BPL's fault handling, not to BPL, `SendRequest` or `TestProduction` —
+and a suite that only ever tests honest processes will never notice.
+
+**What does discriminate**, all measured on the failing session:
+
+| signal | on the swallowed failure | on the happy run |
+|---|---|---|
+| `response.StringValue` | `caught: ERROR #5001: …` | `none` — the context's initial expression |
+| `Ens.MessageHeader.Status` | `BO.Failing` at **8** (Error); every other header 9 | all 9 |
+| `Ens_Util.Log`, `Type = 2` | **2 rows**, one naming `BO.Failing` with the `#5001` text | **0 rows** |
+
+Note the happy-run column. "There are error rows in the log" is true of almost any instance; what makes
+it a test is that the same query returns **zero** for a successful run of the same process. Assert the
+difference, not the presence.
+
+**Enum values, read from the dictionary rather than assumed** — `Ens.DataType.LogType`: 1 Assert,
+**2 Error**, 3 Warning, 4 Info, 5 Trace, 6 Alert. `Ens.DataType.MessageStatus`: 8 Error, 9 Completed.
+
+**Writing the log assertion, two things measured while getting the snippet to compile.** An embedded-SQL
+host variable must be a **local**: `:..BaseLogId` fails with *"Host variable name must begin with either %
+or a letter, not '.'"*, so copy the property out first. And an `&sql()` **split across lines compiles
+fine** — that was a wrong guess at a `#5559`, and the real cause was a markdown blockquote that had landed
+inside the fence.
+
+**A secondary observation, on the same theme.** An early version of the fixture assigned a long string to
+`Ens.StringContainer.StringValue` and overflowed it. IRIS logged `#7201 Datatype value … too long` as a
+`Type = 2` row — and `SendRequest` still returned `$$$OK` with the full value readable on the response
+object. A datatype violation is another failure that reaches the caller as success.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: both BPL shapes driven with
+  the same failing and succeeding inputs through `%UnitTest.TestProduction.SendRequest`
+  (`(Name, Req, &Resp, GetReply=0, Time=30)`, a **ClassMethod**), with headers and log rows read per
+  session.
+- **Validity.** Still valid.
+- **Severity.** High — the assertion reports success on a process that did nothing.
+- **Example.** `examples/ch05_bpl_dtl/tdd-testproduction-bpl.cls`,
+  `examples/ch05_bpl_dtl/bpl-scope-swallow-fixture.cls`,
+  `examples/ch05_bpl_dtl/production-bpl-assertions.cls`
+
 ### 5.22 A collection's child table exists only if you ask — and `array` and `list` disagree on the default
 
 The projected name is `SCHEMA.Class_Property` — measured, `Example_MSG.ObsCollections_Codes`. That is the
