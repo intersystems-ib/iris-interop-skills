@@ -1832,19 +1832,50 @@ nobody looks once the data has arrived.
 reason "BP" and "BPL" being treated as synonyms is expensive — the obligation exists only for the hand
 form. `EnsLib.MsgRouter.RoutingEngine` has nothing to implement either, which is the other way out.
 
-**This is now a criterion.** `CR-15` fires mechanically on a hand `Ens.BusinessProcess` that calls
-`SendRequestAsync` and overrides no `OnResponse`, and the pre-scan's advisory names the runtime failure
-rather than the style rule — a warning that says `#5003` is harder to step over than one that says
-"less idiomatic". It complements `CR-1` rather than repeating it: CR-1 has legitimate exceptions, and when
-a hand BP is written *with* reason, CR-15 is the obligation that comes with it.
+**This is now an ENFORCED criterion.** `CR-15` fires mechanically on a hand `Ens.BusinessProcess`
+that calls `SendRequestAsync` and overrides no `OnResponse`. It complements `CR-1` rather than
+repeating it: CR-1 has legitimate exceptions, and when a hand BP is written *with* reason, CR-15 is
+the obligation that comes with it.
+
+Two layers, deliberately at different thresholds:
+
+| layer | when | fires on |
+|---|---|---|
+| `conformance_prescan.py` (PostToolUse) | the class is written | advisory — any hand BP with no `OnResponse` whose `pResponseRequired` this file cannot rule out |
+| `conformance_stop_gate.py` (Stop) | work is declared done | **blocks** — only where at least one call site provably leaves `pResponseRequired` at `1` |
+
+The split is the whole design. It went to the Stop gate because an advisory was measured being read,
+acknowledged and stepped over (#331: two flagged classes shipped, and the resulting production logged
+16 `ErrBPTerminated`) — an advisory competes with sixty steps of context, a check at the end does not.
+`CR-15` and not `CR-1` is what got escalated, because CR-1 has exceptions and blocking correct work at
+the end of a long session is worse than an ignored warning.
+
+**And `pResponseRequired = 0` is an EXEMPTION from the block, not a defect of it.** Re-measured
+2026-09-19, three hand BPs in one production, one message each:
+
+| `pResponseRequired` | `OnResponse` | Event Log | reached the operation |
+|---|---|---|---|
+| default (`1`) | absent | `ERROR #5003` / `<Ens>ErrBPTerminated` | yes |
+| explicit `0` | absent | clean | yes |
+| default (`1`) | present | clean | yes |
+
+Row 2 is why the enforcing layer reads `pResponseRequired` **per call site** instead of matching text.
+A fire-and-forget call never invokes the callback and cannot fail this way, so a class making only
+those calls is correct without `OnResponse` — and the file-level escape a text match would need ("a
+`0` appears in a `SendRequestAsync` call") is satisfied by one such call in a class that *also* makes
+a default one, which is a real defect waved through. Note also that all three rows **delivered**: that
+is the reason a gate is needed rather than a test.
 
 - **Source.** Bank audit 2026-09-18; the bank had no class-based BP at all. The `#5003` half added
   2026-09-19 from issues #331/#332, with `Ens.BusinessProcess.OnResponse`'s body read from
   `%Dictionary.CompiledMethod` and `$$$NotImplemented` resolved to its message text.
 - **Validity.** Verified against IRIS for Health 2026.1 in a running production, both `pResponseRequired`
-  variants; the `#5003` mechanism verified at the source rather than by terminating a process.
+  variants. The `#5003` half was first verified only at the source; it has since been verified **by
+  terminating a process** — a hand BP with the default `pResponseRequired` and no override logged
+  `ERROR #5003` / `<Ens>ErrBPTerminated`, while the same class passing `0` ran clean, and both delivered
+  to the operation.
 - **Severity.** High — one half drops the reply and reports success, the other terminates on every reply
-  while the circuit still delivers.
+  while the circuit still delivers. The second half is the one the Stop gate blocks on.
 - **Example.** `examples/ch05_bpl_dtl/bp-class-based-async.cls`
 
 ### 5.13 Calling a function from a DTL — the two forms have opposite rules and the wrong one is silent

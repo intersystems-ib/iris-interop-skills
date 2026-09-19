@@ -14,8 +14,8 @@ worth 0 invocations in 206 runs.
 
 This hook is that missing point. It fires once, at the moment the model would stop.
 
-TWO CHECKS, DELIBERATELY DIFFERENT IN KIND
-------------------------------------------
+THREE CHECKS, DELIBERATELY DIFFERENT IN KIND
+--------------------------------------------
 1. **Orphaned classes (CR-12), mechanical.** Every class this session wrote into IRIS with
    `iris_doc(mode=put)` must also exist on disk. This needs no model judgement and no IRIS
    connection — the transcript records what was put, and the filesystem is right here.
@@ -29,12 +29,37 @@ TWO CHECKS, DELIBERATELY DIFFERENT IN KIND
    one at 96.45. A Stop hook sees the whole session, so it can tell "scratch namespace, no
    authoring" from "authored a production and saved none of it".
 
-2. **Conformance pass not run, behavioural.** If the session authored interop classes and
+2. **CR-15, mechanical and PROVEN.** A hand `Ens.BusinessProcess` that calls
+   `SendRequestAsync` leaving `pResponseRequired` at its default of 1, and overrides no
+   `OnResponse`, terminates with `ERROR #5003: Not implemented` on every reply. Measured on
+   this image, three BPs in one production, one message each:
+
+       pResponseRequired   OnResponse   Event Log                             reached the BO
+       default (1)         absent       ERROR #5003 / <Ens>ErrBPTerminated    yes
+       explicit 0          absent       clean                                 yes
+       default (1)         present      clean                                 yes
+
+   It is here rather than left advisory because #331 measured the advisory being read,
+   acknowledged and stepped over: two classes flagged CR-1 by the PostToolUse pre-scan both
+   shipped, and the resulting production logged 16 `ErrBPTerminated`. An advisory competes
+   with sixty steps of context; a check at the end does not.
+
+   CR-15 and not CR-1 is escalated, deliberately. CR-1 ("do not write a BP to route") has
+   legitimate exceptions, so blocking on it would eventually block correct work at the end of
+   a long session, which is worse than an ignored warning. CR-15 has no exception once
+   `pResponseRequired` is 1: the base method is unimplemented and the reply is guaranteed.
+
+   The predicate is IMPORTED from the pre-scan, never restated -- see the import note below.
+   Note row 3 of the table: every case DELIVERED to the operation. That is why this needs a
+   gate at all. The flow works, so the end-to-end test passes and the only evidence is in the
+   Event Log, which nobody reads once the data has arrived.
+
+3. **Conformance pass not run, behavioural.** If the session authored interop classes and
    never invoked the reviewer, say so once. This one is a nudge with teeth rather than a
    proof of error, so it blocks a single time and then gets out of the way.
 
-Both respect `stop_hook_active`, and both are additionally bounded by a session cutoff and a
-persisted latch (#122). That combination — not `stop_hook_active` alone — is what makes the
+All three respect `stop_hook_active`, and all are additionally bounded by a session cutoff
+and a persisted latch (#122). That combination — not `stop_hook_active` alone — is what makes the
 model interrupted at most once per body of work. `stop_hook_active` is true only while the
 model is already being re-invoked by THIS hook; it resets on every new user turn, so on its
 own it prevents an infinite loop within one turn and nothing more. Relying on it for "once
@@ -44,10 +69,22 @@ written the previous day, in turns that authored nothing.
 A gate that cannot be satisfied is a gate that gets disabled.
 
 NOT MEASURED. That 0/206 is measured; whether this moves it is not, and cannot be from the
-skills session — it needs an eval pass (issue #102). Check (1) does not depend on model
-behaviour and so cannot regress to zero; check (2) might.
+skills session — it needs an eval pass (issue #102). Checks (1) and (2) do not depend on model
+behaviour and so cannot regress to zero; check (3) might.
 """
 import sys, json, os, re, hashlib, calendar, time
+
+# CR-15's predicate is IMPORTED, never restated here. The pre-scan and this gate must agree
+# about what fires: a copy would be a second definition to keep in step, and the same
+# criterion meaning two things in the advisory layer and the enforcing layer is precisely the
+# defect behind #331 ("the detector is correct; the warning obliges nothing"). A restatement
+# would also have to carry the pResponseRequired call-site analysis, which is the part that
+# took a measurement to get right.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from conformance_prescan import cr15_verdict as _cr15_verdict
+except Exception:
+    _cr15_verdict = None      # a broken sibling must degrade this branch, never crash the gate
 
 # Every exit path in this hook is silent by design — an allowing hook writes no
 # attachment and produces no transcript event. That makes a hook that never fires
@@ -84,7 +121,10 @@ XML_DECL = re.compile(r"<Class\s+name=[\"\']([A-Za-z0-9_.%]+)[\"\']", re.I)
 
 
 def classes_on_disk(root):
-    """Every class name actually DEFINED by a file under the project.
+    """Every class name actually DEFINED by a file under the project, mapped to its path.
+
+    The path half exists for CR-15 below, which has to READ the class it judges. Membership
+    tests behave identically on a dict, so find_orphans is unchanged by it.
 
     Matching on filename is the obvious implementation and it is wrong. This plugin's own
     example bank names files by topic — `dtl-order-to-vendor.cls` defines
@@ -99,7 +139,7 @@ def classes_on_disk(root):
     os.walk rather than glob('**'): glob silently skips dot-directories, so a class staged
     under one reads as missing (#95 cost a cycle to that).
     """
-    found = set()
+    found = {}
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for fn in filenames:
@@ -112,12 +152,12 @@ def classes_on_disk(root):
                     text = fh.read()
             except OSError:
                 continue
-            found.update(CLASS_DECL.findall(text))
-            found.update(XML_DECL.findall(text))
+            for name in CLASS_DECL.findall(text) + XML_DECL.findall(text):
+                found.setdefault(name, path)
             # a file named for its class counts even if the body cannot be parsed
             base = fn[:-4] if low.endswith(".cls") else None
             if base and "." in base:
-                found.add(base)
+                found.setdefault(base, path)
     return found
 
 
@@ -125,6 +165,45 @@ def find_orphans(root, classes):
     """Classes this session put into IRIS that no file under the project defines."""
     on_disk = classes_on_disk(root)
     return [c for c in sorted(classes) if c not in on_disk]
+
+
+def cr15_offenders(root, put, srcs):
+    """(class, path) for every class among `put` that PROVABLY fails CR-15.
+
+    SOURCE SELECTION, and it decides whether this branch is honest: the file on disk wins over
+    the content that was put. The plugin's own rule is that the filesystem is the source of
+    truth, CR-12 above has already established that each of these classes has a file, and the
+    file is what the model will edit to fix this. Judging the put content instead would keep
+    demanding a fix that has already been made on disk but not yet re-put -- a gate that
+    cannot be satisfied by doing the right thing, which is how gates get disabled.
+
+    Only "provable" blocks. cr15_verdict's "possible" -- a hand BP whose pResponseRequired is a
+    variable this file cannot evaluate -- stays with the advisory pre-scan, because here a false
+    positive costs the credibility of the whole gate rather than one warning.
+    """
+    if _cr15_verdict is None:
+        return []                       # no predicate -> this branch does not exist
+    on_disk = classes_on_disk(root)
+    out = []
+    for cname in sorted(put):
+        path = on_disk.get(cname)
+        src = ""
+        if path:
+            try:
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    src = fh.read()
+            except OSError:
+                src = ""
+        if not src:
+            src = srcs.get(cname) or ""
+        if not src:
+            continue
+        try:
+            if _cr15_verdict(src) == "provable":
+                out.append((cname, path or "(in the namespace only)"))
+        except Exception:
+            continue                    # never block on a parser bug
+    return out
 
 
 def transcript_set(path):
@@ -380,14 +459,18 @@ def get_says_absent(block):
 
 
 def scan_transcript(path, cutoff=0.0):
-    """Return (classes put into IRIS this session, whether a conformance pass ran).
+    """Return (classes put into IRIS, whether a pass ran, {class: source last put}).
+
+    The third value is what CR-15 falls back to when a class has no file on disk -- it is the
+    exact text that reached the namespace, so a judgement made on it is a judgement about what
+    actually compiled.
 
     Matches the JSON keys of genuine tool invocations, never prose: the router's own text
     contains the literal string `Skill(iris-interop-skills:conformance-review)`, so it
     appears in 98.4% of transcripts as loaded context. Counting that as evidence of a
     review is the trap that made this look fine for 206 runs.
     """
-    put, reviewed = set(), False
+    put, reviewed, srcs = set(), False, {}
     files = transcript_set(path)
     opened = 0
     results, events = {}, []          # #157: correlate each put with its outcome
@@ -443,7 +526,7 @@ def scan_transcript(path, cutoff=0.0):
                             continue
                         if GENERATED.search(name):
                             continue
-                        events.append(("put", block.get("id"), strip_cls(name)))
+                        events.append(("put", block.get("id"), strip_cls(name), content_str))
 
                     elif mode == "get":
                         # A get answering NOT_FOUND is positive proof the class is not in the
@@ -451,7 +534,7 @@ def scan_transcript(path, cutoff=0.0):
                         # model to produce. Today producing it changes nothing.
                         n = inp.get("name")
                         if isinstance(n, str) and n.strip():
-                            events.append(("get", block.get("id"), strip_cls(n.strip())))
+                            events.append(("get", block.get("id"), strip_cls(n.strip()), None))
 
                     elif mode == "delete":
                         # Staging scratch classes and deleting them afterwards is a legitimate
@@ -460,27 +543,30 @@ def scan_transcript(path, cutoff=0.0):
                         # namespace, and the gate fires on the careful case.
                         for n in ([inp.get("name")] + list(inp.get("names") or [])):
                             if isinstance(n, str) and n.strip():
-                                events.append(("del", None, strip_cls(n.strip())))
+                                events.append(("del", None, strip_cls(n.strip()), None))
 
     # replay in encounter order so a later delete still cancels an earlier put
     skipped = 0
-    for kind, tid, cname in events:
+    for kind, tid, cname, body in events:
         if kind == "del":
             put.discard(cname)
+            srcs.pop(cname, None)
         elif kind == "get":
             if get_says_absent(results.get(tid)):
                 put.discard(cname)
+                srcs.pop(cname, None)
         elif put_reached_iris(results.get(tid)):
             put.add(cname)
+            srcs[cname] = body        # last put wins: a re-put is the fix for an earlier one
         else:
             skipped += 1
 
     if not opened:
         _trace("transcript_unreadable", transcript=path, candidates=len(files))
-        return put, True  # cannot read anything -> never block on a hook's blind spot
+        return put, True, srcs  # cannot read anything -> never block on a hook's blind spot
     _trace("scanned", transcripts=opened, subagents=len(files) - 1, puts=len(put),
            blocked_puts=skipped, reviewed=reviewed)
-    return put, reviewed
+    return put, reviewed, srcs
 
 
 def _count_lines(path):
@@ -524,7 +610,7 @@ def main():
         return
 
     cutoff = session_cutoff(transcript)
-    put, reviewed = scan_transcript(transcript, cutoff)
+    put, reviewed, srcs = scan_transcript(transcript, cutoff)
     if not put:
         _trace("no_puts", transcript=transcript,
                exists=os.path.exists(transcript),
@@ -599,6 +685,55 @@ def main():
             "(Measured: 16 runs finished with no .cls on disk at all and 12 of them scored as "
             "passes, one at 96.45 \u2014 ground truth is read from the namespace, so saving "
             "nothing still grades green.)".format(len(fresh), len(put), listed, more)
+        )
+
+    # --- #331: CR-15, the one criterion worth blocking on -----------------------
+    #
+    # Ordered after CR-12 and before the review nudge, which is not arbitrary. CR-12 and this
+    # are proofs; the review nudge is a nudge. And CR-15 cannot even be evaluated until the
+    # class has a file or a recorded put, which CR-12 is what establishes.
+    #
+    # Latched per unresolved condition and per branch (#210): the key is the SET OF OFFENDING
+    # CLASSES, not the body of work, so writing one more unrelated class does not re-raise a
+    # problem that has already been named once.
+    #
+    # The remedy names the two fixes that keep the call's semantics -- override OnResponse, or
+    # use a RoutingEngine which has nothing to implement. It deliberately does NOT mention that
+    # pResponseRequired=0 also satisfies the criterion. That is a real and documented exemption
+    # (it is in conformance-review/SKILL.md, where a person reads it), but naming it inside the
+    # denial would hand an agent a one-character way out that silently changes the flow from
+    # request/reply to fire-and-forget. Naming the remediation in the denial text is how an
+    # agent gets its own bypass (upstream 1.2.7, fork #169/#170).
+    offenders = cr15_offenders(root, put, srcs)
+    if offenders:
+        claimed = set(_latch_state(transcript).get("CR15_claimed") or [])
+        fresh = [(c, pth) for c, pth in offenders if c not in claimed]
+        if not fresh:
+            _trace("latched_cr15", offenders=len(offenders))
+            return                      # already named once; stay silent
+        _trace("blocking_cr15", put=len(put), offenders=len(fresh))
+        listed = "\n".join("  - {}   ({})".format(c, pth) for c, pth in fresh[:15])
+        more = "\n  ... and {} more".format(len(fresh) - 15) if len(fresh) > 15 else ""
+        latch_record(transcript, "CR15_claimed",
+                     sorted(claimed | set(c for c, _ in offenders)))
+        block(
+            "CR15",
+            "CR-15 \u2014 {} hand-written Ens.BusinessProcess class(es) call SendRequestAsync and "
+            "override no OnResponse:\n\n{}{}\n\n"
+            "Ens.BusinessProcess.OnResponse is `Quit $$$EnsError($$$NotImplemented)`. With "
+            "pResponseRequired at its default of 1 the reply IS delivered, the callback IS "
+            "invoked, and it is unimplemented \u2014 so every reply terminates the process with "
+            "`<Ens>ErrBPTerminated ... ERROR #5003: Not implemented`.\n\n"
+            "This is not caught by testing the flow. Measured on this platform: the outbound "
+            "operation has already run by the time the reply comes back, so the data arrives, the "
+            "production reads green, and the only evidence is in the Event Log.\n\n"
+            "Fix each class, then stop:\n"
+            "  - override `Method OnResponse(request As Ens.Request, ByRef response As "
+            "Ens.Response, callrequest As Ens.Request, callresponse As Ens.Response, "
+            "pCompletionKey As %String) As %Status`, or\n"
+            "  - replace the hand BP with `EnsLib.MsgRouter.RoutingEngine` plus a business "
+            "rule, which has nothing to implement (that is CR-1).\n\n"
+            "These classes will not be asked for again.".format(len(fresh), listed, more)
         )
 
     if not reviewed:

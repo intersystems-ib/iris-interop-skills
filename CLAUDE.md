@@ -30,7 +30,12 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   gate, src-before-iris), six PostToolUse guards (silent-execute guard, TDD enforcement,
   conformance pre-scan, docker-detect, tdd-first-green, src-drift guard), and one blocking
   **Stop** gate (conformance-stop-gate) that enforces "before declaring done" — see #96 for why an
-  advisory nudge was worth 0 invocations in 206 runs.
+  advisory nudge was worth 0 invocations in 206 runs. It blocks on three things: **CR-12**
+  (a class put into IRIS with no file on disk), **CR-15** (a hand BP whose `SendRequestAsync` leaves
+  `pResponseRequired` at 1 with no `OnResponse` — measured to terminate every reply with `#5003`),
+  and "the conformance pass never ran". CR-15's predicate is **imported** from
+  `conformance_prescan.py`, never restated: the advisory layer and the enforcing layer must not be
+  able to disagree about what fires.
   The conformance gate also sits on `Write|Edit`, scoped to `.cls` paths only, so an illegal
   identifier is caught before the VS Code sync carries the class into IRIS (#219).
 - **Required user setting:** raise the skill-listing budget (`skillListingBudgetFraction: 0.03`,
@@ -109,7 +114,8 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
     a bare `Method`/`ClassMethod` (no host class, no knowable superclass) and fences holding loose
     statements (no compilation unit). If you move a rule into one of those, it is ungated again.
     - **Tier 1's C9 ratchets both counts** against `ungated` in `scripts/snippets_baseline.json`
-      (currently **20 bare, 34 loose**): growth fails the build, a drop only prints "progress".
+      (read the counts from that file — restating them here is what rotted last time, twice):
+      growth fails the build, a drop only prints "progress".
       Re-record deliberately with `--update-baseline`, never to make a red go away.
     - C9 exists because this figure was carried in this file as prose and **rotted**. It read 33
       for four releases while the truth was 34, and the single fence that made the difference was
