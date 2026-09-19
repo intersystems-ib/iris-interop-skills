@@ -123,6 +123,31 @@ def artefacts() -> list[Path]:
     )
 
 
+def skill_assets() -> list[Path]:
+    """Standalone `.cls` files bundled inside a skill, at `skills/<name>/assets/`.
+
+    THESE ARE COMPILED BY TIER 2 AND ARE OTHERWISE UNGATED. Measured before this existed: a real
+    bank class copied to `skills/messages/assets/` left every tier unchanged -- 170 artefacts, 169
+    staged, tier 1 and tier 2 both green and both blind to it. #335 proposes moving the 49
+    uniquely-owned bank classes into the skill that cites them; done without this, all 49 would
+    leave compile coverage in the same commit that moved them, silently.
+
+    Kept SEPARATE from artefacts() on purpose rather than merged into it. `rel()` is
+    BANK-relative and raises for anything outside the bank, and it is called from a dozen places
+    in tier 1; widening artefacts() would mean auditing every one of them to find the crash.
+    A second source costs one loop and cannot break the bank's own checks.
+
+    `assets/` and not `references/` is the DIRECTION test, not an importance one: references/ is
+    material the model reads to understand, and it costs context when opened; assets/ is material
+    the model copies into its output, and it costs nothing until copied. A standalone
+    compile-verified class carrying its own `/// Rule:` provenance header is emit-shaped by
+    construction. A reference filed as an asset is never read, so the trap it documents goes
+    untaught; an asset filed as a reference costs a full context load to use a file that should
+    have been copied unread. Both directions hurt.
+    """
+    return sorted(SKILLS.glob("*/assets/*.cls"))
+
+
 def rel(p: Path) -> str:
     return str(p.relative_to(BANK))
 
@@ -606,6 +631,27 @@ def tier1() -> bool:
     r.check("C17", "every §\"Heading\" citation in a skill resolves, and none points at a section "
                    "that moved into that skill's own references/", dead + moved)
 
+    # ── C18 ───────────────────────────────────────────────────────────────────────────────
+    # A `.cls` bundled in a skill is a copy-and-adapt template, so it needs the same provenance a
+    # bank artefact needs: C1 requires `/// Rule:` there, and an asset the model pastes into a
+    # production without knowing which measured rule it encodes is worse than no asset.
+    #
+    # Deliberately NOT the full C1..C16 set. Those run off artefacts(), which is BANK-relative
+    # (see skill_assets()), and C4 in particular checks the bank README both ways -- a skill asset
+    # is not indexed there and never should be. Header and one-class-per-file are the two that
+    # carry meaning outside the bank.
+    asset_bad = []
+    for f in skill_assets():
+        text = read(f)
+        if "/// Rule:" not in text:
+            asset_bad.append(f"{repo_rel(f)} -> no `/// Rule:` header; an asset is pasted into a "
+                             f"production, so it must say which measured rule it encodes")
+        if len(class_names(text)) != 1:
+            asset_bad.append(f"{repo_rel(f)} -> {len(class_names(text))} classes in one file; an "
+                             f"asset is copied whole, so it must be exactly one loadable unit")
+    r.check("C18", "every .cls bundled in skills/*/assets carries a /// Rule: header and one class",
+            asset_bad)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
@@ -908,9 +954,17 @@ def tier2() -> bool:
         if len(names) == 1:
             sources[names[0]] = text
 
+    assets = 0
+    for f in skill_assets():
+        names = class_names(read(f))
+        if len(names) == 1:
+            sources[names[0]] = read(f)
+            assets += 1
+
     iris = Atelier()
     print(f"  target {iris.base}")
-    print(f"  staging {len(sources)} classes\n")
+    print(f"  staging {len(sources)} classes"
+          + (f" ({assets} from skills/*/assets)" if assets else "") + "\n")
 
     staged: list[str] = []
     ok = False
