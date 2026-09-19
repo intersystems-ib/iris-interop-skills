@@ -185,8 +185,7 @@ For `type="delimited"` the `fieldSeparator` attribute must be **absent** — the
 set for this type at all"*. Minimum correct shape:
 
 ```xml
-<Record xmlns="http://www.intersystems.com/Ensemble/RecordMap"
-        name="Censo" type="delimited"
+<Record name="Censo" type="delimited"
         targetClassname="MyApp.RecordMap.Censo.Record"
         recordTerminator="&#xA;">
   <Separators><Separator>,</Separator></Separators>
@@ -210,8 +209,9 @@ first — so one defect wears three faces and only one of them says "namespace":
 `#6235` blames `Field` when the field definitions are fine. Two things make it cheap to fix, both
 measured on 2026.1:
 
-- **Omitting `xmlns` altogether generates fine**, with or without the header. If you cannot recall
-  the URI, leave the attribute out; a *wrong* one fails, a *missing* one does not.
+- **The shape above omits `xmlns` deliberately** — omitting it generates fine, so the canonical form
+  is the one that cannot fail. If you do write it, only
+  `http://www.intersystems.com/Ensemble/RecordMap` works.
 - **The `XData RecordMap [ XMLNamespace = "…" ]` bracket is inert.** A wrong URI there generates
   clean, and a bracket that *matches* a wrong element URI still fails. When the error mentions a
   namespace, the bracket is not the thing to compare.
