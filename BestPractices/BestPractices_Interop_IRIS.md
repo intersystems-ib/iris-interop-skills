@@ -568,6 +568,66 @@ setting and require a finding.
   `examples/ch02_hl7v2/routing-rule-hl7-mllp.cls`,
   `examples/ch02_hl7v2/tdd-mllp-setting-targets.cls`
 
+
+### 1.20 Scheduling with `%SYS.Task.Definition`, and the purge settings that do not purge
+
+§5.2 offers two routes to scheduled work and prefers the native task framework for greenfield. The
+adapter route has an artefact (`adp-scheduler-inbound-adapter.cls`); the task route had none.
+
+**The superclass is `%SYS.Task.Definition`.** `%SYS.TaskSuper` also exists, is `%Persistent`, and has
+**no `OnTask`** — so it survives a "does this class exist?" check and then never runs anything. Measured:
+`OnTask` is declared on `%SYS.Task.Definition` and on nothing else. It is a BANNED token in tier 1.
+
+The contract, from the dictionary: `OnTask()` takes **no arguments** and returns `%Status`; plus
+`GetTaskName()`, `OnSubmit(&pID, pSubmit)`, and `GetSettings()`/`SetSettings()`, which is how your own
+properties get rendered in the Portal. The superclass brings only `%RunDate` and `%RunTime` — everything
+else the task declares itself.
+
+**The line that matters is the dispatch.** An `OnTask()` that evaluates its schedule and returns
+`$$$OK` without calling `ProcessInput` is the canonical silent failure: the Task Manager shows a
+successful run, "Last Finished" advances, the Event Log is empty, and nothing is produced. Same shape as
+§5.2's adapter trap, different framework.
+
+**Two objects, two namespaces.** `%SYS.Task` is the *schedule* and is `%SYS`-scoped; the work class is
+named by its `TaskClass` and lives in the **interop** namespace. `Ens.Util.Tasks.Purge` is not mapped
+into `%SYS` — so reading its properties after hopping there returns **zero rows with `SQLCODE 100`**,
+which a `< 0` check does not catch and which reads as "this class has no settings". Hop for the schedule,
+stay put for the work. (See §11.13 for `New $Namespace`.)
+
+**The spelling is `NumberOfDaysToKeep`.** There is no `NumDaysToKeep` anywhere — measured, zero rows,
+with a positive control returning the two classes that carry the long name (`Ens.Util.Tasks.Purge` and
+`Ens.Util.Tasks.PurgeMessageBank`). Setting a property that does not exist on a `%SYS.Task` is not an
+error; it is a value that goes nowhere.
+
+**And the defaults that make a scheduled purge look broken**, read off `Ens.Util.Tasks.Purge`
+(which itself extends `%SYS.Task.Definition`):
+
+| setting | default | |
+|---|---|---|
+| `TypesToPurge` | **`"events"`** | **not messages** — the default purge removes Event Log rows only |
+| `BodiesToo` | **`0`** | message bodies **survive** a message purge |
+| `NumberOfDaysToKeep` | `7` | |
+| `KeepIntegrity` | `1` | will not split a session; a long-running session pins everything in it |
+| `BitMapPurgeMaxDuration` | `600` | |
+
+So "I scheduled the purge and the database still grows" has two ordinary explanations before anything is
+wrong: `TypesToPurge` never included messages, and `BodiesToo` left every body behind. Both are
+one-word settings and neither reports anything. `KeepIntegrity = 1` is the third and the one to leave
+alone — a purge that removed nothing on a busy instance is usually this working correctly.
+
+The schedule's own magic numbers, from their own `VALUELIST`/`DISPLAYLIST`: `TimePeriod`
+`0=Daily 1=Weekly 2=Monthly 3=Monthly Special 4=Run After 5=On Demand`; `DailyFrequency` `0=Once 1=Several`.
+`Settings` is a `%Binary` `$List` of alternating name/value pairs — measured by round-tripping a real
+task and reading it back.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: every signature and default
+  from the dictionary, the schedule by creating, reopening and deleting a real `%SYS.Task`.
+- **Validity.** Still valid.
+- **Severity.** High — a task that dispatches nothing looks like a task that ran, and the default purge
+  settings remove almost nothing.
+- **Example.** `examples/ch01_production/task-definition-scheduled-bs.cls`,
+  `examples/ch01_production/purge-task-schedule.cls`,
+  `examples/ch01_production/tdd-scheduled-task.cls`
 ### 2.1 Use a custom HL7 schema for non-standard partner messages
 
 When a partner emits ER7 messages that deviate from the published HL7 standard (e.g., `SQM_S25` / `SRM_S25` missing `RGS` segment), define a custom HL7 schema based on v2.5 in the Portal, redefine just the affected messages, and set the BS's `MessageSchemaCategory` setting (Portal: “Message Schema Category”) to that schema name.
