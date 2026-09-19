@@ -267,9 +267,11 @@ if not sizes:
 #
 # THE REMEDY IS EVICTION, NOT RELOCATION OF THE NEW THING, and the first version of this text got it
 # wrong. It said to move the new material to references/ "where it costs nothing until read" --
-# measured over 6 Ejercicio-3 runs, Haiku opened a bundled file 0 times out of 303-422 path mentions
-# and Sonnet 1-2 times, so for a capability the task needs, relocating costs the whole capability
-# rather than nothing. Worse, the queue this gate was aimed at (#339, #345, #347) is exactly the
+# measured with a marked guide card and both controls separating cleanly, `references/` + `assets/`
+# is 1 pickup in 44 across Haiku 4.5 AND Sonnet 4.6, with no difference between the models
+# (p = 1.00) -- so for a capability the task needs, relocating costs the whole capability rather
+# than nothing. Full table and provenance: BestPractices/AB-PREREGISTRATION.md, which is the single
+# record of these figures precisely so they are not restated here and left to rot. Worse, the queue this gate was aimed at (#339, #345, #347) is exactly the
 # queue that ADDS required content, so the old wording pointed every future fix at the place fixes
 # die. Fund an addition by evicting genuinely optional depth instead. The remaining issue queue (#339, #345, #347) all ADD content to large
 # skills, and this is what redirects those additions instead of quietly re-inflating what #337 fixed.
@@ -301,10 +303,14 @@ else:
             grew_tok.append("{}: ~{} body tokens, baseline ~{} (+{}) -- FUND IT by evicting "
                             "genuinely optional depth to skills/{}/references/, or re-record "
                             "deliberately. Do NOT move the NEW material out unless nobody needs it "
-                            "to finish the task: measured over 6 Ejercicio-3 runs, Haiku opened a "
-                            "bundled file 0 times out of 303-422 mentions and Sonnet 1-2 times, so "
-                            "for the new capability the cost of relocating is not zero -- it is the "
-                            "whole capability".format(name, tk, was, tk - was, name))
+                            "to finish the task: measured, references/ and assets/ are picked up "
+                            "1 time in 44 across BOTH Haiku and Sonnet (p = 1.00 between them), so "
+                            "relocating a needed capability does not cost a little -- it costs the "
+                            "whole capability. And the body is not a safe fallback either on a small "
+                            "model: inline is 100% on Sonnet but 27% on Haiku, so anything that "
+                            "truly cannot fail belongs in a hook or a gate denial, not in prose. "
+                            "Table: BestPractices/AB-PREREGISTRATION.md".format(
+                                name, tk, was, tk - was, name))
 check("S8", "no SKILL.md body grew its always-loaded token cost (per-skill ratchet)", grew_tok)
 
 if _recorded:

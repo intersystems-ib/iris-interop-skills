@@ -32,8 +32,51 @@ reorganisation can show anything — a null result would be uninterpretable, not
 **Gate 0 measures the mechanism, not the outcome:** over the runs, how often is a
 `skills/*/references/*.md` or `skills/*/assets/*.cls` file read?
 
-- **Evidence already in hand, from the peer session's 6 Ejercicio-3 runs:** Haiku opened a bundled
-  file **0 times**; Sonnet **1–2 times**. Both against hundreds of in-transcript mentions.
+### VERDICT, 2026-09-20: Gate 0 **FAILED**, and the matrix is cancelled by this document's own rule
+
+Measured by the GENAI-Course session with a *delator* — a 30-line guide card carrying an
+unguessable convention marker, so the readout is "did the marker appear in the class the model
+wrote", a `grep` with no IRIS in the path. Controls are half the design and both separated
+cleanly: card **in the prompt** 5/5 in both models, card **nowhere** 0/4.
+
+| where the card was | Haiku 4.5 | Sonnet 4.6 |
+|---|---|---|
+| in the prompt *(positive control)* | 5/5 — 100 % | 5/5 — 100 % |
+| **inline in `SKILL.md`** | 3/11 — **27 %** | **11/11 — 100 %** |
+| `references/` | 0/11 — **0 %** | 0/10 — **0 %** |
+| `assets/` | 0/11 — **0 %** | 1/12 — **8 %** |
+
+| contrast | Fisher |
+|---|---|
+| `inline`: Haiku vs Sonnet | **p = 0.001** |
+| Sonnet: `inline` vs both doors | **p < 0.00001** |
+| the doors: Haiku vs Sonnet | **p = 1.00 — no difference** |
+
+**The conclusion splits in two, and only one half is global.**
+
+1. **The doors are dead for everyone.** `references/` + `assets/` is **1 hit in 44** across both
+   models, and the two models do not differ (p = 1.00). Not "Haiku does not open files" — *nobody*
+   opens them. This recommendation is model-independent.
+2. **The `SKILL.md` body is model-dependent.** Sonnet 11/11; Haiku 3/11. So "the body is a lossy
+   channel" is true **for Haiku and false for Sonnet**, and an earlier version of this document
+   implied it was general.
+
+**Consequences, which bind work planned from here:**
+
+- Gate 0's pass condition (**≥ 1 open per run in ≥ half of runs**) is missed by both models, so by
+  the rule below **the expensive matrix does not run.** A null from it would have been
+  uninterpretable; this is the informative result and cost a fraction as much.
+- **"What truly cannot fail does not go in `SKILL.md`"** is correct **for Haiku**. For Sonnet, inline
+  suffices and a gate is luxury. The channel that reaches both at the moment of decision — a hook's
+  injected text, or a gate's denial message — is the only one measured at 100 % for Haiku, and it is
+  **untested**: see `bench/arm-denial`.
+- **Moving a capability into `references/` is deleting it**, for either model. That is what S8's
+  remedy text enforces; this table is the evidence behind it.
+
+This section is the single record of these figures. Everything else in the repo points here rather
+than restating them, because a number restated in prose rots and a number with one owner does not.
+
+- **Evidence superseded by the verdict above.**
 - **Pass condition:** the opens-per-run rate is high enough that an effect is physically possible.
   Pre-committed threshold: **≥ 1 open per run, in ≥ half of runs, in the arm being tested.**
 - **If Gate 0 fails, stop.** Do not run the matrix. The finding is then *"bundled files are not
