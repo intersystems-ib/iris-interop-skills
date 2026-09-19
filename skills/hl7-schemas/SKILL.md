@@ -23,6 +23,12 @@ The user mentioned: custom HL7 schema, Z-segment, custom DocType, schema editor,
 
 ## When a custom schema is required
 
+> **Defining the category is half the job — the transform must be told to WRITE it.** A DTL declaring
+> `sourceDocType` and no `targetDocType`, *or a standard one*, silently **drops** any field the target
+> schema does not map — and at the default `Parameter REPORTERRORS = 0` it still returns `$$$OK`.
+> Measured three ways in `transformations` §"The WRITE side: `targetDocType`".
+
+
 When a partner emits ER7 messages that deviate from the published HL7 standard — e.g. a `SQM_S25` / `SRM_S25` missing the standard `RGS` segment, or a `ZPI` segment carrying site-specific patient preferences — define a custom schema based on the closest standard version (typically v2.5), redefine only the affected messages, and point the BS's `MessageSchemaCategory` at the custom schema.
 
 This is the only way to make DTL field-name resolution work for the non-standard fields. Without a custom schema, DTL falls back to numeric paths and the BS may reject messages it can't validate against the standard.
