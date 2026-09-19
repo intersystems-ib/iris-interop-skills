@@ -7,17 +7,9 @@ How to author a Search Table class and wire it. This is a build task, not a sear
 Everything above assumes someone already declared the fields. Authoring one is a single subclass
 plus one production setting:
 
-```objectscript
-Class MyApp.Search.Hl7Adt Extends EnsLib.HL7.SearchTable
-{
-XData SearchSpec [ XMLNamespace = "http://www.intersystems.com/EnsSearchTable" ]
-{
-<Items>
-  <Item DocType="" PropName="PatientFirstName">[PID:5().2]</Item>
-</Items>
-}
-}
-```
+The skeleton is inline in the skill body — one canonical copy, because two fences declaring the same class name make the gate stage one and silently skip the other.
+What follows is the part that is only here.
+
 
 - **The XData namespace is `EnsSearchTable`** — literally
   `http://www.intersystems.com/EnsSearchTable`. `EnsHL7SearchTable`, the form you'd guess by

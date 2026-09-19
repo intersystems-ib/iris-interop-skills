@@ -217,7 +217,10 @@ ERROR <EnsRecordMap>ErrInvalidRecordProp: Invalid value for property 'fieldSepar
 ```
 
 That reads as *"your value is malformed"* and actually means *"this property must not be set for
-this type at all"*. The separator goes in `<Separators>`, one `<Separator>` per nesting level —
+this type at all"*.
+
+**The class compiles CLEAN with it** — measured both ways, the error comes only from
+`GenerateObject`, never the compiler. A green compile is not evidence the map is valid. The separator goes in `<Separators>`, one `<Separator>` per nesting level —
 one element for a flat CSV. Minimum correct shape, copy this:
 
 ```xml
@@ -274,7 +277,7 @@ Pkg.REST.impl   GENERATED 1x  Extends %REST.Impl — your method bodies. Edits S
 
 2. **Never trust the compile — check the artifacts exist:**
 
-   ```objectscript
+   ```
    Write ##class(%Dictionary.CompiledClass).%ExistsId("Pkg.REST.disp"),!
    Write ##class(%Dictionary.CompiledClass).%ExistsId("Pkg.REST.impl"),!
    ```

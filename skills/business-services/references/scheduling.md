@@ -10,7 +10,7 @@ Default Ensemble inbound adapters do **interval** scheduling ("every X seconds")
 
 - **Custom scheduler adapter** with a cron-style format `min hour day month dayOfWeek`. Most legacy
   customer projects built one of these. **Gated example:**
-  `assets/adp-scheduler-inbound-adapter.cls`,
+  `../assets/adp-scheduler-inbound-adapter.cls`,
   with its service `bs-scheduled-cron.cls` and dispatch test `tdd-inbound-adapter-dispatch.cls`.
   Until 1.18.0 nothing in this plugin showed the shape — `Ens.InboundAdapter` had **zero** hits
   across all 20 skills and the whole bank — while §5.2 named a class for it.

@@ -263,9 +263,15 @@ if not sizes:
 # WORSE.
 #
 # PER SKILL, not a total, and that is the whole mechanism. A total would let one skill grow while
-# another shrinks, which is how the always-loaded cost creeps up unnoticed. Per skill, the remedy for
-# any growth is the behaviour the reorganisation was for: move the new material to references/, where
-# it costs nothing until read. The remaining issue queue (#339, #345, #347) all ADD content to large
+# another shrinks, which is how the always-loaded cost creeps up unnoticed.
+#
+# THE REMEDY IS EVICTION, NOT RELOCATION OF THE NEW THING, and the first version of this text got it
+# wrong. It said to move the new material to references/ "where it costs nothing until read" --
+# measured over 6 Ejercicio-3 runs, Haiku opened a bundled file 0 times out of 303-422 path mentions
+# and Sonnet 1-2 times, so for a capability the task needs, relocating costs the whole capability
+# rather than nothing. Worse, the queue this gate was aimed at (#339, #345, #347) is exactly the
+# queue that ADDS required content, so the old wording pointed every future fix at the place fixes
+# die. Fund an addition by evicting genuinely optional depth instead. The remaining issue queue (#339, #345, #347) all ADD content to large
 # skills, and this is what redirects those additions instead of quietly re-inflating what #337 fixed.
 #
 # chars/4 is a conventional estimate, not a tokeniser. That is fine for a ratchet -- it only has to be
@@ -292,9 +298,13 @@ else:
             grew_tok.append("{}: not in the baseline ({} tokens) -- a NEW skill must be recorded "
                             "deliberately".format(name, tk))
         elif tk > was:
-            grew_tok.append("{}: ~{} body tokens, baseline ~{} (+{}) -- move the new material to "
-                            "skills/{}/references/<topic>.md, where it costs nothing until read, or "
-                            "re-record deliberately".format(name, tk, was, tk - was, name))
+            grew_tok.append("{}: ~{} body tokens, baseline ~{} (+{}) -- FUND IT by evicting "
+                            "genuinely optional depth to skills/{}/references/, or re-record "
+                            "deliberately. Do NOT move the NEW material out unless nobody needs it "
+                            "to finish the task: measured over 6 Ejercicio-3 runs, Haiku opened a "
+                            "bundled file 0 times out of 303-422 mentions and Sonnet 1-2 times, so "
+                            "for the new capability the cost of relocating is not zero -- it is the "
+                            "whole capability".format(name, tk, was, tk - was, name))
 check("S8", "no SKILL.md body grew its always-loaded token cost (per-skill ratchet)", grew_tok)
 
 if _recorded:

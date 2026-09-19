@@ -32,7 +32,7 @@ Each BO writes to its own log file path, settable from the Portal at runtime —
 
 **Caveat:** `^ISCSOAP` is process-scoped, so heavy multi-process scenarios can still cross-pollute. Treat as a debug aid, not always-on tracing. Disable the SoapLogFile setting once the issue is diagnosed.
 
-Worked example: `assets/alt-soap-webclient-tracing.cls`.
+Worked example: `../assets/alt-soap-webclient-tracing.cls`.
 
 ## Retention and purge
 
