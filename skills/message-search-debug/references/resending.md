@@ -122,8 +122,8 @@ All four are compiled by CI on every release, and together they are the whole §
 point of the fixture is that resend and edit-and-resend share one body row, so an edit rewrites the
 history of the original send too:
 
-- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/resend-edit-and-resend.cls` — the two APIs side by side
-- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/production-resend-fixture.cls` — the production that makes the shared-body
+- `../assets/resend-edit-and-resend.cls` — the two APIs side by side
+- `../assets/production-resend-fixture.cls` — the production that makes the shared-body
   behaviour observable
-- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/bo-message-sink.cls` — the sink the resent messages land in
-- `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch12_monitoring/tdd-resend-edit-and-resend.cls` — the `%UnitTest` that pins it
+- `../assets/bo-message-sink.cls` — the sink the resent messages land in
+- `../assets/tdd-resend-edit-and-resend.cls` — the `%UnitTest` that pins it

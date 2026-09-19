@@ -28,7 +28,7 @@ concatenated with MSH-9. See `business-services` §"HL7 Business Service" for th
 `hl7-schemas` for Ad-hoc messages (Z-segments, custom structures).
 
 **Gated, executed example:**
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch02_hl7v2/dtl-hl7-symbolic-paths.cls` with its
+`../assets/dtl-hl7-symbolic-paths.cls` with its
 fixture test `tdd-hl7-fixture-test.cls`. Measured, and the reason that test exists: a DTL compiles
 **identically** whether the symbolic path is right or nonsense, so tier 2 is green on both — only
 running the transform and asserting an output field separates them.

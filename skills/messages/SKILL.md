@@ -46,7 +46,7 @@ Property Department As %String(MAXLEN=80);
 ### Why `%Persistent` must be leftmost
 
 **Gated example and the only mechanical check:**
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/msg-persistent-leftmost.cls` and its
+`assets/msg-persistent-leftmost.cls` and its
 test `…/tdd-message-own-extent.cls`. The test was mutation-checked — it passes as shipped and
 **fails** when the superclass order is reversed, which no other check in that repo does.
 
@@ -147,7 +147,7 @@ namespace.
 The cascade goes on the class that **references** the object — the message — not on the child:
 
 **Gated, executed example — use it instead of retyping this:**
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/msg-persistent-child-delete-cascade.cls`
+`assets/msg-persistent-child-delete-cascade.cls`
 with its child `dat-address-persistent.cls` and test `tdd-delete-cascade.cls`.
 
 The snippet that used to sit here was wrong in two ways that both compiled, and they are worth
@@ -204,7 +204,7 @@ Alternatives that **fail**:
 - `Serializable` (the default `%SerialObject` choice for the wizard) — produces a cyclic-reference compile error when a CDA `Component` recursively contains `Component`.
 - Persistent with Relationships — slow XML serialisation as above.
 
-Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch03_cda/cda-from-xsd-persistence-pattern.cls`.
+Worked example: `assets/cda-from-xsd-persistence-pattern.cls`.
 
 **Export what the wizard generated.** A CDA XSD produces dozens of classes, all of them written
 straight into the namespace — the source-of-truth gate never sees them, because the wizard does
@@ -224,7 +224,7 @@ This unlocks two things:
 1. The DataTransform Wizard sees concrete types and proposes correct field mappings per variant.
 2. Routing rules can constrain by `msgClass` to dispatch the variants to different processors.
 
-Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch03_cda/comanda-resposta-inheritance.cls`.
+Worked example: `assets/comanda-resposta-inheritance.cls`.
 
 ## SOAP envelope carrying HL7 / CDA as MessageBody
 
@@ -237,7 +237,7 @@ When a partner's WSDL specifies a custom `acceptMessage(message)` operation with
 
 Same pattern applies for SOAP-carrying-CDA (e.g. `<publicarDocument>` with a `<ClinicalDocument xmlns="urn:hl7-org:v3">` directly in the SOAP Body parameter).
 
-Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch03_cda/soap-messagebody-hl7-proxy.cls`.
+Worked example: `assets/soap-messagebody-hl7-proxy.cls`.
 
 ## XML projection — three settings to know
 
@@ -250,7 +250,7 @@ When a message class is projected to XML (SOAP payloads, REST XML responses, fil
 | `CONTENT = "ESCAPE"` on a `%Stream.GlobalCharacter` property | XML-escapes the text. | For free-text fields that may contain `<` or `&`. |
 | `OUTPUTTYPEATTRIBUTE = 0` (class-level on SOAP proxy) | Suppresses `xsi:type` attributes on every element. | When the partner SOAP server rejects messages with `xsi:type` (some SAP, some vendor servers — see `soap-bo` §"Vendor rejects `xsi:type` attributes"). |
 
-Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/xml-projection-settings.cls`.
+Worked example: `assets/xml-projection-settings.cls`.
 
 ## Common pitfalls
 
@@ -342,8 +342,8 @@ is an unrelated mechanism — see `business-services` on a RecordMap separator d
   "it stores". Switch to a stream well before the ceiling rather than at it.
 
 Worked examples (compiled, and the test is run and mutation-checked):
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/msg-maxlen-boundaries.cls` and
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-maxlen-truncation.cls`.
+`assets/msg-maxlen-boundaries.cls` and
+`assets/tdd-maxlen-truncation.cls`.
 
 > **SOAP Wizard / WSDL caveat.** When a WSDL declares a string **without a length facet**, the message class the SOAP wizard auto-generates can come out with a **bounded `%String` (the 50 default)** for that property — so a longer value fails validation the moment the message is saved. After running the wizard, **review the generated payload classes and widen** the affected properties to `%String(MAXLEN="")` (or `%Stream.GlobalCharacter` for large content). See `soap-bo`. Whether the SOAP *deserializer* rejects or quietly shortens before any save is a separate path and is unmeasured — widen the property and the question does not arise.
 

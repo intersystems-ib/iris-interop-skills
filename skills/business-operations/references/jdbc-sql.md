@@ -192,7 +192,7 @@ count. The workaround people reach for — concatenating values into the stateme
 spliced in by hand — is an injection surface and is exactly what these methods remove.
 
 The worked, **compile-gated** version is
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/sql-bo-typed-parmarray.cls`
+`../assets/sql-bo-typed-parmarray.cls`
 (`Example.Adapters.BO.SqlTypedParmArray`) — use it rather than the sketch that used to sit here. That
 file carries `Include EnsSQLTypes` and uses `$$$SqlInteger`, `$$$SqlVarchar`, `$$$SqlJDate` and
 `$$$SqlDouble` in real code, so tier 2 **compiles the macro names** on every release. The sketch here
@@ -262,7 +262,7 @@ used as SqlType`. `"SqlType"` is the primary name and the one ESQL documents, bu
 production code uses `"CType"` — **do not "fix" it, it works.**
 
 Worked example, compiled against live IRIS as part of the example-bank gate:
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/sql-bo-typed-parmarray.cls`
+`../assets/sql-bo-typed-parmarray.cls`
 
 Two historical `<SUBSCRIPT>` gotchas from the same family, kept for recognition only — both Caché
 2016.2 / 2017 era and not reproduced on 2026.1:

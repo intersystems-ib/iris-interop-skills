@@ -273,7 +273,7 @@ The two most-guessed-wrong families:
 **On `-30 Table not found`, the NEXT call is introspection — never another guessed name.**
 
 > **Compiled worked examples**: typed parameters and NULLs via `ExecuteUpdateParmArray` at
-> `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/sql-bo-typed-parmarray.cls`; the inbound side, with the mandatory
+> `assets/sql-bo-typed-parmarray.cls`; the inbound side, with the mandatory
 > `EnsLib.JavaGateway.Service` item wired, at `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/production-sql-poll.cls`.
 
 ## JDBC / SQL outbound
@@ -302,7 +302,7 @@ When a third-party library is only available as Java (legacy SAML modules, custo
 
 The `EnsLib.JavaGateway.Service` item is how a production reaches an **External Language Server**: its `%gatewayName` names the ELS (`%JDBC Server` is the IRIS-shipped default). The two are not alternatives and the item is not deprecated — see [references/jdbc-sql.md](references/jdbc-sql.md). Use a custom Java gateway BO sparingly all the same: most legacy use cases now have native ObjectScript alternatives (e.g. SAML via `intersystems-ib/SAML-COS`).
 
-Worked example: `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/javagateway-bo.cls`.
+Worked example: `assets/javagateway-bo.cls`.
 
 ## Lab device integration — DT in both directions
 

@@ -322,9 +322,16 @@ def tier1() -> bool:
     r.check("C6", "no token the audit proved wrong (comments exempt)", banned_hits)
 
     broken_links = []
+    asset_names = {f.name for f in skill_assets()}
     for path in re.findall(r"\*\*Example\.\*\*\s*`examples/([^`]+)`", doc):
-        if not (BANK / path).exists():
-            broken_links.append(f"deliverable cites examples/{path}, which does not exist")
+        # The deliverable cites `examples/<ch>/<file>` by its bank path. After the asset move the
+        # file may live in skills/<name>/assets instead, and it is still shipped -- so a basename
+        # match there resolves the pointer. The deliverable keeps the historical path on purpose:
+        # rewriting 45 §-anchored citations to per-skill paths would couple the book to the skill
+        # layout, and the book is the stable half.
+        if (BANK / path).exists() or os.path.basename(path) in asset_names:
+            continue
+        broken_links.append(f"deliverable cites examples/{path}, which does not exist")
     # ── C8 ────────────────────────────────────────────────────────────────────────────────
     # A production <Setting> value is a STRING, so tier 2 compiles a production whose
     # BusinessRuleName names a class that does not exist anywhere. Found by audit: three of the
@@ -334,13 +341,18 @@ def tier1() -> bool:
     #
     # Covers .xml artefacts too: the alert-circuit production is XML, which tier 2 skips
     # entirely, so it is the one place a dangling name would never be compiled at all.
+    # BANK PLUS SKILL ASSETS, and this is the whole reason the asset move needed the gate first.
+    # C7/C8/C10 ask "does this name resolve to something we ship". `files` is bank-only, so the
+    # moment 63 examples moved into skills/*/assets these three started reporting real, shipped
+    # classes as dangling: 45 C7 failures, 2 C8, 1 C10 -- measured, not predicted, on the first run
+    # after the move. Messages use repo_rel(), never rel(), because rel() is bank-relative and RAISES
+    # outside it.
+    gated = [f for f in files if f.suffix in (".cls", ".xml")] + skill_assets()
     CLASS_SETTINGS = ("BusinessRuleName", "RecordMap")
     ITEM_SETTINGS = ITEM_REF_SETTINGS
-    shipped = {cn for f in files if f.suffix == ".cls" for cn in class_names(read(f))}
+    shipped = {cn for f in gated if f.suffix == ".cls" for cn in class_names(read(f))}
     dangling = []
-    for f in files:
-        if f.suffix not in (".cls", ".xml"):
-            continue
+    for f in gated:
         text = read(f)
         if "<Production " not in text:
             continue
@@ -364,9 +376,9 @@ def tier1() -> bool:
                 if name in CLASS_SETTINGS:
                     if v in shipped or v.startswith(("Ens", "EnsLib", "HS", "%")):
                         continue
-                    dangling.append(f"{rel(f)} -> {name}=\"{v}\" names no shipped class")
+                    dangling.append(f"{repo_rel(f)} -> {name}=\"{v}\" names no shipped class")
                 elif name in ITEM_SETTINGS:
-                    dangling.append(f"{rel(f)} -> {name}=\"{v}\" names no item in this production")
+                    dangling.append(f"{repo_rel(f)} -> {name}=\"{v}\" names no item in this production")
     r.check("C8", "production settings resolve to a shipped class or an item in the same production",
             dangling)
 
@@ -384,9 +396,7 @@ def tier1() -> bool:
     # compiled at all.
     rule_targets = []
     prod_items: dict[str, set[str]] = {}
-    for f in files:
-        if f.suffix not in (".cls", ".xml"):
-            continue
+    for f in gated:
         text = read(f)
         if "<Production " not in text:
             continue
@@ -397,9 +407,7 @@ def tier1() -> bool:
                 if mm:
                     items.add(mm.group(1))
             prod_items[cn] = items
-    for f in files:
-        if f.suffix not in (".cls", ".xml"):
-            continue
+    for f in gated:
         text = read(f)
         m_prod = re.search(r'<ruleDefinition[^>]*\sproduction="([^"]*)"', text)
         if not m_prod or not m_prod.group(1):
@@ -701,14 +709,27 @@ def tier1() -> bool:
     #
     # Rename or move an example and this fires, which is the point: the bank's README is reconciled
     # by C4, but a skill citing the old name was unguarded in both directions.
+    # BOTH path forms, and the second arm is why: moving a bank example into skills/<name>/assets/
+    # replaces its `${CLAUDE_PLUGIN_ROOT}/...` citation with one RELATIVE to the citing file, which
+    # is the portability win (no variable to resolve) -- and which the first arm cannot see. Without
+    # this arm the move would silently drop 63 citations out of path verification in the same commit
+    # that created them. Resolved against the citing file's own directory, so `assets/x.cls` from a
+    # SKILL.md and `../assets/x.cls` from a references/ file both work.
     plugin_refs, dangling = 0, []
     for md in skill_markdown():
-        for m in re.finditer(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\s`)'\"]+)", read(md)):
+        body = read(md)
+        for m in re.finditer(r"\$\{CLAUDE_PLUGIN_ROOT\}/([^\s`)'\"]+)", body):
             target = m.group(1).rstrip(".,;")
             plugin_refs += 1
             if not (REPO / target).exists():
                 dangling.append(f"{repo_rel(md)} -> ${{CLAUDE_PLUGIN_ROOT}}/{target} does not exist")
-    r.check("C19", "every ${CLAUDE_PLUGIN_ROOT} path a skill cites resolves on disk", dangling)
+        for m in re.finditer(r"(?<![\w/.$}])((?:\.\./)?assets/[^\s`)'\"]+\.cls)", body):
+            target = m.group(1).rstrip(".,;")
+            plugin_refs += 1
+            if not (md.parent / target).resolve().exists():
+                dangling.append(f"{repo_rel(md)} -> relative asset {target} does not resolve")
+    r.check("C19", "every example path a skill cites resolves on disk — plugin-root and relative",
+            dangling)
     # A clean C19 means nothing if it scanned no paths at all.
     if not plugin_refs:
         r.check("C19-control", "C19 actually found plugin-root references to check", ["found 0"])
@@ -1566,6 +1587,12 @@ def update_baseline() -> None:
     for f in artefacts():
         if f.suffix == ".cls":
             sources += class_names(read(f))
+    # Skill assets are compiled by tier 2 as well (see skill_assets), so they belong in the
+    # expected-clean list. Without this, moving a bank class into skills/<name>/assets/ makes a later
+    # break report "not in baseline" instead of "REGRESSION vs baseline" -- the weaker of the two
+    # signals, and the wrong one.
+    for f in skill_assets():
+        sources += class_names(read(f))
     unpointed = unpointed_subjects()
     BASELINE.write_text(json.dumps({
         "_comment": "Classes expected to compile clean. Any of these failing is a "

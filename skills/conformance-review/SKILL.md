@@ -89,7 +89,7 @@ re-plan from scratch and it never rewrites silently.
    step only when the tests touch no external system at all.
 
    **Read it with the gated helper rather than by hand** —
-   `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-destination-assert.cls`:
+   `assets/tdd-destination-assert.cls`:
 
    ```
    SELECT Example_Tests.DestinationAssert_NameDestination('<Pkg>.Production','BO.AdtOut','FilePath')

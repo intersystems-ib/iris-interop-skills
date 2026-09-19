@@ -234,8 +234,8 @@ forced fresh compiles: `(TableName, KeyNam, DataValue)` and `INSERT INTO Ens_Uti
 `SQLCODE` and counting rows is the only protection.
 
 Worked example, run and mutation-checked:
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/lookup-bootstrap-sqlproc.cls` and
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/tdd-lookup-bootstrap.cls`.
+`assets/lookup-bootstrap-sqlproc.cls` and
+`assets/tdd-lookup-bootstrap.cls`.
 
 Invoke from MCP: `SELECT MyApp.Bootstrap_ImportLookups()` — schema `MyApp`, function
 `Bootstrap_ImportLookups`; the all-underscores form resolves to `SQLUSER` and returns `-359`.

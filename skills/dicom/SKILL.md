@@ -421,21 +421,21 @@ and its `%UnitTest` sibling:
 
 - **Modality Worklist date parsing** (§15.4) — `$ZDATEH(value, 5)` and the error trap that stops one
   bad date aborting the whole C-FIND:
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/dicom-mwl-date-functionset.cls`, tested by
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-dicom-mwl-date.cls`
+  `assets/dicom-mwl-date-functionset.cls`, tested by
+  `assets/tdd-dicom-mwl-date.cls`
 - **Registering associations from `OnStart`** (§15.5) — and the verify step that makes it worth doing:
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/production-dicom-onstart-associations.cls` with
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/utl-dicom-association-registrar.cls`, tested by
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-dicom-onstart-associations.cls`
+  `assets/production-dicom-onstart-associations.cls` with
+  `assets/utl-dicom-association-registrar.cls`, tested by
+  `assets/tdd-dicom-onstart-associations.cls`
 - **Query/retrieve is a quartet, not a duplex pair** (§15.6) — and the vendored snapshot's own reply
   leg dangles, which is why tier 2b now ratchets it:
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/production-dicom-query-retrieve.cls` with
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/bp-dicom-leg.cls`, tested by
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-dicom-query-retrieve.cls`
+  `assets/production-dicom-query-retrieve.cls` with
+  `assets/bp-dicom-leg.cls`, tested by
+  `assets/tdd-dicom-query-retrieve.cls`
 - **A C-FIND reply is N Pending then exactly one terminal status** (§15.7) — including when there are
   zero matches, where a responder that returns early sends nothing at all:
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/bp-mwl-findresponse-sequence.cls`, tested by
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch15_dicom/tdd-mwl-findresponse-sequence.cls`
+  `assets/bp-mwl-findresponse-sequence.cls`, tested by
+  `assets/tdd-mwl-findresponse-sequence.cls`
 
 ## Reference
 

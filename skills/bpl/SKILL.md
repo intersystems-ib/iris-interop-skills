@@ -83,7 +83,7 @@ BS.Lab    →  Router.Lab    →  BO.LIS
 - IRIS 2026 introduces **delete-on-context** for persistent properties on the BPL context, so message-body bloat from long-lived BPLs is reduced. (Validate the exact syntax via docs before relying on it.)
 - When BPL becomes hard to read (>30 activities, deep nesting), consider a custom
   `Ens.BusinessProcess` in plain ObjectScript — sometimes more maintainable. **Gated example:**
-  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/bp-class-based-async.cls`. Until 1.19.0
+  `assets/bp-class-based-async.cls`. Until 1.19.0
   this skill recommended that shape while the bank held only `Ens.BusinessProcessBPL`, so "BP" and
   "BPL" were effectively synonyms here.
   - **The third argument of `SendRequestAsync` is the whole difficulty.** Measured by running both
@@ -383,8 +383,8 @@ Four shapes cover most orchestration needs. Reach for the closest match before a
 
 Worked examples, all compiled against live IRIS 2026.1:
 
-- Custom BPL — `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/bpl-order-process.cls` (§5.6): `<context>` property, a sync `<call>` with `callrequest` bindings, a `<code>` activity.
-- Fan-out routing rule — `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/routing-rule-fanout.cls` (§5.8): one `<rule>` per source `msgClass`, two `<send>` inside one `<when>`, correct engine/assist pairing, and the `!=` / `Document.` condition traps in its header.
+- Custom BPL — `assets/bpl-order-process.cls` (§5.6): `<context>` property, a sync `<call>` with `callrequest` bindings, a `<code>` activity.
+- Fan-out routing rule — `assets/routing-rule-fanout.cls` (§5.8): one `<rule>` per source `msgClass`, two `<send>` inside one `<when>`, correct engine/assist pairing, and the `!=` / `Document.` condition traps in its header.
 
 The pre-flight `ValidateProduction()` validator shown above is the full version (item-class check **plus** rule-XData parsing of `transform=`/`target=`). A lighter starter that only checks item classes is fine early on — extend it with the rule-XData parser as the production matures.
 

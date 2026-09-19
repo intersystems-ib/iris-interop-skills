@@ -35,7 +35,7 @@ namespace. Both directions had happened, and nothing made it visible.
 The check is cheap, and it has to report **both** directions to earn the words "in sync":
 
 **Gated, compiled and RUN:**
-`${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch01_production/drift-report-disk-vs-namespace.cls`
+`assets/drift-report-disk-vs-namespace.cls`
 (`Example.UTL.DriftReport`). It lived here as two **bare `ClassMethod`s**, so no tier compiled it —
 which mattered more than usual, because its earlier form did not compile at all (see the first trap
 below) and this is the one snippet this skill tells you to run at the end of every build.
