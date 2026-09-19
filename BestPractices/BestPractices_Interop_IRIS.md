@@ -3561,6 +3561,68 @@ The list is **illustrative**. Attribute names, casing and the region-specific id
 
 - **Severity.** Low (reference data).
 
+### 11.14 PKCE: IRIS gives you one private method, and the half that protects you is the server's
+
+`skills/security` said "Authorization Code + PKCE — never `client_credentials` or implicit" and stopped.
+Everything below is what that leaves the reader to discover.
+
+**IRIS's only PKCE method is Private.** `%SYS.OAuth2.Authorization` carries 16 methods. Exactly one is
+named for PKCE — `MakeCodeVerifier()` — and it is declared `Private`: calling it raises
+`<PRIVATE METHOD>`. Measured, no **public** method on that class mentions a challenge or a verifier in its
+name or its formal spec. So both halves of the client computation are yours to write.
+
+**The challenge is base64url without padding, and plain Base64 is wrong three ways at once:**
+
+| form | value | why it fails |
+|---|---|---|
+| `Base64Encode(sha, 1)` | `yXDQdtg4ee/M85tLOnFTjlJIFGMNoljyjRqcnoRUBc0=` | 44 chars; contains `/` and `=` |
+| after `+/`→`-_`, `=` stripped | `yXDQdtg4ee_M85tLOnFTjlJIFGMNoljyjRqcnoRUBc0` | 43 chars, unreserved only |
+
+`+`, `/` and `=` are all illegal in a `code_challenge`. A client sending the padded form is rejected — or,
+against a lenient server, produces a mismatch that shows up intermittently.
+
+**The hash argument order is load-bearing.** `$System.Encryption.SHAHash(256, pText)` is correct;
+`SHAHash(pText, 256)` raises `<ILLEGAL VALUE>`.
+
+**Where the parameters go.** There is no PKCE argument, but there is a channel — the `&properties` array:
+
+```
+GetAuthorizationCodeEndpoint(applicationName, scope, redirectURL, &properties,
+                            *isAuthorized, *sc, responseMode, sessionId)
+MakeAuthorizationCodeURL(client, token, redirect, &properties, *sc)
+```
+
+`code_challenge` and `code_challenge_method` go on the **authorization** request; `code_verifier` goes on
+the **token** request. Sending the verifier on the first one discloses the secret and is the natural
+mix-up, so keep the two steps in separate methods.
+
+**And the half you cannot write.** *A server that never verifies the challenge still issues a token.* Every
+line of a correct client implementation runs, the flow completes, a token comes back — and the protection
+is entirely absent, because PKCE is a proof the **server** checks. Confirm on your authorization server
+that the challenge is required and verified. A client-side PKCE implementation alone buys nothing.
+
+**A verifier check needs an explicit flag, not the loop counter.** The first draft of the example ended its
+character loop with `Quit i = tLen`, which is true both when the loop completed and when it broke on the
+**last** character — so a verifier whose only illegal character was the final one was accepted. The test
+caught it; the mutation set now reinstates that line so it cannot come back.
+
+- **Not measured, and stated as such.** Server-side enforcement was not exercised: there is no OAuth2
+  server here. `OAuth2.Server.Configuration` has **zero rows**, and the configuration classes
+  (`OAuth2.Client`, `OAuth2.Server.Configuration`, `OAuth2.AccessToken`) exist **only in %SYS** — all three
+  absent from the interop namespace, while `%SYS.OAuth2.Authorization` is present in both. So
+  `MakeAuthorizationCodeURL`'s `client As OAuth2.Client` parameter names a class the interop namespace
+  cannot see, and that dangling reference compiles anyway (§6.20).
+- **On the test vector.** The challenge above was **measured, not quoted.** A recalled "RFC 7636
+  Appendix B" pair was tried first and did not reproduce; what settled it was checking the primitive
+  against a known digest — `Base64Encode(SHAHash(256,"abc"), 1)` is
+  `ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=` here and byte-identical from an independent SHA-256. Two
+  agreeing implementations against one recalled constant means the constant was wrong.
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19.
+- **Validity.** Still valid.
+- **Severity.** CRITICAL — a malformed challenge and an unverifying server both leave a flow that completes.
+- **Example.** `examples/ch11_security/oauth2-client-pkce.cls`,
+  `examples/ch11_security/tdd-oauth2-client-pkce.cls`
+
 ### 11.13 Asserting Server Certificate Validation — `VerifyPeer`, and the config that looks configured
 
 §11.7 step 1 is "Set `Server Certificate Validation = Require` on the SSL config". It is the point of
