@@ -283,8 +283,41 @@ into no filter. When that closes, re-run the probe and delete this section.
 
 ### Authoring a Search Table
 
-Authoring one is a build task, not a search task:
-see [references/search-tables.md](references/search-tables.md).
+A build task, not a search task — but the minimum is small enough to carry here, because every
+part of it fails silently if you guess.
+
+```objectscript
+Class MyApp.Search.Hl7Adt Extends EnsLib.HL7.SearchTable
+{
+XData SearchSpec [ XMLNamespace = "http://www.intersystems.com/EnsSearchTable" ]
+{
+<Items>
+  <Item DocType="" PropName="PatientName">[PID:5().2]</Item>
+  <Item DocType="" PropName="Medication">[RXE:2.2]</Item>
+</Items>
+}
+}
+```
+
+Four things, each of which produces no error when wrong:
+
+- **The XData namespace is `EnsSearchTable`** — literally
+  `http://www.intersystems.com/EnsSearchTable`. `EnsHL7SearchTable`, the form you would guess from
+  the class name, does not work.
+- **Omit `PropType`.** That is the safe default. `PropType="String"` and `PropType="String:25"`
+  both fail with `ErrDatatypeValidationFailed`; only `String:CaseSensitive` / `String:CaseInsensitive`
+  are observed in a live catalogue.
+- **Assign it or it indexes nothing.** `SearchTableClass` is a `Host` setting on the **service** and
+  on the **operation** — the class compiles happily unassigned and the table just stays empty. Only
+  messages received *after* assignment are indexed; nothing back-indexes history.
+- **A subclass of `EnsLib.HL7.SearchTable` has no table of its own.** It shares the base extent and
+  is distinguished by `PropId`. Querying `MyApp_Search.Hl7Adt` expecting your rows returns **zero
+  rows with no error**.
+
+Renaming one is a new registration plus a cleanup: the `Ens_Config.SearchTableProp` row outlives the
+class, so a renamed table collides with an orphan whose class no longer exists. That trap, the
+`DELETE` that clears it, and the full property syntax:
+[references/search-tables.md](references/search-tables.md).
 
 ## Searching by message body content
 
@@ -300,50 +333,6 @@ Not efficiently searchable when:
 
 Headless resend, edit-and-resend without breaking the trail, and bulk resend:
 see [references/resending.md](references/resending.md).
-
-## Per-BO SOAP tracing
-
-The global `^ISCSOAP("Log")` toggle traces all SOAP traffic for the namespace, mixing every BO's calls into one log file. Useless on a production with multiple SOAP integrations.
-
-**Better:** per-BO SOAP tracing via a customer-internal copy of `%SOAP.WebClient`:
-
-1. Copy `%SOAP.WebClient` to a customer namespace (e.g. `Alt.SOAP.WebClient`) — `Alt` is the canonical reserved package for patched system classes (xref `interop` §"Reserved package names").
-2. Change the generated SOAP proxy's superclass from `%SOAP.WebClient` to `Alt.SOAP.WebClient`.
-3. Add a `SoapLogFile` setting on each BO; toggle the global only inside that BO's `OnMessage`:
-
-```objectscript
-Property SoapLogFile As %String(MAXLEN="512") [ InitialExpression = "" ];
-Parameter SETTINGS = "<...>,SoapLogFile";
-
-Method OnMessage(...) {
-    If (..SoapLogFile'="") {
-        set ^ISCSOAP("Log")="ios"
-        set ^ISCSOAP("LogFile")=..SoapLogFile
-    }
-    // invoke proxy...
-    If (..SoapLogFile'="") { set ^ISCSOAP("Log")="" }
-}
-```
-
-Each BO writes to its own log file path, settable from the Portal at runtime — no recompile to turn tracing on/off.
-
-**Caveat:** `^ISCSOAP` is process-scoped, so heavy multi-process scenarios can still cross-pollute. Treat as a debug aid, not always-on tracing. Disable the SoapLogFile setting once the issue is diagnosed.
-
-Worked example: `assets/alt-soap-webclient-tracing.cls`.
-
-## Retention and purge
-
-Persistent messages and message-body tables grow unbounded. Without a purge task scheduled, `Ens.MessageHeader` and every custom-message-class table accumulate forever.
-
-Add `Ens.Util.Tasks.Purge` to the production at creation time, scheduled daily. Set `NumDaysToKeep` per the customer's retention policy:
-
-- **30 days** — typical default for development environments and low-criticality flows.
-- **90 days** — common for production where operational lookback is the only requirement.
-- **Longer** — only if a regulatory or contractual retention requirement applies, in which case the messages probably belong in a separate audit store, not in `Ens.MessageHeader`.
-
-The purge task removes both `Ens.MessageHeader` rows and the corresponding message-body table rows. Auditing an existing production, flag the absence of the purge task as a gap (xref `alerting` baseline checklist).
-
-Verify purge actually runs: Management Portal → Interoperability → Manage → System Tasks → check the last-run timestamp and any errors.
 
 ## What this skill does NOT yet do
 
@@ -371,6 +360,12 @@ Verify purge actually runs: Management Portal → Interoperability → Manage �
 - **Bulk-resending without dedup** — a 200-row failure window resent against a non-idempotent BO creates 200 duplicates downstream.
 - **Leaving `^ISCSOAP("Log")` enabled namespace-wide** — log file grows fast, mixes all BO traffic, disk fills. Per-BO `SoapLogFile` only.
 - **No purge task** → tables grow forever; eventually the namespace becomes slow and large backups become unwieldy.
+
+## Operating it over time
+
+Per-BO SOAP envelope tracing, and message retention / purge tasks:
+[references/operations.md](references/operations.md). Neither is needed to find, resend
+or triage a message.
 
 ## See also
 

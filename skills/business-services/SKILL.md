@@ -206,19 +206,95 @@ The user-stated principle: a BS that needs a setting should refuse to start if t
 ## Record Mapper — file intake
 
 A delimited or fixed-width file intake is a **RecordMap**, never a hand-written parser
-(that is conformance criterion CR-2). The whole of it — the `XData RecordMap` schema the
-validator accepts, fixed-width, building one programmatically, generating the `.Record`
-class, testing the parser, and FTP/FTPS — is in
+(that is conformance criterion CR-2).
+
+**`fieldSeparator` is the trap that costs the most attempts, and its error names the wrong thing.**
+For `type="delimited"` the attribute must be **absent**. Writing the obvious `fieldSeparator=","`
+gives:
+
+```
+ERROR <EnsRecordMap>ErrInvalidRecordProp: Invalid value for property 'fieldSeparator' in Record of type delimited
+```
+
+That reads as *"your value is malformed"* and actually means *"this property must not be set for
+this type at all"*. The separator goes in `<Separators>`, one `<Separator>` per nesting level —
+one element for a flat CSV. Minimum correct shape, copy this:
+
+```xml
+<Record xmlns="http://www.intersystems.com/Ensemble/RecordMap"
+        name="Censo" type="delimited"
+        targetClassname="MyApp.RecordMap.Censo.Record"
+        recordTerminator="&#xA;">
+  <Separators><Separator>,</Separator></Separators>
+  <Field name="Id"     datatype="%String"/>
+  <Field name="Nombre" datatype="%String"/>
+</Record>
+```
+
+Five more, each of which costs a compile:
+
+| What gets written | What the schema wants |
+|---|---|
+| `fieldSeparator=","` or `separator=","` | omit it entirely; use `<Separators>` |
+| `<Field type="%String"/>` | `datatype="%String"` |
+| `<Field>` outside `<Record>` | every `<Field>` nested inside `<Record>`; a `<Record>` with none fails `#5661 Collection property '…Record::Contents' is required` |
+| `<RecordMap>` as the root element | the root element is `<Record>` |
+| `recordTerminator="\n"` | an XML entity: `&#xA;` for LF, `&#xD;&#xA;` for CRLF |
+
+`targetClassname` is the class the generator creates and is free — it need not be
+`<map class>.Record`. After generating, **export the `.Record` class to disk**: the generator writes
+it into the namespace only, and CR-12 fails a class that exists nowhere else.
+
+Fixed-width, building a map programmatically, testing the parser, and FTP/FTPS:
 [references/recordmap.md](references/recordmap.md).
 
 ## REST inbound — three routes, and they are not interchangeable
 
 - **The adapter's own port** (`EnsLib.HTTP.InboundAdapter`) and **a hand-written `%CSP.REST`
   dispatcher**: [references/rest-csp.md](references/rest-csp.md).
-- **Spec-first** — one Swagger 2.0 document generates the dispatcher and an implementation stub:
-  [references/rest-spec-first.md](references/rest-spec-first.md). Before you start: the key must be
-  `swagger: "2.0"`; an OpenAPI **3.0** document compiles **clean and generates nothing**, so check
-  `.disp` and `.impl` exist rather than trusting the compile.
+- **Spec-first** — one Swagger 2.0 document generates the dispatcher and an implementation stub.
+
+### Spec-first — the whole sequence
+
+Three classes, one of them yours:
+
+```
+Pkg.REST.spec   YOU AUTHOR    Extends %REST.Spec, holds the XData OpenAPI document
+Pkg.REST.disp   GENERATED     Extends %CSP.REST — the web app points here. Never edit: rewritten every time.
+Pkg.REST.impl   GENERATED 1x  Extends %REST.Impl — your method bodies. Edits SURVIVE regeneration.
+```
+
+1. **`swagger: "2.0"` is mandatory.** An OpenAPI **3.0** document is the expensive mistake, and the
+   two ways of generating disagree about it — the one you reach for by hand is the silent one:
+
+   | route | Swagger 2.0 | OpenAPI 3.0 |
+   |---|---|---|
+   | compile the hand-authored `.spec` class | generates `.disp` + `.impl` | **compiles CLEAN, generates NOTHING, no error** |
+   | `##class(%REST.API).CreateApplication(name, dynObj, .err)` | `$$$OK`, generates all three | `ERROR #8738 … <$.swagger>`, names the exact JSON path |
+
+2. **Never trust the compile — check the artifacts exist:**
+
+   ```objectscript
+   Write ##class(%Dictionary.CompiledClass).%ExistsId("Pkg.REST.disp"),!
+   Write ##class(%Dictionary.CompiledClass).%ExistsId("Pkg.REST.impl"),!
+   ```
+
+3. **A failed regeneration leaves the previous dispatcher serving.** Re-running
+   `CreateApplication` with a bad document errors, and the old `.disp`/`.impl` stay live answering
+   the old contract. The error alone does not tell you which version is deployed.
+
+4. **The generated dispatcher validates almost nothing.** Read out of the generated routine:
+   `required` and a duplicate occurrence are enforced with `$data` tests; **`minimum`, `maximum`,
+   `pattern` and `enum` generate no code at all**, and the projected `.impl` signature is a bare
+   `%String` / `%Integer` with no `VALUELIST` or `MINVAL`. An invalid enum value reaches your
+   implementation untouched — if the contract promises a 400, **you** must write it.
+
+5. **The `.impl` class is not a Business Service.** Build the canonical message there and hand it to
+   the production — an adapterless BS (`Parameter ADAPTER = "";`) invoked through
+   `##class(Ens.Director).CreateBusinessService(.tService)` is the conformant route.
+
+Depth, including auth guards and the web-application wiring:
+[references/rest-spec-first.md](references/rest-spec-first.md).
 
 ## Testing / how to verify
 
@@ -375,39 +451,6 @@ If the messages are **Ad-hoc** — Z-segments, custom structures, fields the sta
 See [references/soap-inbound.md](references/soap-inbound.md) for the class shape and
 for HTTP Basic Auth on it.
 
-## Scheduled BS — wall-clock vs interval
-
-Default Ensemble inbound adapters do **interval** scheduling ("every X seconds"). For **wall-clock** schedules (daily 08:30, weekdays 08:00–18:00 only, etc.) two options:
-
-- **Custom scheduler adapter** with a cron-style format `min hour day month dayOfWeek`. Most legacy
-  customer projects built one of these. **Gated example:**
-  `assets/adp-scheduler-inbound-adapter.cls`,
-  with its service `bs-scheduled-cron.cls` and dispatch test `tdd-inbound-adapter-dispatch.cls`.
-  Until 1.18.0 nothing in this plugin showed the shape — `Ens.InboundAdapter` had **zero** hits
-  across all 20 skills and the whole bank — while §5.2 named a class for it.
-  The one line that matters is `..BusinessHost.ProcessInput()`. An `OnTask()` that checks its
-  schedule and returns `$$$OK` without it leaves the service **green and ticking for ever,
-  producing nothing**, with an empty Event Log. Measured: broken that way, `OnTask` still returns
-  `$$$OK` — so the status can never be the signal, only the dispatch count.
-- **IRIS native task framework** — subclass **`%SYS.Task.Definition`**, override `OnTask`, and have it trigger a passive BS via `Ens.Director.CreateBusinessService`. Preferred for new work. (Not `%SYS.TaskSuper`: that class also exists, so the mistake survives an existence check, but it is the internal persistent superclass of the stored `%SYS.Task` schedule record — *"for internal use only"* — and has no `OnTask` to override. Every shipped task on an instance, `PurgeJournal` / `IntegrityCheck` / `PurgeErrorsAndLogs` …, subclasses `%SYS.Task.Definition`.)
-
-### Scheduled BS concurrency — `PoolSize=1` alone is not enough
-
-To prevent concurrent execution of a scheduled Business Service, **both** are required:
-
-(a) Set `Pool Size = 1` on the BS item.
-(b) Make **all calls from the BS synchronous** (`SendRequestSync`).
-
-Async calls let the BS return before the work downstream finishes. The scheduler's next tick fires while the first execution is still in-flight → two concurrent BS instances racing.
-
-Also: any **manual** entry path (a Studio test, a non-scheduled inbound message sent by a different BS) bypasses the scheduler entirely and is not subject to the lock. If concurrency matters for correctness, defend in code (a global lock / semaphore inside the BS).
-
-## Synchronous chain for source-system ordering dependencies
-
-When the source system has row-ordering dependencies (e.g. an UPDATE that depends on its prior INSERT, a "Reprogramacion" that depends on its "Programacion"), prefer a synchronous BS → BP → BO chain over async messaging. Async queues are free to reorder; sync chains preserve order at the cost of throughput.
-
-Document the trade-off explicitly in the production. See `bpl` for the BP-side pattern.
-
 ## HTTP Basic Auth on an inbound SOAP BS
 
 See [references/soap-inbound.md](references/soap-inbound.md).
@@ -423,26 +466,16 @@ inbound endpoint needs: see [references/rest-csp.md](references/rest-csp.md).
 - Email inbound (`EnsLib.EMail.InboundAdapter`) — covered by docs; this skill doesn't have validated examples.
 - Workflow tasks / human steps — not a BS pattern.
 
-## IRIS SQL dialect — quick cheat-sheet
+## Scheduled, and order-sensitive, services
 
-When a RecordMap BS reads/writes through a SQL Gateway, or you verify a run with `iris_query`, keep
-these IRIS-SQL specifics in mind:
+Wall-clock vs interval scheduling, `PoolSize` concurrency, and the synchronous chain for
+sources with ordering dependencies: [references/scheduling.md](references/scheduling.md).
+None of it is needed for a standard file, HL7 or REST intake.
 
-- **Class ↔ table names.** A persistent class `Pkg.Sub.Cls` projects to SQL table `Pkg_Sub.Cls` —
-  package dots become `_`, and the **last** dot separates schema from table. So class `Ens.Util.Log`
-  is table `Ens_Util.Log`; `Ens.MessageHeader` stays `Ens.MessageHeader`. Real interop tables:
-  `Ens_Util.Log` (event log), `Ens.MessageHeader` (message headers), `EnsLib_*` schemas for adapter data.
-- **Reserved words.** `DOMAIN`, `LANGUAGE`, `OUTPUT`, `CONNECTION`, `DEFAULT`, `USER`, `VALUE`, `SECTION`
-  and friends are reserved. If a column/table is named one of them, **delimit it with double quotes**
-  (`SELECT "Connection" FROM …`). Unquoted, you get SQLCODE -1/-12.
-- **ObjectScript is not SQL.** `iris_query` runs SQL SELECTs only. `set`/`write`/`do`/`##class(...)`,
-  `&sql(...)`, and `^global` references are ObjectScript — run them with `iris_execute`, not `iris_query`.
-- **Discover, don't guess.** Before querying, use `iris_table_info` (or `docs_introspect`, or the
-  `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` — an agent, not a skill; with no agent tool, follow `interop`
-  §"Resolving real names") to get the real table/column names rather than guessing
-  system-catalog tables — and on `SQLCODE -30 Table not found`, the next call is introspection,
-  never a differently-guessed name. Collection properties project to a child table **in the
-  parent's schema** — projection rule and example: `messages` §Collections.
+## IRIS SQL dialect
+
+Cheat-sheet moved to [references/sql-dialect.md](references/sql-dialect.md) — it is a SQL
+topic, not an inbound-service one.
 
 ## See also
 
