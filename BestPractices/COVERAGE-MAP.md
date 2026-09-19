@@ -147,6 +147,12 @@ things in it bind work planned from this map:
   peer session already measured Haiku at **0 opens** across 3 Ejercicio-3 runs.
 - **A before/after across 1.41.0 → 1.110.0 measures a release train, not a change.** Do not attribute
   a delta to one restructuring across that gap.
+- **Before inlining a capability, check that its failure actually happens.** v1.110.0 inlined the
+  `fieldSeparator` trap because a reference file called it "the trap that costs the most attempts" —
+  a documented *claim* taken for an observed *failure*. Measured over the eleven RecordMaps built in
+  twelve Ejercicio-3 runs: **none wrote `fieldSeparator`**, on either version. The error that does
+  stop the step (`#6235`) was absent from the plugin entirely. Checking costs one grep over existing
+  runs; skipping it spends the scarcest channel in the plugin on a failure nobody hits.
 - **A grep over a diff is not an arm check.** When the transform *removes* text, a filter on that text
   cannot fail. Use the script, which compares whole trees and carries a positive control:
 

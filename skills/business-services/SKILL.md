@@ -174,20 +174,15 @@ Prefer Async unless there is a specific reason to wait. Sync ties up a BS pool s
 A delimited or fixed-width file intake is a **RecordMap**, never a hand-written parser
 (that is conformance criterion CR-2).
 
-**`fieldSeparator` is the trap that costs the most attempts, and its error names the wrong thing.**
-For `type="delimited"` the attribute must be **absent**. Writing the obvious `fieldSeparator=","`
-gives:
+**A broken RecordMap compiles CLEAN.** Every wrong shape in this section compiles with zero errors;
+the error comes only from `EnsLib.RecordMap.Generator.GenerateObject`. Generate before you trust a
+green compile.
 
-```
-ERROR <EnsRecordMap>ErrInvalidRecordProp: Invalid value for property 'fieldSeparator' in Record of type delimited
-```
-
-That reads as *"your value is malformed"* and actually means *"this property must not be set for
-this type at all"*.
-
-**The class compiles CLEAN with it** — measured both ways, the error comes only from
-`GenerateObject`, never the compiler. A green compile is not evidence the map is valid. The separator goes in `<Separators>`, one `<Separator>` per nesting level —
-one element for a flat CSV. Minimum correct shape:
+For `type="delimited"` the `fieldSeparator` attribute must be **absent** — the separator goes in
+`<Separators>`, one `<Separator>` per nesting level, one element for a flat CSV. Writing
+`fieldSeparator=","` gives `<EnsRecordMap>ErrInvalidRecordProp: Invalid value for property
+'fieldSeparator'`, which reads as *"your value is malformed"* and means *"this property must not be
+set for this type at all"*. Minimum correct shape:
 
 ```xml
 <Record xmlns="http://www.intersystems.com/Ensemble/RecordMap"
@@ -200,24 +195,33 @@ one element for a flat CSV. Minimum correct shape:
 </Record>
 ```
 
-**The enclosing `XData RecordMap [ XMLNamespace = "…" ]` must carry the SAME URI as that `xmlns`,
-and getting it wrong is the failure that actually stops a build here.** Both
-`http://www.intersystems.com/recordmap` and `http://www.intersystems.com/Ensemble/RecordMap` are
-accepted — mixing them puts the `<Field>` children in a namespace the parser rejects:
+**That `xmlns` on `<Record>` is the failure that actually stops a build here, and only one URI
+works.** `http://www.intersystems.com/Ensemble/RecordMap` is the `NAMESPACE` parameter on all eleven
+`EnsLib.RecordMap.Model.*` classes; `http://www.intersystems.com/recordmap` is **not** accepted on the
+element. A wrong URI leaves every child unresolved, and the parser reports whichever child it reaches
+first — so one defect wears three faces and only one of them says "namespace":
 
-```
-ERROR #6235: Unexpected namespace for tag: Field
-```
+| wrong URI on `<Record>`, and… | error |
+|---|---|
+| `<Separators>` is the first child | `#6237 Unexpected tag in XML input: Separators` |
+| `<Field>` is the first child | `#6235 Unexpected namespace for tag: Field` |
+| nothing resolved, so the collection is empty | `#5661 Collection property 'Separators' is required` |
 
-It names `Field`, so it reads as a problem with the field definitions; they are fine. Compare the
-two URI strings before touching a `<Field>`. Omitting `xmlns` on `<Record>` also works — the header
-governs — and removes the mismatch surface entirely.
+`#6235` blames `Field` when the field definitions are fine. Two things make it cheap to fix, both
+measured on 2026.1:
+
+- **Omitting `xmlns` altogether generates fine**, with or without the header. If you cannot recall
+  the URI, leave the attribute out; a *wrong* one fails, a *missing* one does not.
+- **The `XData RecordMap [ XMLNamespace = "…" ]` bracket is inert.** A wrong URI there generates
+  clean, and a bracket that *matches* a wrong element URI still fails. When the error mentions a
+  namespace, the bracket is not the thing to compare.
 
 Five more, each of which costs a compile:
 
 | What gets written | What the schema wants |
 |---|---|
 | `fieldSeparator=","` or `separator=","` | omit it entirely; use `<Separators>` |
+| `type="fixedWidth"` | `fixedwidth`, all lowercase — the `VALUELIST` is `,delimited,fixedwidth`; camelCase gives `#6260 Datatype validation failed for attribute, type` |
 | `<Field type="%String"/>` | `datatype="%String"` |
 | `<Field>` outside `<Record>` | every `<Field>` nested inside `<Record>`; a `<Record>` with none fails `#5661 Collection property '…Record::Contents' is required` |
 | `<RecordMap>` as the root element | the root element is `<Record>` |
