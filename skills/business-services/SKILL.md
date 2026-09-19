@@ -177,7 +177,7 @@ The user-stated principle: a BS that needs a setting should refuse to start if t
 >
 > Applies to subclasses of **prebuilt** `EnsLib.*.Service.*` and `EnsLib.*.Operation.*`. A direct
 > subclass of `Ens.BusinessService` that declares `Parameter ADAPTER` has **no** such obligation —
-> its inherited `OnInit()` does nothing by default (ESQL, §"Initializing the Adapter"), so
+> its inherited `OnInit()` does nothing by default (ESQL §6.5 "Initializing the Adapter"), so
 > `##super()` there adds nothing.
 >
 > Put `##super()` FIRST rather than `Quit ##super()` last: the validation then runs against a fully

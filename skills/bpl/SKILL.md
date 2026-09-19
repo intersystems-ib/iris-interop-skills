@@ -346,7 +346,7 @@ Two things in that one line, both of which this skill previously had wrong:
 - **Bare name, never package-qualified.** The rule expression parser resolves methods across every
   `Ens.Rule.FunctionSet` subclass in the namespace — that is what the FunctionSet pattern is for. A
   qualified call does not parse at all: `<Ens>ErrInvalidToken` at the offset of the `.`, surfacing as
-  `#5490` from the rule generator. See `alerting` §"Wire it in the `Ens.Alert` routing rule".
+  `#5490` from the rule generator. See `alerting` §"Alert deduplication — `Ens.Alert` routing-rule guards".
 - **`Document.`, not bare field names.** The guard runs in an `EnsLib.MsgRouter.RoutingEngine`
   context, so the `Ens.AlertRequest` fields are reached through `Document.`.
 

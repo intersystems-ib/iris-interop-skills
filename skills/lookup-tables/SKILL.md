@@ -105,7 +105,9 @@ ClassMethod NormalizeKey(value As %String) As %String [ Final ]
 | `"  DIABÉTICA  "` | `diabetica` |
 | `Diabetica` | `diabetica` |
 
-**Two `$ZSTRIP` traps, both measured on IRIS 2026.1 (#114).** They are worth stating because the
+### Two `$ZSTRIP` traps
+
+**Both measured on IRIS 2026.1 (#114).** They are worth stating because the
 obvious-looking mask is the broken one:
 
 - **`-` is not a `$ZSTRIP` action character.** Any mask containing it — `"*-CWE"`, `"*-CW"`, `"*-E"`
