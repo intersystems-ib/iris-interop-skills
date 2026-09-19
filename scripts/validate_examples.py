@@ -924,6 +924,41 @@ _COMMENT_ONLY = re.compile(
     r"\A(?:[^\S\n]*(?://[^\n]*|;[^\n]*|Include\s+[^\n]*)?\n)*[^\S\n]*\Z")
 
 
+def skill_markdown() -> list[Path]:
+    """Every markdown file in a skill that could carry a fence -- NOT just SKILL.md.
+
+    THIS GLOB IS THE COMPILE GATE OVER skills/. Both tier 3 and C9 read `snippets()`, so whatever
+    this misses is ungated by the whole pipeline, silently and while every check stays green.
+
+    It was `*/SKILL.md`, and that is a trap the moment any content moves to a reference file --
+    which is the direction #337 chose. Measured before changing it: a deliberately UNCOMPILABLE
+    class placed in `skills/bpl/references/zzprobe.md` left tier 3 green at the same 33 classes,
+    never seeing it. C9 is worse than neutral there -- its ungated counts come from this same
+    function, so relocating a fence out of reach makes those counts DROP, and C9 prints a drop as
+    "progress". The gate would have congratulated us for removing content from it.
+
+    So the reach widens BEFORE any content moves, never in the same change and never after.
+
+    Two patterns, matching the two shapes Anthropic's Agent Skills docs actually show: files
+    bundled beside SKILL.md (the PDF skill's `FORMS.md`, `REFERENCE.md`) and one subdirectory of
+    them (the BigQuery skill's `reference/finance.md`). Nothing deeper -- "keep references one
+    level deep from SKILL.md" is the documented rule, and a file reachable only through a chain is
+    one the docs say Claude may only partially read.
+    """
+    return sorted(SKILLS.glob("*/*.md")) + sorted(SKILLS.glob("*/*/*.md"))
+
+
+def provenance(md: Path) -> str:
+    """`bpl` for a SKILL.md, `bpl:rules` for `bpl/references/rules.md`.
+
+    `md.parent.name` was correct while every source was a SKILL.md; for a reference file it returns
+    the literal "references", so every reference fence in every skill would report the same
+    provenance and a broken snippet could not be traced back to the skill that owns it.
+    """
+    rel = md.relative_to(SKILLS)
+    return rel.parts[0] if md.name == "SKILL.md" else "%s:%s" % (rel.parts[0], md.stem)
+
+
 def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
     """Extract every compilable class out of the ```objectscript fences in skills/.
 
@@ -940,8 +975,8 @@ def snippets() -> tuple[dict[str, tuple[str, str]], int, int, list[str]]:
     dupes: list[str] = []
     indented: list[str] = []
     members = fragments = 0
-    for md in sorted(SKILLS.glob("*/SKILL.md")):
-        skill = md.parent.name
+    for md in skill_markdown():
+        skill = provenance(md)
         for m in re.finditer(r"```objectscript\n(.*?)```", read(md), re.S):
             block = m.group(1)
             if not re.search(r"(?im)^\s*Class\s+[\w.%]+\s+Extends", block):
@@ -1158,7 +1193,8 @@ def tier2_external() -> bool:
 
 
 def tier3(record: bool = False) -> bool:
-    print("Tier 3 -- compile the INLINE snippets in skills/*/SKILL.md\n")
+    print("Tier 3 -- compile the INLINE snippets in skills/*/SKILL.md"
+          " and any reference markdown bundled beside it\n")
     sources, members, fragments, dupes = snippets()
     if dupes:
         print("  DUPLICATE CLASS NAME across fences -- one of each pair is never compiled:")
