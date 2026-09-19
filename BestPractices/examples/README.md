@@ -129,6 +129,8 @@ its siblings.
 | §5.18 | %UnitTest fixture lifecycle + the `GetEventLog` window floor (S27+S28 folded) | `ch05_bpl_dtl/tdd-lifecycle-and-eventlog.cls` |
 | §5.19 | BPL `<flow>`/`<sync>` fan-out template — the shape `bpl` forbids improvising | `ch05_bpl_dtl/bpl-flow-sync-aggregate.cls` |
 | §5.21 | BPL `<scope>`/`<catchall>` — a handler that logs and falls through completes the process GREEN | `ch05_bpl_dtl/bpl-scope-catchall-compensation.cls` |
+| §5.22 | A collection's child table is projected only if asked — and `array` and `list` default oppositely | `ch05_bpl_dtl/msg-list-collection-child-table.cls` |
+| §5.22 | Oracle: each absence asserted next to a presence from the same query, plus the `element_key` type split | `ch05_bpl_dtl/tdd-list-collection-projection.cls` |
 | §5.21 | Oracle: the BP's own header is 8 (Error) only because the catchall sets `status` | `ch05_bpl_dtl/tdd-bpl-scope-catchall.cls` |
 | §5.21 | Fixture: the BPL plus a target that fails on demand, reusing `Example.BO.FailOnDemand` | `ch05_bpl_dtl/production-bpl-scope.cls` |
 | §5.19 | The audit that makes an un-awaited async call loud | `ch05_bpl_dtl/utl-bpl-sync-audit.cls` |
