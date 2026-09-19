@@ -57,11 +57,11 @@ message first (`messages`) and write the test first (`tdd`) as always.
 2. **Don't hand-roll introspection or SQL via `iris_execute`.** Asking "what's the production status / which
    items exist / what columns does this table have" by writing ObjectScript or SQL leads to guessed,
    non-existent APIs (`<METHOD/CLASS DOES NOT EXIST>`) and malformed queries (`<SYNTAX>errdone+2^%qaqqt`).
-   Use the typed MCP tools — the cheat-sheet lives in `message-search-debug`, and
-   `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` (the `introspect-dont-guess`
-   plugin **agent** (an agent, not a skill — `Skill()` on it errors with "Unknown skill") resolves real names
-   before you reference them; with no agent tool, follow `interop` §"Resolving real names" and the
-   introspection section in `business-operations`.
+   Use the typed MCP tools — the cheat-sheet lives in `message-search-debug`. To resolve real names
+   before you reference them, call
+   `Agent(subagent_type="iris-interop-skills:introspect-dont-guess")` — **an agent, not a skill**, so
+   `Skill()` on it errors with "Unknown skill". With no agent tool, follow `interop`
+   §"Resolving real names" and the introspection section in `business-operations`.
 
 ## Scaffold on disk before you implement (cuts compile-order and `NO_TESTS_FOUND` thrash)
 
