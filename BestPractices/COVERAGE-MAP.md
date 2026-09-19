@@ -135,6 +135,25 @@ a number nobody asserts rots, and the fix is to stop restating it. That is the s
 to catch, which is why C9's own counts live in `scripts/snippets_baseline.json` and not in prose.
 **Wave 0 is complete.**
 
+## Measurement protocol — read before proposing any before/after
+
+The A/B that would show whether the skill reorganisation (#337) and the description trim (#365)
+actually help is **pre-registered** in `BestPractices/AB-PREREGISTRATION.md`: arms pinned by sha,
+primary metric, unit of analysis, parser rules and decision rule all fixed before any run. Three
+things in it bind work planned from this map:
+
+- **Gate 0 runs first and can cancel the rest.** If bundled `references/`/`assets/` files are never
+  opened, no A/B on progressive disclosure can show anything — a null would be uninterpretable. The
+  peer session already measured Haiku at **0 opens** across 3 Ejercicio-3 runs.
+- **A before/after across 1.41.0 → 1.110.0 measures a release train, not a change.** Do not attribute
+  a delta to one restructuring across that gap.
+- **A grep over a diff is not an arm check.** When the transform *removes* text, a filter on that text
+  cannot fail. Use the script, which compares whole trees and carries a positive control:
+
+```bash
+python3 scripts/verify_arm_single_variable.py bench/arm-k7 bench/arm-m3
+```
+
 ## Two systemic caveats — read before planning from any wave
 
 **1. Tier 2 compiles; it never runs.** Every `%UnitTest` sample proposed below gates its API names,
