@@ -542,6 +542,70 @@ def tier1() -> bool:
                 f"diff and compiles clean. Delete it.")
     r.check("C16", "no invisible character in an artefact (they compile clean)", invisible)
 
+    # ── C17 ───────────────────────────────────────────────────────────────────────────────
+    # Prose cross-references are gated by NOTHING, and splitting a skill breaks them wholesale.
+    # Measured over v1.91.0-v1.93.0: five §"Heading" citations were broken by a split, one of them
+    # SHIPPED in v1.91.0 and was found two releases later by hand. Tiers 0-3 compile code; nothing
+    # reads a pointer. So this is the check, not a habit.
+    #
+    # TWO ARMS, because the obvious one arm would have caught NONE of the five.
+    #
+    #   (a) DEAD TARGET. A §"Heading" that matches no heading anywhere under skills/. This is the
+    #       arm people expect, and it found exactly one real case (bpl citing an `alerting` heading
+    #       that no longer exists).
+    #
+    #   (b) MOVED OUT FROM UNDER THE CITATION. A SKILL.md citing §"X" where X resolves ONLY in that
+    #       same skill's own references/. The citation still "resolves", which is why arm (a) is
+    #       blind to it -- but the prose around it says "below"/"above"/"this file" and the section
+    #       is no longer in this file. Every one of the five was this shape. The remedy is a link to
+    #       the reference file, not a § to a section that left.
+    #
+    # NORMALISATION matters more than the matching. A citation wrapped across two lines carries the
+    # continuation prefix (`///`, `//`, `>`) into the middle of the quoted text, and a first draft of
+    # this check reported four such citations as dead when all four resolved fine. Strip the
+    # prefixes and collapse whitespace before comparing, or the check cries wolf and gets muted.
+    #
+    # MATCHED BY SUBSTRING, deliberately: citations are routinely shortened (§"Required parameters"
+    # for a heading that continues "— `PRODUCTION` is COMPILE-TIME mandatory"). Requiring equality
+    # would fail on the repo's own established style.
+    #
+    # `§<number>` is NOT matched, and that is load-bearing: `ESQL §3.1`, `GOBJ §2.6.3`, `EGDV §12.3`
+    # are citations into external InterSystems books, they have no heading here, and there are
+    # nine of them. The regex requires a quote immediately after the §, which excludes all of them.
+    #
+    # WHAT THIS DOES NOT COVER, so a clean run is not read as more than it is: a prose pointer with
+    # no § at all ("see the BO skeleton above") is invisible to this check. Four of those were fixed
+    # by hand in v1.93.0 and nothing stops the next one.
+    skill_md = sorted(SKILLS.glob("*/*.md")) + sorted(SKILLS.glob("*/*/*.md"))
+    headings: dict[str, list[Path]] = {}
+    for md in skill_md:
+        for h in re.findall(r"^#{2,4} (.+)$", read(md), re.M):
+            headings.setdefault(h.strip(), []).append(md)
+
+    def _norm(s: str) -> str:
+        """Drop continuation prefixes a wrapped citation drags in, then collapse whitespace."""
+        s = re.sub(r"\n\s*(?:///|//|>|\*)?\s*", " ", s)
+        return re.sub(r"\s+", " ", s).strip()
+
+    dead, moved = [], []
+    for md in skill_md:
+        skill = md.relative_to(SKILLS).parts[0]
+        for m in re.finditer(r'§"([^"]+)"', read(md), re.S):
+            want = _norm(m.group(1))
+            if not want:
+                continue
+            where = {f for h, fs in headings.items() if want in _norm(h) for f in fs}
+            if not where:
+                dead.append(f"{repo_rel(md)} -> §\"{want}\" matches no heading under skills/")
+            elif md.name == "SKILL.md" and md not in where and \
+                    all(str(f).startswith(str(SKILLS / skill / "references")) for f in where):
+                moved.append(
+                    f"{repo_rel(md)} -> §\"{want}\" now lives only in "
+                    f"{', '.join(sorted(repo_rel(f) for f in where))}; link the reference file "
+                    f"instead of citing a section this file no longer contains")
+    r.check("C17", "every §\"Heading\" citation in a skill resolves, and none points at a section "
+                   "that moved into that skill's own references/", dead + moved)
+
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
     # Method/ClassMethod, and loose statements -- is printed on every run but was asserted by
