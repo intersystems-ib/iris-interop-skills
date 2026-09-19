@@ -123,6 +123,43 @@ def artefacts() -> list[Path]:
     )
 
 
+# A test is EVIDENCE that a subject example works; it is not a template anyone copies to build a
+# component. Requiring its own pointer would add 52 lines of noise to SKILL.md bodies that S7 caps at
+# 500 lines, and deriving the subject automatically is not possible: measured, only 20 of the 52
+# have a subject recoverable from the filename (`tdd-dicom-mwl-date.cls` tests
+# `dicom-mwl-date-functionset.cls` -- no prefix relation). So they are exempt by convention, and the
+# convention is stated here rather than hidden in a regex.
+TEST_TIER = ("tdd-", "fixture")
+
+
+def unpointed_subjects() -> list[str]:
+    """Bank subject examples that NO skill markdown reaches by a full ${CLAUDE_PLUGIN_ROOT} path.
+
+    ONE function, called by C20 and by --update-baseline both. The check and its baseline computed
+    separately is how a ratchet silently measures two different things.
+
+    STRICT, not "the basename is mentioned somewhere", and the difference is the whole point: a model
+    cannot open `msg-censo-validated.cls` from a bare filename. Measured, strict costs 9 files more
+    than loose -- and those 9 are the worst state in the tree, cited by name so they look covered
+    with no path to open them. C19 already guarantees every such path resolves, so strict + C19 is
+    reachable AND correct; loose is neither.
+    """
+    pointed = set()
+    for md in skill_markdown():
+        for m in re.finditer(r"\$\{CLAUDE_PLUGIN_ROOT\}/(BestPractices/examples/[^\s`)'\"]+\.cls)",
+                             read(md)):
+            pointed.add(m.group(1).rstrip(".,;"))
+    out = []
+    for f in artefacts():
+        if f.suffix != ".cls":
+            continue
+        if any(k in f.name for k in TEST_TIER):
+            continue
+        if str(f.relative_to(REPO)) not in pointed:
+            out.append(rel(f))
+    return sorted(out)
+
+
 def skill_assets() -> list[Path]:
     """Standalone `.cls` files bundled inside a skill, at `skills/<name>/assets/`.
 
@@ -675,6 +712,54 @@ def tier1() -> bool:
     # A clean C19 means nothing if it scanned no paths at all.
     if not plugin_refs:
         r.check("C19-control", "C19 actually found plugin-root references to check", ["found 0"])
+
+    # ── C20 ───────────────────────────────────────────────────────────────────────────────
+    # An example no skill points at is UNREACHABLE: the model has no way to learn it exists.
+    # Measured, 101 of 169 were unreferenced by basename and 110 by a usable path; excluding the
+    # test tier leaves 69 subject examples out of 117.
+    #
+    # A RATCHET, not an equality, and for the same reason as C9: 69 cannot fail the build today, but
+    # a NEW example with no pointer is new unreachable surface and must. A drop only prints, because
+    # working the debt down is the goal and a gate that fails on progress gets muted.
+    #
+    # WHAT THIS MEASURES AND WHAT IT DOES NOT. Reachability, not reading. #335 measured 1,589
+    # presentations of resolved example paths against 0 opens, so C20 at zero debt would still not
+    # mean the examples get used. This stops the SUPPLY problem getting worse; the demand side is the
+    # write-time hook in #335's proposal 2 and is not this check's business.
+    unpointed = unpointed_subjects()
+    _bl = json.loads(read(BASELINE)) if BASELINE.exists() else {}
+    recorded_list = _bl.get("unpointed_subjects")
+    # The LIST, not just a count, because a count can only say "one more than before" -- and the
+    # first version of this check did exactly that: it failed and then printed the first eight
+    # entries of the whole sorted debt, none of which was the file the author had just added. A gate
+    # that names the wrong files is one people learn to ignore.
+    recorded_up = len(recorded_list) if isinstance(recorded_list, list) else recorded_list
+    grew_up = []
+    # A MISSING baseline makes a ratchet inert, and an inert check reports "ok" -- which is the
+    # silent-pass shape this repo keeps being bitten by. --update-baseline always writes the key, so
+    # its absence means the file was hand-edited. Say so rather than pass.
+    if recorded_up is None:
+        grew_up.append("no `unpointed_subjects` count in examples_baseline.json, so this ratchet is "
+                       "measuring nothing -- run --update-baseline after a green gate")
+    if recorded_up is not None:
+        if len(unpointed) > recorded_up:
+            fresh = ([u for u in unpointed if u not in set(recorded_list)]
+                     if isinstance(recorded_list, list) else [])
+            grew_up.append(
+                f"{len(unpointed)} subject examples are reachable from no skill, baseline "
+                f"{recorded_up} -- {len(unpointed) - recorded_up} new one(s). Add a "
+                f"`${{CLAUDE_PLUGIN_ROOT}}/BestPractices/examples/<ch>/<file>.cls` pointer to the "
+                f"owning skill, or re-record deliberately.")
+            grew_up += [f"    NEW and unreachable: {u}" for u in fresh[:8]]
+    r.check("C20", "no new bank example is unreachable from every skill (ratchet)", grew_up)
+    if recorded_up is not None and len(unpointed) < recorded_up:
+        print(f"          note: unreachable subject examples down to {len(unpointed)} from "
+              f"{recorded_up} -- progress; re-record with --update-baseline")
+    # The test-tier exemption must actually exempt something, or the convention has rotted.
+    exempted = [f for f in artefacts() if f.suffix == ".cls" and any(k in f.name for k in TEST_TIER)]
+    if not exempted:
+        r.check("C20-control", "the tdd-/fixture exemption still matches files",
+                ["matched 0 -- the naming convention changed and C20 is now measuring the test tier"])
 
     # ── C9 ────────────────────────────────────────────────────────────────────────────────
     # Tier 3 compiles only the fences holding a COMPLETE class. The remainder -- bare
@@ -1481,12 +1566,21 @@ def update_baseline() -> None:
     for f in artefacts():
         if f.suffix == ".cls":
             sources += class_names(read(f))
+    unpointed = unpointed_subjects()
     BASELINE.write_text(json.dumps({
         "_comment": "Classes expected to compile clean. Any of these failing is a "
                     "regression and fails the build. Update only with a verified run.",
         "expected_clean": sorted(sources),
+        "_unpointed_comment": "Count of bank SUBJECT examples (tdd-*/fixture excluded) that no "
+                              "skill reaches by a full ${CLAUDE_PLUGIN_ROOT} path. C20 ratchets "
+                              "this: growth fails, a drop only prints. The LIST is recorded, not "
+                              "just its length, so a failure can name the newly-unreachable file "
+                              "rather than the first eight of the existing debt. Computed by "
+                              "unpointed_subjects(), the same function C20 calls.",
+        "unpointed_subjects": unpointed,
     }, indent=2) + "\n", encoding="utf-8")
-    print(f"baseline recorded: {len(sources)} classes -> {BASELINE.name}")
+    print(f"baseline recorded: {len(sources)} classes, {len(unpointed)} unreachable subject "
+          f"example(s) -> {BASELINE.name}")
 
 
 def main() -> int:
