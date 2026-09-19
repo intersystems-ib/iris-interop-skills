@@ -2842,6 +2842,82 @@ the production to assert that the circuit fires and carries the right text.
 
 ---
 
+### 6.19 HTTP Basic on an inbound SOAP service: `OnPreWebMethod` denies by raising a fault, never by returning a status
+
+`business-services` offers `OnPreWebMethod()` as the place to put Basic auth when it must live in IRIS.
+The callback is the right one. **The way it is naturally written authenticates nothing.**
+
+Five spellings of the same guard, one SOAP POST each against a live endpoint, with counters incremented
+inside `OnPreWebMethod` (`pre`) and inside the web method body (`body`):
+
+| `OnPreWebMethod` body | HTTP | `pre` | `body` | outcome |
+|---|---|---|---|---|
+| `As %Status`, `Quit $$$OK` | 200 | 1 | 1 | allowed, as intended |
+| `As %Status`, `Quit $$$ERROR(...)` | **200** | 1 | **1** | **allowed anyway** |
+| `As %Status`, no `Quit` at all | **200** | 1 | **1** | **allowed anyway** |
+| no return type, `Do ..ReturnFault(..MakeFault(...))` | 500 | 1 | 0 | denied, faultstring is yours |
+| no return type, `Throw ...` | 500 | 1 | 0 | denied, faultstring is `Server Application Error` |
+
+Two of the five fail open, and they are the two a developer writes first — the skill's own fence was the
+third row, with no `Quit` in it. Use `..ReturnFault(..MakeFault($$$FAULTServer, "..."))`: `Throw` also
+stops the call but replaces your message with a generic one, costing the caller the reason.
+
+**The dictionary said so before any of this was measured, and that is the transferable part.** All
+**52** `OnPreWebMethod` methods on the instance — `%SOAP.WebService`, `EnsLib.SOAP.Service` and 50
+others — declare **no return type**. A callback whose every platform implementation declares none is
+telling you its return value is not read. Declaring `As %Status` on your override does not create a
+contract; it only makes the discarded value look consulted. (In the dictionary an undeclared return
+type is stored as **NULL**, so `WHERE ReturnType = ''` finds none of them and a naive count reports all
+52 as typed.)
+
+**No adapter is involved.** `business-services` states the pattern "requires `EnsLib.SOAP.InboundAdapter`".
+It does not: `OnPreWebMethod` comes from `%SOAP.WebService`, which `EnsLib.SOAP.Service` extends, and the
+callback fires with the adapter blanked. The false prerequisite would send a reader to add an adapter
+they do not need — and per §6.17, adding one changes the deployment mode.
+
+Three preconditions decide whether the guard runs at all, and each one fails in a way that resembles the
+guard working:
+
+| precondition | if wrong | why it misleads |
+|---|---|---|
+| a production is running | `<Ens>ErrProductionNotRunning`, surfaced as `Server Application Error`, `pre=0` | a stopped production refuses *everything* |
+| the item is named after the **class** | `<Ens>ErrBusinessDispatchNameNotRegistered`, `pre=0` | items are `<Tipo>.<Name>` everywhere else in interop |
+| the web app does **not** require auth | `wsse:FailedAuthentication`, `pre=0` | looks like your credential check rejecting the call |
+
+That second row is the one worth remembering: a direct-mode SOAP service is reached through its class, so
+the CSP dispatcher resolves the config item by class name. It is the only place in interop where an item
+named `<Tipo>.<Name>` is wrong. The same class still sends to ordinary `<Tipo>.<Name>` targets.
+
+The third needs care. On an application with `AutheEnabled = 32`, Basic credentials authenticate a **WSDL
+GET** but the same credentials on a **SOAP POST** are refused before this method runs. Measured, one app,
+one credential pair:
+
+| credential carrier | HTTP | reached `OnPreWebMethod`? | `HTTP_AUTHORIZATION` |
+|---|---|---|---|
+| `Authorization: Basic` | 500 | no | never read |
+| WS-Security UsernameToken | 200 | yes | ABSENT |
+| both together | 200 | yes | **PRESENT** |
+| neither | 500 | no | never read |
+
+So `%request.CgiEnvs("HTTP_AUTHORIZATION")` *is* readable here — but on a password-protected application
+the request only arrives if it already authenticated another way, which makes "authenticate in
+`OnPreWebMethod`" circular. Put this guard on an application that does not require authentication, so
+that IRIS lets the request through and this method is the thing deciding.
+
+- **Not verified, stated as such.** The unauthenticated configuration (`AutheEnabled = 64`) could not be
+  exercised: the measuring instance's `UnknownUser` holds **no roles**, so every request returned a
+  generic `SOAP-ENV:Server` error with `pre=0`. That is a property of that instance, not of IRIS. Confirm
+  on your own instance that an anonymous request reaches the method, and grant `UnknownUser` only the
+  namespace access it needs.
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: five guard variants and
+  three credential carriers posted to a live endpoint on a throwaway web application, then reproduced as
+  a running suite whose mutations reopen the hole on demand.
+- **Validity.** Still valid.
+- **Severity.** CRITICAL — the natural spelling authenticates nothing while looking correct.
+- **Example.** `examples/ch06_adapters/soap-inbound-onprewebmethod-auth.cls`,
+  `examples/ch06_adapters/production-soap-authguard.cls`,
+  `examples/ch06_adapters/tdd-soap-onprewebmethod-deny.cls`
+
 ### 6.18 Resolving a path from a Setting: the class that compiles and the value that escapes
 
 CR-10 (`conformance-review/SKILL.md:144`) tells you to move a hardcoded path into a Setting, or resolve

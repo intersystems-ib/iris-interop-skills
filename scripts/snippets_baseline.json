@@ -6,6 +6,7 @@
     "MyApp.BS.DicomRest",
     "MyApp.BS.PatientCensusFromCSV",
     "MyApp.BS.RestEntry",
+    "MyApp.BS.SoapAuthGuard",
     "MyApp.Bootstrap",
     "MyApp.DAT.Address",
     "MyApp.DT.AL1Subtransform",
@@ -32,7 +33,7 @@
     "MyApp.UTL.WsdlFetch"
   ],
   "ungated": {
-    "bare_members": 18,
+    "bare_members": 17,
     "loose_fragments": 33
   }
 }
