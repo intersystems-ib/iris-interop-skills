@@ -95,6 +95,51 @@ for slug, desc in parsed.items():
 
 check("S4", "every description carries a non-empty trigger list", no_trigger + empty_trigger)
 
+# S9 -- the DOCUMENTED cap, and it was being breached (#365).
+#
+# Anthropic's Agent Skills docs state it twice: `description` maximum **1,024 characters**. Measured
+# at the time this was added, conformance-review was 1,090 -- 66 over -- and the 66 characters past
+# the cap were the TAIL OF THE SPANISH TRIGGER LIST:
+#
+#     "n implementado, es correcto, cumple, revisión, control de calidad."
+#
+# So the overflow was eating `revisión` and `control de calidad` on a plugin whose users write
+# Spanish, and #127 measured that trigger words are the half that is FREE and valuable while prose is
+# the tax. Whatever a client does past 1,024 -- truncate or reject -- being over a documented maximum
+# with triggers in the excess is a defect.
+#
+# CHARACTERS, not words. #365 framed it as "157 words against a ~100 budget"; there is no published
+# word budget. The 100 figure in the docs is "~100 tokens per Skill" -- a statement of METADATA COST,
+# not a limit -- and words are neither. The cap that exists is 1,024 characters, so that is what this
+# checks.
+#
+# THIS DOES NOT LICENCE SHORTENING DESCRIPTIONS GENERALLY. CLAUDE.md is explicit: #127 measured
+# ADDING 60 words (-13.3 precision) and whether removal is symmetric is untested, so an edit made for
+# matching performance still needs a before/after. Trimming to get under a documented hard cap is a
+# correctness fix and a different thing.
+DESC_CHAR_CAP = 1024
+over_cap = []
+for path in skills:
+    name = os.path.basename(os.path.dirname(path))
+    fm = frontmatter(open(path, encoding="utf-8").read())
+    if not fm:
+        continue
+    m = re.search(r"^description:\s*(.*?)(?=\n[a-z-]+:|\Z)", fm, re.S | re.M)
+    if not m:
+        continue
+    desc = m.group(1).strip()
+    if len(desc) > DESC_CHAR_CAP:
+        over = len(desc) - DESC_CHAR_CAP
+        over_cap.append("{}: description is {} chars, documented cap {} ({} over). What falls past "
+                        "the cap here: {!r} -- cut PROSE, never trigger words (#127: prose is a tax, "
+                        "triggers are free)".format(name, len(desc), DESC_CHAR_CAP, over,
+                                                    desc[DESC_CHAR_CAP:][:60]))
+check("S9", "every description is within the documented {}-character cap".format(DESC_CHAR_CAP),
+      over_cap)
+if not skills:
+    failures.append("S9")
+    print("  FAIL  S9  no skill was measured -- a clean pass here is vacuous")
+
 # --- S5: the #141 check. A [SqlProc] projects as <schema>.<Class>_<Method>, where <schema> is the
 # package with dots turned into underscores. `SELECT Pkg_Bootstrap_Method(...)` carries no schema
 # qualifier at all, so IRIS resolves it against SQLUSER and always answers SQLCODE -359. Four skills
