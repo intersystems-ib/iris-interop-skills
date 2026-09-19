@@ -1,6 +1,6 @@
 ---
 name: lookup-tables
-description: Lookup tables for code translation in DTL/BPL. Routed from interop. Triggers: lookup table, tabla de búsqueda, code map, Lookup(), Ens.Util.LookupTable, CSV codes, traducción de códigos, normalización.
+description: Lookup tables for code translation in DTL/BPL. Triggers: lookup table, tabla de búsqueda, code map, Lookup(), Ens.Util.LookupTable, CSV codes, traducción de códigos, normalización.
 ---
 
 # Lookup Tables

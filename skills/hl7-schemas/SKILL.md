@@ -1,6 +1,6 @@
 ---
 name: hl7-schemas
-description: Custom HL7 v2 schemas, Z-segments, schema editor. Routed from interop. Triggers: custom HL7 schema, esquema HL7, Z-segment, DocType, schema editor, schema category, v2.x, ER7, segmento personalizado.
+description: Custom HL7 v2 schemas, Z-segments, schema editor. Triggers: custom HL7 schema, esquema HL7, Z-segment, DocType, schema editor, schema category, v2.x, ER7, segmento personalizado.
 ---
 
 # Custom HL7 Schemas

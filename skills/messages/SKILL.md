@@ -1,6 +1,6 @@
 ---
 name: messages
-description: Message class design (Ens.Request+%Persistent, HL7, SOAP). Routed from interop. Triggers: message class, mensaje, Ens.Request, Ens.Response, %Persistent, HL7 message, request/response, definir mensaje, message body.
+description: Message class design (Ens.Request+%Persistent, HL7, SOAP). Triggers: message class, mensaje, Ens.Request, Ens.Response, %Persistent, HL7 message, request/response, definir mensaje, message body.
 ---
 
 # Messages — the foundational building block

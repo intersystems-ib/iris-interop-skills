@@ -1,6 +1,6 @@
 ---
 name: bpl
-description: BPL processes, routing rules, message routers. Routed from interop. Triggers: MessageRouter, routing rule, enrutador, regla de enrutamiento, router, BPL, Ens.BusinessProcess, business process, fan-out.
+description: BPL processes, routing rules, message routers. Triggers: MessageRouter, routing rule, enrutador, regla de enrutamiento, router, BPL, Ens.BusinessProcess, business process, fan-out.
 ---
 
 # BPL Business Processes

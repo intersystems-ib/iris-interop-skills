@@ -1,6 +1,6 @@
 ---
 name: production-lifecycle
-description: Production class, start/stop/update, deploy, settings. Routed from interop. Triggers: production, producción, Ens.Production, start/stop, arrancar/parar, deploy, despliegue, System Default Settings, UpdateProduction, namespace.
+description: Production class, start/stop/update, deploy, settings. Triggers: production, producción, Ens.Production, start/stop, arrancar/parar, deploy, despliegue, System Default Settings, UpdateProduction, namespace.
 ---
 
 # Production lifecycle — the container of everything

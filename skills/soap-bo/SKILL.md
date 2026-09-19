@@ -1,6 +1,6 @@
 ---
 name: soap-bo
-description: SOAP wizard BO, WSDL, %Persistent payloads, CDA. Routed from interop. Triggers: SOAP, WSDL, SOAP Wizard, web service, BO SOAP, %SerialObject, %Persistent payload, CDA, cliente SOAP.
+description: SOAP wizard BO, WSDL, %Persistent payloads, CDA. Triggers: SOAP, WSDL, SOAP Wizard, web service, BO SOAP, %SerialObject, %Persistent payload, CDA, cliente SOAP.
 ---
 
 # SOAP Business Operations — Wizard-driven

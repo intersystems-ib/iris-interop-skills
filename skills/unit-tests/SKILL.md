@@ -1,6 +1,6 @@
 ---
 name: unit-tests
-description: %UnitTest framework - runner, storage, results. Routed from interop. Triggers: %UnitTest, unit test, prueba unitaria, test runner, %UnitTest.TestProduction, ^UnitTest.Result, RunTest, qualifiers.
+description: %UnitTest framework - runner, storage, results. Triggers: %UnitTest, unit test, prueba unitaria, test runner, %UnitTest.TestProduction, ^UnitTest.Result, RunTest, qualifiers.
 ---
 
 # %UnitTest framework — toolbox reference

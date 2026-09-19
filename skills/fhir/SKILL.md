@@ -1,6 +1,6 @@
 ---
 name: fhir
-description: FHIR Facade/Repository, OAuth PKCE, R4 Bundles. Routed from interop. Triggers: FHIR, Façade, Repository, OAuth2 PKCE, R4 Bundle, SMART-on-FHIR, FHIR SQL Builder, recurso FHIR.
+description: FHIR Facade/Repository, OAuth PKCE, R4 Bundles. Triggers: FHIR, Façade, Repository, OAuth2 PKCE, R4 Bundle, SMART-on-FHIR, FHIR SQL Builder, recurso FHIR.
 ---
 
 # FHIR on IRIS for Health
