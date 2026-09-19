@@ -130,7 +130,7 @@ backwards. The `xmlns` on the **`<Record>` element** is what matters; the `XData
 So: `http://www.intersystems.com/Ensemble/RecordMap` is the only URI accepted **on the element** — it
 is the `NAMESPACE` parameter on all eleven `EnsLib.RecordMap.Model.*` classes. Omitting `xmlns`
 generates fine, so when in doubt leave it out. `http://www.intersystems.com/recordmap` is accepted
-only in the bracket, where nothing is checked — which is why "both are accepted" looked true: it was
+only in the bracket, where nothing is checked. A class read back from IRIS shows `xmlns` on `<Record>` because the generator writes it when it rewrites the block — that is not a reason to type it by hand — which is why "both are accepted" looked true: it was
 only ever tried in the position that cannot fail.
 
 ### Fixed-width instead of delimited
