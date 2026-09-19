@@ -2842,6 +2842,67 @@ the production to assert that the circuit fires and carries the right text.
 
 ---
 
+### 6.20 `%SOAP.WSDL.Reader.Process`: the measured signature, and why a typed `#Dim` is not a gate
+
+`soap-bo` records the signature with "Verified on IRIS-for-Health 2026.1". A version-pinned claim in
+prose needs something holding it in place. The obvious candidate does not work.
+
+**A typed `#Dim` gates nothing at compile time.** Six variants, each compiled with
+`$System.OBJ.Compile`:
+
+| call | result |
+|---|---|
+| typed `#Dim`, correct arity | compiles clean |
+| typed `#Dim`, **five** arguments | **compiles clean** — no arity check |
+| typed `#Dim`, **method that does not exist** | **compiles clean** — no existence check |
+| untyped variable, five arguments | compiles clean |
+| untyped variable, method that does not exist | compiles clean |
+| `Process` called as `##class(...).Process(...)` | **compiles clean**, despite `ClassMethod = 0` |
+
+ObjectScript resolves instance-method calls at run time, so a declared type is **documentation, not a
+contract**. Six ways to get the call wrong, none caught by the compiler. Keep writing the `#Dim` — it
+tells the next reader what the variable is — but do not mistake it for a check. What pins an external
+API is a test that **reads the formal spec** and **calls the thing**; `tdd-wsdl-reader-signature.cls`
+does both.
+
+**The signature**, read from `%Dictionary.CompiledMethod`:
+
+```
+Process(pLocationURL As %String,
+        pPackage As %String = "",
+        pTest As %Boolean = 0,
+        schemaReader As %XML.Utils.SchemaReader = "") As %Status      [ instance method ]
+```
+
+The fourth parameter **is** typed — `soap-bo` recorded it as a bare `schemaReader = ""`, now corrected.
+
+**`pLocationURL` accepts a local file path, not only a URL.** Measured: `Process("/tmp/x.wsdl", "Pkg")`
+returned `$$$OK` and generated the classes. That is what makes this pattern testable with nothing
+reachable — the oracle keeps a WSDL in an XData block, writes it to a temp file and reads it back.
+
+**What it generates**, measured on a one-operation WSDL, as a differential between the two flag values:
+
+| `MakeBusinessOperation` | generated | extends |
+|---|---|---|
+| 0 and 1 | `<Pkg>.<Svc>Soap` | `%SOAP.WebClient` |
+| 0 and 1 | `<Pkg>.<Svc>Soap.<Op>` | `%SOAP.ProxyDescriptor` |
+| 1 only | `<Pkg>.BusOp.<Svc>Soap` | `Ens.BusinessOperation` |
+| 1 only | `<Pkg>.BusOp.<Op>Request` | `Ens.Request` |
+| 1 only | `<Pkg>.BusOp.<Op>Response` | `Ens.Response` |
+
+So the count to expect is **operations + 1** with the flag off, and **+3 per operation's trio** with it
+on — and the interop classes land in a **`BusOp` sub-package**, one level below the client, which none of
+the skills stated. The Reader's own default for the flag is **0**, which yields the proxy client and
+nothing else; inside an interop project you almost always want 1.
+
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: the formal spec read from
+  the dictionary, six compile variants, and two generations run from a local file and diffed.
+- **Validity.** Still valid.
+- **Severity.** Medium — every wrong spelling of the call compiles, so the failure is deferred to the
+  first run.
+- **Example.** `examples/ch06_adapters/soap-wsdl-reader-generate.cls`,
+  `examples/ch06_adapters/tdd-wsdl-reader-signature.cls`
+
 ### 6.19 HTTP Basic on an inbound SOAP service: `OnPreWebMethod` denies by raising a fault, never by returning a status
 
 `business-services` offers `OnPreWebMethod()` as the place to put Basic auth when it must live in IRIS.
