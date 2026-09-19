@@ -212,6 +212,8 @@ its siblings.
 | §15.6 | Query/retrieve wired as four legs — the retrieved images arrive on a third inbound service | `ch15_dicom/production-dicom-query-retrieve.cls` |
 | §15.6 | The duplex partner every DICOM service and operation needs, shared by three items | `ch15_dicom/bp-dicom-leg.cls` |
 | §15.6 | Oracle: four distinct legs, every duplex name resolves, read through the item OBJECT | `ch15_dicom/tdd-dicom-query-retrieve.cls` |
+| §15.7 | A C-FIND reply is N Pending then exactly one terminal — the numbers named, since no macro exists | `ch15_dicom/bp-mwl-findresponse-sequence.cls` |
+| §15.7 | Oracle: the zero-row case, exactly-one-terminal, and a drift alarm on the missing `$$$Pending` | `ch15_dicom/tdd-mwl-findresponse-sequence.cls` |
 | §15.5 | DICOM production registering its AE pairs from `OnStart`, with the pairs in one place | `ch15_dicom/production-dicom-onstart-associations.cls` |
 | §15.5 | Oracle: an empty context validates and saves, `AETExists` lies, and the production/OnStart titles must agree | `ch15_dicom/tdd-dicom-onstart-associations.cls` |
 | §15.4 | Sibling: the run, whose central assertion is the off-by-one the first draft made | `ch15_dicom/tdd-dicom-mwl-date.cls` |
