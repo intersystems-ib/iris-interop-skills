@@ -569,6 +569,81 @@ setting and require a finding.
   `examples/ch02_hl7v2/tdd-mllp-setting-targets.cls`
 
 
+### 1.21 RecordMap field types are not per-record validation, and what they do instead differs by type
+
+Putting `%Integer` or `%Date` on a RecordMap field looks like declaring a constraint. It is not. What it
+actually does depends on which type you picked, and none of the outcomes is a rejection you can route.
+
+Measured on a four-field delimited map, `GetObject` followed by `%ValidateObject()`:
+
+| record | `GetObject` | value stored | `%ValidateObject` |
+|---|---|---|---|
+| `P1,12,64000,ICU` | OK | `Beds = 12` | OK |
+| `P2,ABC,64000,ICU` | **OK** | **`Beds = "ABC"`** | **ERR `#7207`/`#5802`** |
+| `P3,,64000,ICU` | OK | `Beds = ""` | **OK** — empty is a legal `%Integer` |
+| `P4,12,NOTADATE,ICU` | **raises `<ZODAT>`** | no object at all | — |
+| `P5,12` (too few) | OK | `Admitted = ""`, `Ward = ""` | OK |
+| `P6,…,EXTRA,MORE` (too many) | OK | extras **discarded** | OK |
+
+**`%Integer` is permissive at parse and strict at save.** `GetObject` returns `$$$OK` and puts the literal
+`ABC` into an `%Integer` property. Only `%ValidateObject()`/`%Save()` objects, with `#7207 Datatype value
+'ABC' is not a valid number` wrapped in `#5802 Datatype validation failed on property …:Beds`. By then the
+record is already a message.
+
+**`%Date` is strict at parse and fails badly.** It raises `<ZODAT>` inside the generated
+`AdmittedDisplayToLogical`, surfaced as `#5002 ObjectScript error`. The error names a generated method —
+not your field, not your file, not the record. This is the only case that matches the folklore that a bad
+record "never becomes a message", and the price is an error nobody can act on.
+
+**Field count is not checked at all.** Too few fields leaves the rest empty; too many **discards** the
+extras. No status, no log entry, no exception, and `%ValidateObject()` is content. Silent data loss.
+
+So validate **per record in the transform**, where a failure is a message you can route:
+
+- every record becomes a message, so Visual Trace has something to show;
+- a bad one carries `IsValid = 0` and a `Problems` string, so a routing rule can send it to an error
+  operation and a human can read the reason;
+- the raw text is preserved beside the verdict, because the person fixing it needs the original;
+- the typed property is filled **only** once the checks pass, so no consumer reads a value the transform
+  already rejected;
+- reasons accumulate — a record with three problems reports three, or fixing one just reproduces the
+  rejection.
+
+**Checking a date without raising takes two specific arguments**, both measured. `$ZDateH(value, 5, , , ,
+, , , -1)`: **format 5** is the one that parses `YYYY-MM-DD` (`"2026-09-19"` → `67832`), and the **ninth**
+argument `-1` makes it return `-1` instead of raising. `$ZDateH(v, 1)` raises `<ILLEGAL VALUE>` even on a
+valid date, and there is no format `-1`. An earlier draft passed the wrong format *and* ten arguments and
+**compiled clean** — §6.20's point, again.
+
+**Two harness requirements, each of which produced identical results across every case** — the shape of a
+broken measurement rather than a finding:
+
+- `GetObject` wants an **`%IO.`** stream (the service's own signature reads `pStream As %IO.DeviceStream`).
+  Handed a `%Stream.GlobalCharacter` it fails with `<PROPERTY DOES NOT EXIST> *Name`, naming neither the
+  stream nor the requirement.
+- an `%IO.StringStream` is left positioned at the end by `Write()`, so without `Rewind()` every case
+  returns `<EnsRecordMap>ErrStreamAtEnd`.
+
+**And a trap that silently disables setup entirely.** `%UnitTest.TestCase` declares the **unprefixed**
+hooks — `OnBeforeAllTests`, `OnAfterAllTests`, `OnBeforeOneTest`, `OnAfterOneTest`. A `%`-prefixed spelling
+compiles clean as dead code that is never called, and the suite then runs with no setup. Grepping for it
+found the same mistake in already-shipped material: `tdd-wsdl-reader-signature.cls` (§6.20) had a
+`%OnAfterAllTests` that never ran, so its temp WSDL file survived every run. Both are corrected.
+
+- **Fixture note.** This section uses `Example.RecordMap.CensoTyped`, a separate map, rather than adding a
+  typed field to `Example.RecordMap.Censo`. Censo's four fields are all `%String` so it cannot show a type
+  failure — but it is referenced by §1.11, by the `GetObject` sections and by its own test, and editing a
+  gated artefact to serve a different section is the wrong trade.
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: six record shapes parsed
+  through a generated record class, each followed by `%ValidateObject()` and `%Save()`; `$ZDateH` compared
+  across four argument forms; the transform run on seven inputs.
+- **Validity.** Still valid.
+- **Severity.** High — the type gives you either a value you did not want or an exception you cannot route.
+- **Example.** `examples/ch01_production/recordmap-typed-fields-fixture.cls`,
+  `examples/ch01_production/msg-censo-validated.cls`,
+  `examples/ch01_production/dtl-censo-validate-flags.cls`,
+  `examples/ch01_production/tdd-censo-validate-flags.cls`
+
 ### 1.20 Scheduling with `%SYS.Task.Definition`, and the purge settings that do not purge
 
 §5.2 offers two routes to scheduled work and prefers the native task framework for greenfield. The
