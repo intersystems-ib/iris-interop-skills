@@ -1214,7 +1214,21 @@ Open architectural questions captured in that plan (useful as a checklist):
 
 The FHIR SQL Builder projects FHIR repository data to custom SQL schemas WITHOUT moving the data. Use cases: ANSI SQL queries / Power BI / Tableau against FHIR data, when data analysts know SQL but not FHIRPath. Components: IRIS for Health FHIR Repository → FHIR SQL Builder analysis engine → custom SQL projection tables → Builder Client UI. Design via match expressions (FHIRPath subset) e.g. `system='http://hospital.smarthealthit.org'` to filter Patient.identifier arrays.
 
-Setup: Docker-based; populate via `Do ##class(HS.HC.FHIRSQL.Utils.Setup).Setup("/data/fhirdata/")` in `HSLIB` namespace; portal at `/csp/fhirsql/index.csp`.
+Setup: Docker-based; portal at `/csp/fhirsql/index.csp`. **The setup call is not `Setup(path)`** — read from
+the dictionary, `HS.HC.FHIRSQL.Utils.Setup.Setup` takes **three** parameters and returns **void**:
+
+```
+Setup(dir="//projects/healthshare/appmodules/HSHC-WIP/HealthConnect.FHIRSQL/latest",
+      pNamespace=..#FHIRNAMESPACE,
+      pStrategyClass:%String="HS.FHIRServer.Storage.Json.InteractionsStrategy")   -> VOID
+LoadFHIRData(ns=..#FHIRNAMESPACE, dir=".../internal/testing/data",
+             pSome=0, pPath:%String="", pFileLimit:%Integer="")                   -> VOID
+```
+
+`dir`'s default is an InterSystems **build** path, and **`LoadFHIRData` is the method whose `dir` names
+data** — so `Setup("/data/fhirdata/")` passes a data directory into a parameter the defaults suggest is not
+for data. Both return void, so `Set tSC = ...Setup(...)` raises `<COMMAND>` (§6.21). Class parameters:
+`FHIRNAMESPACE = "DEMO"`, `APPNAMESPACE = "HSSYS"`. See §4.13 for the existence test that pins this.
 
 - **Validity.** Verify current GA status; this was 2022.1 EAP.
 - **Severity.** Medium.
@@ -1254,6 +1268,58 @@ storage. Same wiring either way.
 - **Validity.** Still valid.
 - **Severity.** High — the namespace prerequisite is invisible until nothing resolves.
 - **Example.** `examples/ch04_fhir/production-fhir-facade.cls`
+
+### 4.13 An existence test must read the dictionary — a call-through to a missing method compiles clean
+
+A version-dependent platform API needs a standing check, and the obvious way to write one does not work.
+
+**A call never proves existence.** Measured five ways:
+
+| construct | result |
+|---|---|
+| `##class(HS.Totally.Absent).DoesNotExist()` | **compiles clean** |
+| `##class(HS.FHIRServer.Service).NoSuchMethodAnywhere()` | **compiles clean** |
+| `Property P As HS.Totally.Absent;` | `#5373 … used by 'X:property:P'` |
+| `ClassMethod Go(pArg As HS.Totally.Absent)` | `#5373 … used by 'X:Go:FormalSpec'` |
+| `Class X Extends HS.Totally.Absent` | `#5373 … used by 'X:superclass'` |
+
+`#5373` is raised **only** by a class in a **type** position — property, formal spec, superclass. A method
+call never raises it. So "does this API exist?" written as a call-through asserts nothing, which is §6.20's
+point about arity applied to existence. Read `%Dictionary.CompiledClass` / `%Dictionary.CompiledMethod`
+instead.
+
+**A correction to this project's own reasoning.** The coverage-map row said tier 2 "excuses `#5373` as a
+placeholder dependency". It does not — tier 2 ends `ok = not failed`, so any failure including `#5373`
+fails it. The excuse lives in **tier 3**, the skill-snippet tier, where an illustrative
+`MyApp.Msg.SomeRequest` is legitimate. The conclusion survives for the stronger reason above.
+
+**The surface this pins**, all read from the dictionary — and two facts contradict what §4.9 said:
+
+| member | signature | returns |
+|---|---|---|
+| `Setup` | `(dir="…/HSHC-WIP/HealthConnect.FHIRSQL/latest", pNamespace=..#FHIRNAMESPACE, pStrategyClass:%String="HS.FHIRServer.Storage.Json.InteractionsStrategy")` | **void** |
+| `LoadFHIRData` | `(ns=..#FHIRNAMESPACE, dir="…/internal/testing/data", pSome=0, pPath:%String="", pFileLimit:%Integer="")` | **void** |
+| `Install` | `(pNamespace="HSSYS")` | — |
+
+So `Setup` takes **three** parameters, not one; `dir`'s default is a **build** path while `LoadFHIRData`'s
+is a data path; and both return **void**, so assigning either raises `<COMMAND>` (§6.21). `HS.HC.FHIRSQL.Utils.Setup`
+is present in the interop namespace **and** in `HSLIB`; class parameters are `FHIRNAMESPACE = "DEMO"` and
+`APPNAMESPACE = "HSSYS"`.
+
+**Counting declared parameters needs two guards**, and they are easy to ship untested. A comma can sit
+inside a parenthesised type-parameter list (`%String(MAXLEN=10,TRUNCATE=1)`) or inside a quoted default
+(`="a,b"`), so a naive `$Length(spec, ",")` over-counts. Mutation-checking caught this: neither guard was
+exercised by any real FHIR SQL spec, and the first attempt at a test put every comma inside quotes, which
+exercised only one of the two.
+
+- **Not executed, and stated as such.** Neither `Setup` nor `LoadFHIRData` was called: FHIR SQL Builder is
+  not installed here, so what `Setup` does with a data path is read from its defaults, not observed.
+- **Source.** Verified against IRIS for Health Community 2026.1, 2026-09-19: five compile probes for
+  `#5373`, and every signature and class parameter read from `%Dictionary`.
+- **Validity.** Still valid.
+- **Severity.** High — a call-through existence test passes whether the API is there or not.
+- **Example.** `examples/ch04_fhir/fhirsql-setup-existence-test.cls`,
+  `examples/ch04_fhir/tdd-fhirsql-setup-existence.cls`
 
 ### 4.12 `Bundle.type` decides whether all-or-nothing applies, and `batch` satisfies the prose while breaking the guarantee
 
