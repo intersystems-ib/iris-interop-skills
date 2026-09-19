@@ -2584,6 +2584,67 @@ spelling that works there.
 - **Severity.** Medium — a compile error, so it cannot ship; but the message points away from the cause.
 - **Example.** `examples/ch04_fhir/dtl-fhir-redact-quickstream.cls`
 
+### 5.25 A rule class is a class, and the generator's only error is `<INVALID OREF>`
+
+§5.8 gives the `<ruleSet>` structure. It does not give the **class** that carries it, and that is the
+half people have to write. When it is written from memory the compiler's answer names neither the line
+nor the element:
+
+```
+ERROR <Ens>ErrException: <INVALID OREF>generateRuleDefinition+10^Ens.Rule.Generator.1 -- logged as '-' number - @''
+  > ERROR #5490: Error running generator for method 'evaluateRuleDefinition:MyApp.RUL.Whatever'
+    > ERROR #5030: An error occurred while compiling class 'MyApp.RUL.Whatever'
+```
+
+That is a null-object error *inside the generator*. There is nothing in it to act on, so the usual
+response is to start permuting the wrapper.
+
+**WHAT ACTUALLY CAUSES IT, isolated one variable at a time on 2026.1.** Same `<ruleSet>` body in every
+row; only the named thing changes:
+
+| what was wrong | compiles? |
+|---|---|
+| nothing — lowercase elements, `.../rule` URI | clean |
+| `XMLNamespace` = `http://www.intersystems.com/dtl` | **clean** |
+| `XMLNamespace` = `http://www.intersystems.com/EnsRuleDefinition` | **clean** |
+| no `XMLNamespace` bracket at all | **clean** |
+| `Parameter RuleAssistant` instead of `RuleAssistClass` | **clean** |
+| the **root** tag PascalCase (`<RuleDefinition>`), inner lowercase | **`<INVALID OREF>`** |
+| the **root** tag PascalCase, inner PascalCase too | **`<INVALID OREF>`** |
+| root lowercase, an **inner** tag PascalCase (`<RuleSet>`) | fails with `#6237 Unexpected tag in XML input: RuleSet`, naming the tag |
+| elements that exist in no rule schema (`<RuleAction>`, `<Assign>`) under a PascalCase root | **`<INVALID OREF>`** |
+| empty XData | fails, but with a precise `#6301` naming line and offset |
+
+**So it is the ROOT tag specifically.** The generator looks for `ruleDefinition`; miss that and the XML
+import yields no object at all, so it throws before it can report a position — there is nothing in the
+message because there was nothing to report a position *about*. Miss an INNER tag and the root parsed
+fine, so the importer can name the offender: `#6237 Unexpected tag in XML input: RuleSet`. That
+distinction is the difference between a one-line fix and a loop of guesses, and it is invisible from
+either error alone.
+
+**The `XMLNamespace` URI is conventional, not load-bearing — and this is worth stating because it is the
+first thing that looks guilty.** Compile the same rule with `.../rule` and with `.../dtl` and the
+generated `.INT` routines are byte-identical apart from the routine name and checksum: same
+`rule#1(All):when#1` reason string, same target. It is the natural suspect precisely because a wrong URI
+*looks* like the kind of thing that would break a generator, so a wrong URI in a failing class invites
+the conclusion that it was the cause. It was not. Write `http://www.intersystems.com/rule` because every
+tool and every example does, not because omitting it breaks the build.
+
+**And one shape that compiles clean and routes nothing:** a `<ruleDefinition>` with no `<ruleSet>` inside
+it. The class compiles, `evaluateRuleDefinition` is generated, every message falls through, and no error
+is raised anywhere. Same family as §7.1 — the rule matched nothing and said so to no one.
+
+- **Source.** Issue #340, reporting 33 failed `iris_doc`/`iris_compile` calls across five transcripts
+  from one 60-step bench, all on this generator error, against 0 for the model that already knew the
+  wrapper. The issue attributed it to the namespace URI; measuring one variable at a time on
+  2026-09-19 showed the URI is inert and the element casing is the whole cause.
+- **Validity.** Verified against IRIS for Health Community 2026.1: eight wrapper variants compiled
+  individually, and the generated `.INT` for the correct and `/dtl` URIs diffed.
+- **Severity.** High — the error is undiagnosable from its own text, so the cost is paid in a loop of
+  guesses rather than in one fix.
+- **Example.** The complete skeleton is inline in `bpl`'s SKILL.md (and compiled by tier 3 there);
+  `examples/ch05_bpl_dtl/routing-rule-fanout.cls` is the full worked case.
+
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 
 When you import a vendor WSDL in Ensemble/IRIS, the generated SOAP client classes nearly always need at least one of these patches.

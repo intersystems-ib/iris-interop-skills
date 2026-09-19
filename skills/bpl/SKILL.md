@@ -98,6 +98,57 @@ BS.Lab    →  Router.Lab    →  BO.LIS
     outstanding — the framework tracks them in `..%MasterPendingResponses` and runs `OnComplete`
     after the last one. That is why `pResponseRequired = 0` presents as a fast, healthy process.
 
+### The rule CLASS — copy this, don't reconstruct it
+
+The `<ruleSet>` below is the *contents* of an XData block. This is the class that carries it.
+
+```objectscript
+Class MyApp.RUL.Orders Extends Ens.Rule.Definition
+{
+
+/// Generic messages: EnsLib.MsgRouter.RuleAssist. HL7 v2: EnsLib.HL7.MsgRouter.RuleAssist.
+/// Other virtual docs (X12, ASTM, XML VDoc): EnsLib.MsgRouter.VDocRuleAssist.
+Parameter RuleAssistClass = "EnsLib.MsgRouter.RuleAssist";
+
+XData RuleDefinition [ XMLNamespace = "http://www.intersystems.com/rule" ]
+{
+<ruleDefinition alias="" context="EnsLib.MsgRouter.RoutingEngine">
+<ruleSet name="Main" effectiveBegin="" effectiveEnd="">
+<rule name="Orders" disabled="false">
+<constraint name="msgClass" value="MyApp.MSG.Order"></constraint>
+<when condition="1">
+<send transform="MyApp.DT.OrderToVendor" target="BO.Vendor"></send>
+<return></return>
+</when>
+</rule>
+</ruleSet>
+</ruleDefinition>
+}
+
+}
+```
+
+**`<ruleDefinition>` is lowercase, and getting THAT wrong is what makes the failure undiagnosable.**
+Measured one variable at a time on 2026.1 (§5.25 has the full table):
+
+| what is wrong | what the compiler says |
+|---|---|
+| the **root** tag (`<RuleDefinition>`) | `<INVALID OREF>generateRuleDefinition+10^Ens.Rule.Generator.1` — names no line, no element |
+| an **inner** tag (`<RuleSet>`, `<When>`, `<Send>`) | `#6237 Unexpected tag in XML input: RuleSet` — names the tag |
+| the `XMLNamespace` URI, or no `XMLNamespace` at all | nothing. **compiles clean** |
+| `Parameter RuleAssistant` misspelt | nothing. **compiles clean** |
+
+So a wrong root tag is the one that gives you nothing to act on: the generator gets no object at all and
+throws before it can report a position. A wrong inner tag names itself, and is cheap.
+
+> The `XMLNamespace` URI is the first thing that looks guilty and it is **inert**. Compile the same rule
+> with `.../rule` and with `.../dtl` and the generated `.INT` is byte-identical apart from the routine
+> name and checksum. Write `http://www.intersystems.com/rule` because every tool does — not to fix a
+> build.
+
+**One shape compiles clean and routes nothing:** a `<ruleDefinition>` with no `<ruleSet>` inside it.
+Every message falls through, and nothing is logged anywhere.
+
 ### Routing rule structure: one rule per source `msgClass`, multiple `<send>` per rule
 
 When a single origin needs to fan out to multiple destinations (e.g. CSV → PostgreSQL + SOAP + REST), the canonical structure is **one `<rule>` per source message class, with N `<send>` actions inside its `<when>` block**:
