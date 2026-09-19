@@ -136,6 +136,65 @@ For production interop hosts, prefer `Locked Down` when operationally feasible. 
 
 `Locked Down` disables more services by default and requires explicit enablement of each used CSP application, REST endpoint, etc. — more setup work, smaller attack surface.
 
+## Least privilege for an interop endpoint's service user
+
+The principal an external caller authenticates as is the one account whose credentials live outside
+your instance. It gets a **bounded role**, never `%All`.
+
+Three resources cover a SOAP or REST interop endpoint:
+
+| resource | permission | why |
+|---|---|---|
+| the web application (e.g. `/csp/app/api`) | `U` | without it the caller cannot reach the dispatcher at all |
+| `%DB_<NAMESPACE>` | `RW` | the production's own data and `Ens.*` tables |
+| `%DB_IRISSYS` | `R` | `^ISCSOAP`, which the SOAP framework reads — the `<PROTECT>` in `soap-bo` |
+
+**`Security.Users.Modify` with a `Roles` property REPLACES the list. It does not add, and it returns
+`$$$OK`.** Measured on IRIS for Health 2026.1, one throwaway user:
+
+| call | roles afterwards |
+|---|---|
+| `Create(user, "%Developer", …)` | `%Developer` |
+| `AddRoles(user, .r)` with `r = "%Operator"` | `%Developer,%Operator` |
+| **`Modify(user, .p)` with `p("Roles") = "%Developer"`** | **`%Developer`** — `%Operator` silently gone |
+| `Modify(user, .p)` with only `p("Enabled") = 1` | `%Developer` — untouched |
+
+The last row is the part that decides how to write a bootstrap: the clobber happens only when the
+`Roles` subscript is **present**. `Modify` for anything else is safe. An idempotent bootstrap that
+sets `p("Roles")` strips every role the user had on its *first* run, silently, and reports success.
+
+```objectscript
+/// Bounded permissions for the service user behind an interop endpoint.
+/// Idempotent: creates the role once, and ADDS it rather than replacing what the user has.
+Class Demo.UTL.EndpointRole Extends %RegisteredObject
+{
+
+ClassMethod Grant(pUser As %String, pWebApp As %String, pNamespace As %String) As %Status
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    Set tRole = "DemoInteropEndpoint"
+    If '##class(Security.Roles).Exists(tRole) {
+        // Resources, not %All: USE on the web app, RW on the namespace, R on IRISSYS for ^ISCSOAP.
+        Set tRes = pWebApp_":U,%DB_"_$ZConvert(pNamespace,"U")_":RW,%DB_IRISSYS:R"
+        Set tSC = ##class(Security.Roles).Create(tRole, "interop endpoint", tRes)
+        If $$$ISERR(tSC) Quit tSC
+    }
+    // AddRoles ADDS. Modify() with a Roles property would replace the list instead.
+    Set tRoles = tRole
+    Quit ##class(Security.Users).AddRoles(pUser, .tRoles)
+}
+
+}
+```
+
+**And fix the right end of the loop.** The reason `%All` on a service user looks necessary is
+usually that the **anonymous** principal already has it: a web application left at
+`AutheEnabled = 96` (`32+64`, which admits unauthenticated callers) reaches the handler as
+`UnknownUser`, someone grants `UnknownUser` `%All` to make it work, and the next step is to raise the
+*named* account to match. Lower the anonymous one instead — take `%All` off `UnknownUser` and set
+`AutheEnabled = 32` so the endpoint authenticates. `business-services` has the bit table.
+
 ## Reference data — partner-specific SAML attributes
 
 When generating a SAML 2.0 assertion for a partner system, the assertion's `<saml:AttributeStatement>` must include exactly the attribute names the partner's policy declares. Names are case-sensitive and partner-defined; capture the canonical list from the partner's integration spec before coding the assertion generator.
@@ -157,7 +216,7 @@ Some e-invoicing and public-sector signature workflows (e.g. Spanish TicketBAI, 
 
 ## When NOT to use this skill — fall back to docs
 
-- Application-level role-based authorization inside a CSP/REST app — that's `%SYS.Security.*` / role management, not interop-specific.
+- Application-level authorization **logic** inside a CSP/REST app — which user may see which record. That is `%SYS.Security.*` territory and not interop-specific. The **endpoint's own service principal** is in scope and is covered above: that one is part of wiring an interop endpoint, and disclaiming it is what left `%All` as the only documented answer.
 - IAM (InterSystems API Manager) / Kong policies — separate product; verify operational specifics against current InterSystems docs.
 - Encrypting databases (instance keys, secondary databases) — platform concern, not interop.
 
