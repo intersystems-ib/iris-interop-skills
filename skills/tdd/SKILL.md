@@ -448,6 +448,12 @@ Method OnAfterAllTests() As %Status
 
 ### BPL via Testing Service
 
+> **`$IsObject(resp)` is not evidence the process worked.** A BPL with a `<catchall>` that records a
+> fault and does not propagate it completes at Status 9 **Completed** and returns a populated response
+> object — so `$$$AssertStatusOK(..SendRequest(...))` and `$$$AssertEquals($IsObject(resp), 1)` both
+> pass on a run where every `<call>` failed. Measured: deliverable §5.23. Assert returned field
+> **values**, plus `Ens_Util.Log` rows of `Type = 2` (Error), or the target's `Ens.MessageHeader.Status`.
+
 ```objectscript
 Class MyApp.Tests.BPL.MyProcess Extends %UnitTest.TestProduction
 {
@@ -463,7 +469,7 @@ Method OnBeforeAllTests() As %Status
     Quit $$$OK
 }
 
-/// Verifies that BP.MyProcess receives a request and returns a response object
+/// Verifies that BP.MyProcess actually DID the work — not merely that it replied.
 Method TestProcessReceivesAndForwards()
 {
     Set req = ##class(MyApp.MSG.SomeRequest).%New()
@@ -471,6 +477,15 @@ Method TestProcessReceivesAndForwards()
     Do $$$AssertStatusOK(..SendRequest("BP.MyProcess", req, .resp, 1, 30))
     ; SendRequest with GetReply=1 waits for the response. Resp is now populated.
     Do $$$AssertEquals($IsObject(resp), 1, "Got a response back")
+    ; NEITHER ASSERTION ABOVE IS SUFFICIENT. A BPL whose <catchall> records a fault without
+    ; propagating it completes at Status 9 and returns a real response object, so both pass while
+    ; every <call> failed — measured, deliverable §5.23. Assert the VALUE, and assert the log.
+    Do $$$AssertEquals(resp.Field, "expected value", "the response carries the transformed value")
+    ; The host variable must be a LOCAL. Measured: `:..BaseLogId` fails to compile with
+    ; "Host variable name must begin with either % or a letter, not '.'" — copy the property out first.
+    Set tBase = ..BaseLogId
+    &sql(SELECT COUNT(*) INTO :tErrors FROM Ens_Util.Log WHERE ID >= :tBase AND Type = 2)
+    Do $$$AssertEquals(tErrors, 0, "and nothing in this run logged an Error (Ens.DataType.LogType 2)")
 }
 
 }

@@ -131,6 +131,9 @@ its siblings.
 | §5.21 | BPL `<scope>`/`<catchall>` — a handler that logs and falls through completes the process GREEN | `ch05_bpl_dtl/bpl-scope-catchall-compensation.cls` |
 | §5.22 | A collection's child table is projected only if asked — and `array` and `list` default oppositely | `ch05_bpl_dtl/msg-list-collection-child-table.cls` |
 | §5.22 | Oracle: each absence asserted next to a presence from the same query, plus the `element_key` type split | `ch05_bpl_dtl/tdd-list-collection-projection.cls` |
+| §5.23 | Oracle: asserts that `tdd`'s two weak assertions BOTH pass on a BPL whose every `<call>` failed | `ch05_bpl_dtl/tdd-testproduction-bpl.cls` |
+| §5.23 | Fixture, deliberately carrying the §5.21 defect so the assertion gap is demonstrable | `ch05_bpl_dtl/bpl-scope-swallow-fixture.cls` |
+| §5.23 | Fixture: the swallowing and propagating BPLs in one production, so the contrast is asserted | `ch05_bpl_dtl/production-bpl-assertions.cls` |
 | §5.21 | Oracle: the BP's own header is 8 (Error) only because the catchall sets `status` | `ch05_bpl_dtl/tdd-bpl-scope-catchall.cls` |
 | §5.21 | Fixture: the BPL plus a target that fails on demand, reusing `Example.BO.FailOnDemand` | `ch05_bpl_dtl/production-bpl-scope.cls` |
 | §5.19 | The audit that makes an un-awaited async call loud | `ch05_bpl_dtl/utl-bpl-sync-audit.cls` |
