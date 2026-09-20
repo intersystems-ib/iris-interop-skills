@@ -5,6 +5,37 @@ Interoperability productions with Claude, plus a best-practices + worked-example
 bank under `BestPractices/`. Start at the `interop` router; load `component-map`
 right after it to pick the right component/adapter for the task at hand.
 
+## Objective and target models
+
+**The objective** is to improve an LLM's capacity to **design, implement and test IRIS
+Interoperability productions** — following best practices, and leveraging the IRIS
+Interoperability components, tools and prebuilt artefacts that already exist rather than
+hand-rolling replacements for them.
+
+**The initial target agent and LLM is Claude Sonnet.** Some best effort should be made to stay
+compatible with other LLMs and agents:
+
+- **Claude Haiku**
+- **OpenAI Codex + Sol**
+- **OpenCode + OpenRouter + DeepSeek v4 Flash**
+
+Two measured facts bound what "best effort" can mean, and both are about *where* guidance has to
+live rather than what it says:
+
+- **The hook layer does not reach two of the three secondary targets.** The SessionStart conventions
+  bootstrap fired in **0 of 676 codex runs** and **0 of 289 opencode runs**, against 318/318 on
+  Claude (#115). So anything a non-Claude agent must know has to be reachable from a skill body — a
+  hook, a router injection, or a gate denial is a Claude-only channel in practice.
+- **Bundled files are not read by any measured model.** `skills/*/references/` and
+  `skills/*/assets/` were picked up **1 time in 44** across Sonnet 4.6 and Haiku 4.5, with no
+  difference between them (p = 1.00). Moving a needed capability there deletes it for every target,
+  not just the small ones. Table and provenance: `BestPractices/AB-PREREGISTRATION.md` §"VERDICT".
+
+Delivery through the `SKILL.md` body is, by contrast, **model-dependent**: 100 % on Sonnet against
+27 % on Haiku. Optimising the body for Sonnet is therefore the right default, and Haiku's lower rate
+is useful as an early detector of a body that has grown past what a smaller model will read — it is
+not a reason to contort the design.
+
 ## Skills system
 
 When working on anything IRIS Interoperability, invoke the `interop` router skill.
