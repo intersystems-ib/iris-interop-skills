@@ -170,14 +170,14 @@ Switch to UPSERT (`INSERT ... ON CONFLICT (paciente_id) DO NOTHING` / `DO UPDATE
 ## Common pitfalls
 
 - **`##class(Pkg.BO.X).%New()` to test the operation directly** → a BO does not instantiate. `Ens.BusinessOperation` declares no `%New`; a subclass returns `""`, and the error surfaces a line later as `<INVALID OREF>`. The adapter beside it *does* instantiate, which makes the BO look like the broken one. See `tdd` §"Pitfalls specific to Interop TDD".
-- **Concatenating values into SQL strings** instead of parameterizing → injection + escaping bugs.
+- **Concatenating values into SQL strings** instead of parameterizing → injection and escaping bugs.
 - **Writing SQL from an assumed table name, then guessing again on `-30`** → see §"Resolve real table names BEFORE the first query" above.
-- **Forgetting `MessageMap`** → every request hits the default `OnMessage` method which then has to dispatch by type manually.
-- **PoolSize > 1 with order-sensitive HL7 receivers** → out-of-order delivery breaks downstream state.
+- **Forgetting `MessageMap`** → every request hits the default `OnMessage`, which must then dispatch by type by hand.
+- **PoolSize > 1 with order-sensitive HL7 receivers** → out-of-order delivery breaks downstream.
 - **Hardcoding URLs/credentials** instead of using settings + credentials records → environment-specific deploys fail.
-- **No timeout on HTTP/REST outbound** → a hung remote endpoint blocks the BO pool indefinitely.
-- **Auditing a non-idempotent BO as a defect** when the remote table has a PK preventing duplicates → see "Idempotency" above; the constraint is the contract, not the bug.
-- **Stripping `$$$LOGINFO(...)` from the BO method because it's "noisy in prod"** → keep the log calls; toggle them off via the item's `LogTraceEvents` setting (or by environment) instead of editing the code. Verbosity is an operator decision, not a source-code one.
+- **No timeout on HTTP/REST outbound** → a hung endpoint blocks the BO pool indefinitely.
+- **Auditing a non-idempotent BO as a defect** when the remote table's PK already prevents duplicates → see "Idempotency" above: the constraint is the contract.
+- **Stripping `$$$LOGINFO(...)` from the BO method because it's "noisy in prod"** → keep the log calls; toggle them off via the item's `LogTraceEvents` setting (or by environment) instead of editing the code: verbosity is an operator decision.
 - **Reformatting a `%TimeStamp` in the BO** when the DTL already produced one → bind it directly. A `%TimeStamp`'s logical value *is* the ODBC form `YYYY-MM-DD hh:mm:ss`, so there is nothing to convert and re-formatting only creates a second place for date logic to drift. **This does not extend to `%Date`.** A `%Date`'s logical value is the `+$HOROLOG` day count (`52798`), and **the SQL adapter converts nothing** — measured: no `LogicalToOdbc`/`OdbcToLogical` call anywhere in `EnsLib.SQL.Common` or `EnsLib.SQL.CommonJ`. It binds the ObjectScript value you hand it, taking the type from `SQLDescribeParam` or from the descriptor you supply. Binding a `%Date` property straight into a `DATE` column hands the driver `52798` — the exact failure in the `%Date` row of "JDBC type marshalling" in
 [references/jdbc-sql.md](references/jdbc-sql.md). Convert once with `$ZDATE(value, 3)` and bind the result as `$$$SqlJDate` through `ExecuteUpdateParmArray`.
 
@@ -267,21 +267,21 @@ The two most-guessed-wrong families:
   `check_config`, `iris_production_item`, `iris_interop_query`; `message-search-debug` has the full
   table). `%Library.SQLConnection` **is a real class**, and its definitions **are** a real table —
   just not under the class name and not in this namespace: `%Library.sys_SQLConnection`, in `%SYS`.
-  See "Diagnose a named SQL Gateway connection without the Portal" in
-  [references/jdbc-sql.md](references/jdbc-sql.md).
+  "Diagnose a named SQL Gateway connection without the Portal" covers it in
+  `references/jdbc-sql.md`.
 
 **On `-30 Table not found`, the NEXT call is introspection — never another guessed name.**
 
-> **Compiled worked examples**: typed parameters and NULLs via `ExecuteUpdateParmArray` at
-> `assets/sql-bo-typed-parmarray.cls`; the inbound side, with the mandatory
+> **Before writing a SQL BO, read `assets/sql-bo-typed-parmarray.cls`** — typed parameters and NULLs
+> via `ExecuteUpdateParmArray`; the inbound side, with the mandatory
 > `EnsLib.JavaGateway.Service` item wired, at `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/production-sql-poll.cls`.
 
 ## JDBC / SQL outbound
 
 `DSN` forms, diagnosing a named SQL Gateway connection without the Portal, the settings quartet,
-`Credentials`/`BusinessPartner`, a worked PostgreSQL example, type marshalling, and typed
-parameters (`ExecuteUpdateParmArray` / `ExecuteQueryParmArray`):
-see [references/jdbc-sql.md](references/jdbc-sql.md).
+**Before wiring a JDBC outbound, read [references/jdbc-sql.md](references/jdbc-sql.md)** —
+`Credentials`/`BusinessPartner`, a worked PostgreSQL example, type marshalling, and typed parameters
+(`ExecuteUpdateParmArray` / `ExecuteQueryParmArray`).
 
 ## DIME protocol (legacy — do NOT use for new integrations)
 
@@ -302,7 +302,7 @@ When a third-party library is only available as Java (legacy SAML modules, custo
 
 The `EnsLib.JavaGateway.Service` item is how a production reaches an **External Language Server**: its `%gatewayName` names the ELS (`%JDBC Server` is the IRIS-shipped default). The two are not alternatives and the item is not deprecated — see [references/jdbc-sql.md](references/jdbc-sql.md). Use a custom Java gateway BO sparingly all the same: most legacy use cases now have native ObjectScript alternatives (e.g. SAML via `intersystems-ib/SAML-COS`).
 
-Worked example: `assets/javagateway-bo.cls`.
+Before writing a Java gateway BO, read `assets/javagateway-bo.cls`.
 
 ## Lab device integration — DT in both directions
 

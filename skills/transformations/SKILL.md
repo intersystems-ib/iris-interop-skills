@@ -158,8 +158,8 @@ measured side by side:
 prefer `..ConvertDateTime` in a DTL — it is in the picker, it round-trips through the visual editor,
 and it needs no `<code>` block — but choose it knowing it will not refuse 31 February.
 
-Oracle for every row and both failure modes (run and mutation-checked):
-`assets/tdd-convertdatetime-cheatsheet.cls`.
+**Before converting a date in a DTL, read `assets/tdd-convertdatetime-cheatsheet.cls`** — the oracle for
+every row and both failure modes, mutation-checked.
 
 ## Custom DTL functions via FunctionSet subclass
 
@@ -330,8 +330,8 @@ exactly the ones ObjectScript uses most:
 <code><![CDATA[Quit:(tipo="")&&(val="")]]></code>
 ```
 
-Worked example, compiled *and executed* against live IRIS 2026.1:
-`assets/dtl-order-to-vendor.cls` (§5.7) —
+**Before writing a DTL, read `assets/dtl-order-to-vendor.cls`** (§5.7) — compiled *and executed*
+against live IRIS 2026.1, it
 shows both escaping forms, and its header records the compile-order trap: `Transform` is built by
 a generator that resolves `sourceClass`/`targetClass` at generation time, so a DTL compiled in the
 same batch as its own message classes can fail with `#5001 <CLASS DOES NOT EXIST>` wrapped in
@@ -382,8 +382,8 @@ Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Ru
 
 ## HL7-specific patterns — fields, segments, paths
 
-Symbolic field names, the path-resolution decision tree, repeating segments, subtransforms over
-`EnsLib.HL7.Segment` and `<foreach>`: see [references/hl7-paths.md](references/hl7-paths.md).
+**Before writing an HL7 path, read [references/hl7-paths.md](references/hl7-paths.md)** — symbolic
+field names, the path-resolution decision tree, repeating segments and `<foreach>`.
 
 ## Date / numeric type marshalling pitfalls
 
