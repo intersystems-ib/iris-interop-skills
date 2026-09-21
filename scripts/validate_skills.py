@@ -297,11 +297,25 @@ if not sizes:
 # to protect, at the moment the contributor is deciding where material goes. That is why the wording
 # matters more than its age.
 #
-# SCOPE, because the previous version borrowed a number across tiers: the 0/6-vs-5/6 result above is
-# Sonnet 4.6 only, n=6 per gate, one task, one skill, one file. Haiku is NOT measured for the bundled
-# tier. The separate Haiku figure that used to appear here (27% inline vs Sonnet's 100%) is a BODY-tier
-# measurement and says nothing about references/ or assets/; it survives below only where it is
-# actually about the body.
+# THE FIX IS MODEL-SPECIFIC, and this is now measured rather than assumed. Haiku 4.5 was run on the
+# same VM, same day, same card, same assets/ file, 6 reps per gate (#388):
+#
+#                                      Haiku        Sonnet      Fisher
+#   prompt (control +)                 6/6  100%    6/6  100%
+#   nothing (control -)                0/6    0%    0/6    0%
+#   directive, all three gates         1/18   6%   17/18  94%    p = 0.00000007
+#
+#   Haiku: directive 1/18 vs control -    p = 1.0000   <-- indistinguishable from no file at all
+#   Haiku: prompt 6/6  vs directive 1/18  p = 0.000052 <-- and the instrument DOES work on Haiku
+#
+# So the directive pointer recovers the bundled tier on Sonnet and does NOT recover it on Haiku: for a
+# small model, moving something needed into a file is still deleting it, whatever verb points at it.
+# The previous version of this text guessed exactly that and had no number for it; it borrowed the 27%
+# BODY-tier figure to argue about references/ and assets/, which is a different tier. That borrowing is
+# gone -- 1/18 is from the tier this paragraph is about.
+#
+# LIMITS: one task, one skill, one file, n=6 per gate. Not tested whether repeating the pointer every
+# turn, or firing it from a hook, reaches Haiku.
 #
 # chars/4 is a conventional estimate, not a tokeniser. That is fine for a ratchet -- it only has to be
 # the SAME estimate on both sides of a comparison, and it is computed once here and recorded from the
@@ -337,11 +351,15 @@ else:
                             "(indistinguishable from the card not existing), the directive form "
                             "5-6 in 6, Fisher p = 0.0152; relative vs absolute path makes no "
                             "difference (p = 1.00). Evicting behind a passive pointer still costs "
-                            "the whole capability -- evicting behind a directive one costs nothing. "
-                            "The body is not a free fallback either: inline is 100% on Sonnet but "
-                            "27% on Haiku (that figure is BODY-tier; the bundled tier is unmeasured "
-                            "on Haiku), so anything that truly cannot fail belongs in a hook or a "
-                            "gate denial, not in prose. Table: BestPractices/AB-PREREGISTRATION.md"
+                            "the whole capability -- evicting behind a directive one costs nothing "
+                            "ON SONNET (94% across the three directive gates, n=18, vs 0% passive). "
+                            "It does NOT recover on Haiku 4.5: 1 of 18, statistically indistinguishable "
+                            "from the file not existing (p = 1.00 against the negative control) even "
+                            "though the same content pasted into the prompt lands 6/6. For a small "
+                            "model, moving something needed into a file is still deleting it, whatever "
+                            "verb points at it -- so anything that TRULY cannot fail belongs in a hook "
+                            "or a gate denial, not in prose and not behind a pointer. "
+                            "Table: BestPractices/AB-PREREGISTRATION.md"
                             .format(name, tk, was, tk - was, name))
 check("S8", "no SKILL.md body grew its always-loaded token cost (per-skill ratchet)", grew_tok)
 
