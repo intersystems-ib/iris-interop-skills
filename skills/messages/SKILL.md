@@ -71,22 +71,23 @@ other body class in the namespace.
 The `%Persistent`-first form is still a fully-fledged message: `%Extends("Ens.Request")` and
 `%Extends("Ens.MessageBody")` both remain true, and it saves, reopens and routes normally.
 
-Do **not hand-author** a `Storage` block. IRIS generates the storage definition on first compile
-— from the primary superclass, which is the whole point above. Writing one yourself makes
-`iris_doc(mode=put)` refuse with `STORAGE_STRIP_BLOCKED` until `allow_storage_regeneration: true`
-is passed; the guard is protecting generated storage, so the fix is to leave the block out, not to
-pass the flag.
+Do **not hand-author** a `Storage` block: IRIS generates it on first compile, from the primary
+superclass. `iris_doc(mode=put)` refuses a hand-written one with `STORAGE_STRIP_BLOCKED` until
+`allow_storage_regeneration: true` is passed — leave the block out rather than passing the flag.
 
 **The GENERATED `Storage Default` block is a different thing and is not a defect.** In a disk-first
-flow, a VS Code / Atelier export writes it back into the `.cls` after the first successful compile,
-and it re-materialises on every subsequent export. `iris_doc` accepts it silently
+flow, a VS Code / Atelier export writes it back into the `.cls` after the first successful compile
+and again on every export. `iris_doc` accepts it silently
 (`storage_stripped: false`) precisely because it is byte-identical to what IRIS generates. Do not
-delete it: removing it only sends you round the loop — rewrite clean, export, the block returns.
+delete it. On a class whose extent holds rows that is a data hazard, not a loop: measured on 2026.1,
+keeping the block holds a deleted property's slot **vacant**; dropping it makes IRIS **re-pack**
+(`Gamma` 4 → 3) while every stored row keeps the old layout, with **no error either way**. Nor is the
+global name derivable: `Ens.Config.Credentials` → `^Ens.Conf.CredentialsD`.
 
 The test is **what the block names**, not whether it is present: globals that are the class's own
 extent (`^Pkg.MSG.NameD` / `^Pkg.MSG.NameI` for `Pkg.MSG.Name`) are the generated default and are
-fine. A **custom global map** — globals that are not this class's own extent — is the thing the rule
-is about, and the thing the guard refuses.
+fine. A **custom global map** — globals that are not this class's own extent — is what the rule is
+about and what the guard refuses.
 
 Pair Request with a Response class extending `(%Persistent, Ens.Response)` — same leftmost rule. If the operation is fire-and-forget, return `Ens.Response` directly — no custom Response class needed.
 
@@ -257,7 +258,7 @@ Before setting any of these three, read `assets/xml-projection-settings.cls`.
 - **`%Persistent` present but NOT leftmost** (`Extends (Ens.Request, %Persistent)`) → same outcome as
   omitting it, and nothing fails: it compiles and the SQL table projects, so only `iris_table_info`
   reveals it. See §**Why `%Persistent` must be leftmost**.
-- **Hand-written `Storage` block** → `iris_doc` refuses the write (storage guard). See §**Canonical pattern — custom persistent message**.
+- **Hand-written `Storage` block** → refused by the guard; see §**Canonical pattern — custom persistent message**.
 - **Subclassing `EnsLib.HL7.Message`** → almost always wrong; HL7 is structurally defined by DocType, not by class hierarchy.
 - **Putting business properties on the carrier instead of the payload** in SOAP scenarios → wizard regeneration overwrites them.
 - **Missing pair**: Request without matching Response when the operation is synchronous and the BP expects a typed response.

@@ -88,17 +88,18 @@ names before you count a single brace.** This bites hardest on HL7 work, where t
 | `Parameter IN_DIR = "…/IN/"` | `Parameter InDir = "…/IN/"` |
 
 The string `ADT_A01` itself is fine everywhere it is **data** — `MessageSchemaCategory`, a DocType,
-an `XData` schema, a `Lookup()` key. It is illegal only as an identifier. A member name *can*
-legally carry other characters if it is delimited — `Property "My Property" As %String;`
-(GOBJ §2.6.3) — but that is for mapping a foreign schema, never for a component you author.
+an `XData` schema, a `Lookup()` key. It is illegal only as an identifier. A member name *can* legally carry
+other characters if delimited — `Property "My Property" As %String;` (GOBJ §2.6.3) — but that is for
+mapping a foreign schema, never for a component you author.
 
-**Do not hand-write a `Storage` block.** IRIS generates the storage definition on first compile.
-Writing one yourself makes `iris_doc(mode=put)` refuse with `STORAGE_STRIP_BLOCKED`, and the fix is
-to leave the block out, not to pass `allow_storage_regeneration: true` — see `messages`. Note that
-**only** `iris_doc` diagnoses this: a class that reaches IRIS through a disk write plus the VS Code
-sync and `iris_compile` gets the bare `#5559` with no hint at all. The **generated** `Storage
-Default` block that a VS Code / Atelier export brings back into the file *after* a successful
-compile is expected and is **not** a defect — do not chase it out of the file.
+**Do not hand-write a `Storage` block when AUTHORING a class — and never strip the one IRIS
+generated.** On a new class leave it out: IRIS generates it on first compile, and
+`iris_doc(mode=put)` refuses a hand-written one with `STORAGE_STRIP_BLOCKED` (the fix is to leave the
+block out, not to pass `allow_storage_regeneration: true` — see `messages`). `iris_doc` is the **only**
+thing that diagnoses it: measured on 2026.1, a hand-written block compiles **clean** through a disk
+write plus sync plus `iris_compile` — no error at all, and **not** `#5559`, which is the identifier
+error above. On an EXISTING class the generated block is maintained state: keep it byte-for-byte, and
+see `messages` for what regenerating it costs.
 
 **One statement per line.** ObjectScript is line-oriented: there is no line-continuation character.
 Splitting `Do $$$AssertTrue(<expr>,` across two lines yields `MPP5612: Referenced macro missing
