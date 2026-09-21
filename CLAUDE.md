@@ -26,15 +26,45 @@ live rather than what it says:
   bootstrap fired in **0 of 676 codex runs** and **0 of 289 opencode runs**, against 318/318 on
   Claude (#115). So anything a non-Claude agent must know has to be reachable from a skill body — a
   hook, a router injection, or a gate denial is a Claude-only channel in practice.
-- **Bundled files are not read by any measured model.** `skills/*/references/` and
-  `skills/*/assets/` were picked up **1 time in 44** across Sonnet 4.6 and Haiku 4.5, with no
-  difference between them (p = 1.00). Moving a needed capability there deletes it for every target,
-  not just the small ones. Table and provenance: `BestPractices/AB-PREREGISTRATION.md` §"VERDICT".
+- **Bundled files are read only when the `SKILL.md` *orders* them read — and only on Sonnet.**
+  The earlier figure (`skills/*/references/` + `skills/*/assets/` picked up **1 time in 44**) was
+  measured entirely against **passive** citations — `See [references/x.md](…)`, `Worked example:
+  assets/y.cls` — which is what essentially every skill here uses. Re-measured on 1.119.0, same card
+  in the same `assets/` file, 6 runs per arm, changing only the sentence that points at it
+  (#379, #388, 2026-09-21):
 
-Delivery through the `SKILL.md` body is, by contrast, **model-dependent**: 100 % on Sonnet against
+  | how the `SKILL.md` announces the file | Sonnet 4.6 | Haiku 4.5 |
+  |---|---|---|
+  | *(positive control: card pasted in the prompt)* | 6/6 | 6/6 |
+  | *(negative control: card nowhere)* | 0/6 | 0/6 |
+  | passive bullet — the wording the old figure measured | **0/6** | — |
+  | directive section, relative path | **5/6** | 0/6 |
+  | directive section, absolute path | 6/6 | 1/6 |
+  | same directive line in a project `CLAUDE.md` | 6/6 | 0/6 |
+
+  Passive vs directive on Sonnet: **p = 0.0152**. Sonnet vs Haiku across the three directive arms,
+  17/18 vs 1/18: **p = 0.00000007**. **Path form is irrelevant** (relative 5/6 vs absolute 6/6,
+  p = 1.00), so an unresolvable relative link is *not* why the tier looked dead.
+
+  **A pointer that works has three parts — a trigger condition, an imperative verb, and what the
+  reader gets:** *"Before writing a DTL, read `<path>`. It carries the minimal XData that compiles
+  and the four failures that give no readable error."* Drop the trigger or the verb and it measures
+  zero. Reading implies using: across the re-measured arms, marker-in-output, a real `Read` call,
+  and marker-in-transcript agreed 12 of 12 — there is no "opened it and ignored it" mode.
+
+  **On Haiku the tier stays dead either way**: 1 of 18 with a directive pointer, indistinguishable
+  from the file not existing (p = 1.00 vs the negative control) even though the same content in the
+  prompt lands 6/6. For a small model, moving a needed capability behind a file still deletes it.
+
+Delivery through the `SKILL.md` body is likewise **model-dependent**: 100 % on Sonnet against
 27 % on Haiku. Optimising the body for Sonnet is therefore the right default, and Haiku's lower rate
 is useful as an early detector of a body that has grown past what a smaller model will read — it is
 not a reason to contort the design.
+
+**What this means for placement.** On Sonnet, `references/` and `assets/` are usable storage as long
+as every pointer is directive — that is what funds an eviction under the S8 ratchet. On Haiku, and
+for anything that truly cannot fail on any model, the only channels that hold are a hook or a gate
+denial. Table and provenance: `BestPractices/AB-PREREGISTRATION.md` §"VERDICT".
 
 ## Skills system
 

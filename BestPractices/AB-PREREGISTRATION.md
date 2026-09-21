@@ -52,6 +52,34 @@ cleanly: card **in the prompt** 5/5 in both models, card **nowhere** 0/4.
 | Sonnet: `inline` vs both doors | **p < 0.00001** |
 | the doors: Haiku vs Sonnet | **p = 1.00 — no difference** |
 
+> ### ⚠ SUPERSEDED 2026-09-21 — for the MECHANISM, not the numbers
+>
+> **The table above stands; it is the audit's output and it replicates.** What is wrong is point 1
+> below, which reads it as a fact about the *tier*. Every door in this experiment was announced
+> **passively** (`plantilla en assets/x.md, copiala`, `See [references/x.md](…)`) — the only form
+> this repo used at the time. Re-measured on 1.119.0 with the same card in the same file, changing
+> only the sentence that points at it:
+>
+> | pointer wording | Sonnet 4.6 | Haiku 4.5 |
+> |---|---|---|
+> | passive bullet — reproduces this table's 0 % | **0/6** | — |
+> | directive (trigger condition + imperative verb) | **5/6 – 6/6** | 0/6 – 1/6 |
+> | same directive line in a project `CLAUDE.md` | 6/6 | 0/6 |
+>
+> Passive vs directive on Sonnet: **p = 0.0152**. Sonnet vs Haiku across three directive arms,
+> 17/18 vs 1/18: **p = 0.00000007**. Path form is irrelevant (relative vs absolute, p = 1.00), so
+> an unresolvable relative link is not the explanation either.
+>
+> So: **on Sonnet the doors are usable when the pointer is an order rather than a mention. On Haiku
+> they stay shut either way** — 1 of 18, indistinguishable from the file not existing, while the
+> same card in the prompt lands 6/6. Read point 1 below as *"passive mentions are dead for
+> everyone"*, and the Haiku half of the third consequence as **confirmed, and now measured on the
+> tier it is actually about** rather than borrowed from the body's 27 %.
+>
+> Provenance: #379 (correction comment), #388 (the bulk fix), #389 (the S8 remedy text). Harness
+> `ab_rutas.py` in the TR-26015 bench, 6 reps per arm, both controls separating cleanly in both
+> models.
+
 **The conclusion splits in two, and only one half is global.**
 
 1. **The doors are dead for everyone.** `references/` + `assets/` is **1 hit in 44** across both
@@ -135,9 +163,14 @@ reassuring.
 ### What this design still cannot say
 
 Subtraction measures **breadth**, so it cannot separate "this skill is unnecessary" from "this skill
-is necessary but its content is unreachable". Given that `references/` and `assets/` are picked up
-1 time in 44 (§"VERDICT" below), a skill whose load-bearing material sits behind a door would look
-removable in **every** arm. A tie on such a skill is evidence about reach, not about need.
+is necessary but its content is unreachable". Given that `references/` and `assets/` were picked up
+1 time in 44 **when every pointer to them was passive** (§"VERDICT" below, and its 2026-09-21
+addendum), a skill whose load-bearing material sits behind a door would look removable in **every**
+arm. A tie on such a skill is evidence about reach, not about need.
+
+The addendum does not lift this caveat, it dates it: the subtraction runs were executed against
+plugin versions whose citations were passive throughout, so their ties carry exactly this ambiguity.
+A re-run after the #388 conversion would not — on Sonnet.
 
 ## Arms
 
