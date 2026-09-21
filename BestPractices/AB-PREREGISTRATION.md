@@ -89,6 +89,56 @@ pre-registration does not open with the expensive design.
 
 ---
 
+## Pre-registered decision tree — subtraction round 2
+
+Registered **2026-09-21, before the data exists**, for the GENAI-Course subtraction experiment:
+arm **A** (all 20 skills), **B** (the 11 touched), **C** (the 6-skill core), across Haiku and Sonnet,
+scored on completion **and** conformance. It is written now for the same reason Gate 0's stop rule
+was: a decision rule invented after the number lands is not a decision rule.
+
+### The outcome space, and what each result triggers
+
+| result | reading | pre-committed trigger |
+|---|---|---|
+| **C ≈ A** | 6 skills produce work as good as 20 on this exercise | Propose the 6-skill core as the default and the other 14 as opt-in. State the scope precisely: *nothing measurable on this exercise by this counter* — not "the additive work was worthless". |
+| **C < A, B ≈ A** | 11 is sufficient, 6 is not | Prune to the 11, and name which of the 5 skills dropped in C the gap traces to before pruning anything. |
+| **C < A, B < A** | the 20 earn their keep | Stop proposing subtraction. The lever becomes the token programme instead — the skills over the 5k figure, worked down without removing any. |
+| **C > A** | loading 20 skills *costs* attention | **Stronger than a tie, and it inverts the default**: pruning stops being merely safe and becomes required. Do not treat this as a surprising tie. |
+
+A comparison not in this table is exploratory, may be reported as such, and may not drive a ship
+decision.
+
+### The validity gate that runs BEFORE any row above is read
+
+**A tie is only as strong as the counter**, and for this experiment the counter is measurably
+incomplete. Measured in this repo on 2026-09-21, by classifying every gate/hook hit as enforcing or
+not — a grep hit is not a check:
+
+| skill removed in C | enforcing representative | what the term hits actually are |
+|---|---|---|
+| `hl7-schemas` | **none** | the `interop_route.py` regex that *names* the skill; exemption text in `interop_bootstrap.py` and `interop_conformance_gate.py` keeping `DocType` / `MessageSchemaCategory` out of a naming rule; test fixtures. `HL7.Schema` appears in **0** gate or hook files. |
+| `messages` | **one — CR-11** | `Class …\.(?:DAT\|MSG)\.… Extends … %Persistent` without a delete cascade. It fires on a property of a payload that **already exists**; it cannot fire if no message class was designed at all. |
+
+So a conformance tie is **blind** to whether removing `hl7-schemas` hurt, and **partially blind** for
+`messages`. That is a property of the checks, not of the arms, and no amount of run volume fixes it.
+
+**Consequence, binding on how the result is written up:** a tie must be reported as *"no difference on
+the measured dimensions, and the measured dimensions do not include custom HL7 schema authoring, nor
+whether a message class was designed at all."* Naming the blind spots is part of the result, not a
+footnote to it.
+
+**The cheap fix, if it can be afforded before the run:** add one scenario that *requires* a custom
+Z-segment schema, scored on whether the generated schema resolves. Without it, arm C **cannot lose on
+`hl7-schemas` by construction** — which makes a tie on that dimension uninformative rather than
+reassuring.
+
+### What this design still cannot say
+
+Subtraction measures **breadth**, so it cannot separate "this skill is unnecessary" from "this skill
+is necessary but its content is unreachable". Given that `references/` and `assets/` are picked up
+1 time in 44 (§"VERDICT" below), a skill whose load-bearing material sits behind a door would look
+removable in **every** arm. A tie on such a skill is evidence about reach, not about need.
+
 ## Arms
 
 Pinned as branches so the comparison is reproducible and cannot drift while it runs. Each is pinned
