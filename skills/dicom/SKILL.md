@@ -1,8 +1,7 @@
 ---
 name: dicom
-description: DICOM C-STORE/FIND/MOVE, MWL, PACS, STOW-RS. Routed from interop. Triggers: DICOM, C-STORE, C-FIND, C-MOVE, MWL, modality worklist, PACS, STOW-RS, DICOMweb, imaging modality (the device), AE Title, EnsLib.DICOM. NOT a trigger: reading or converting .dcm files locally (e.g. a pydicom batch script) with no network protocol and no IRIS — that is file processing, not integration.
+description: DICOM C-STORE/FIND/MOVE, MWL, PACS, STOW-RS. Triggers: DICOM, C-STORE, C-FIND, C-MOVE, MWL, modality worklist, PACS, STOW-RS, DICOMweb, imaging modality (the device), AE Title, EnsLib.DICOM. NOT a trigger: reading or converting .dcm files locally (e.g. a pydicom batch script) with no network protocol and no IRIS — that is file processing, not integration.
 ---
-
 # DICOM on IRIS for Health
 
 DICOM is a protocol family of its own inside Interop. The wiring shape, message

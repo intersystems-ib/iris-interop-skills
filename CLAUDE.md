@@ -149,8 +149,15 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   `Triggers:` list cost nothing on either side (+1.7 precision, +3.7 recall, both null). Prose
   broadens the match surface without improving it — a tax, not a dial.
   **This licenses not-adding, not shortening**: the probe measured *adding* 60 words, and whether
-  removing words is symmetric is untested. Existing descriptions stay as they are until an arm
-  measures the removal direction, and any description edit still needs a before/after (#126, #127).
+  removing words is symmetric is untested. So a description edit still needs a before/after
+  (#126, #127) — with **one decided exception, 2026-09-21 (#365, v1.121.0)**: the string
+  `Routed from interop.` was removed from all **16** descriptions that carried it, by the owner's
+  decision, *without* waiting for `bench/arm-m3` to run. The reasoning is recorded rather than
+  implied: the string cannot match any user utterance (it names an internal routing relationship, and
+  no one types it), it cost ~84 tokens in every session, and #127's own finding is that description
+  *shape* predicts neither recall nor fatal misses. `bench/arm-m3` is still pinned and still runnable
+  — it now measures a shipped decision instead of gating one. This exception is for a string that
+  cannot match; it does not license shortening prose that can.
 - **Hooks are a Claude Code mechanism, and they are INERT on two of the three CLIs the campaign
   measures** (#115). Structurally re-derived over 1292 corpus runs: the SessionStart bootstrap
   appears in 318 of 318 `claude` runs, **0 of 676 `codex`** and **0 of 289 `opencode`** — the single

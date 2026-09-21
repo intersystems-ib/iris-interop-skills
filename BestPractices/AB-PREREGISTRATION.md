@@ -10,14 +10,23 @@ Two things prompted it:
 
 - **#337** — 20 skills were over the 500-line budget with no supporting files; they were split, and
   progressive disclosure now has somewhere to disclose *to*. Whether that helped is unmeasured.
-- **#365** — 15 of 20 descriptions carry the string `Routed from interop.`, which no user utterance
-  can match. Removing it is a plausible improvement in the **untested direction**: #127 measured
-  *adding* prose, never removing it.
+- **#365** — **16** of 20 descriptions carried the string `Routed from interop.`, which no user
+  utterance can match. Removing it was a plausible improvement in the **untested direction**: #127
+  measured *adding* prose, never removing it.
+  **SHIPPED 2026-09-21 in v1.121.0, before this arm ran**, by the owner's decision — see `CLAUDE.md`
+  §"Conventions for editing skills" for the reasoning. Two things follow. The arms below stay pinned
+  at their shas and stay runnable; `arm-m3` now measures a decision already taken rather than gating
+  it. And the count was **16, not 15**: `component-map` carried the variant `Routed from interop — `
+  with an em dash and no period, so an exact-string search for `Routed from interop.` missed it. The
+  15 vs 16 discrepancy in earlier notes is that, not drift.
 
 Counts above are stated once, at a version, and rot from that moment. Re-derive, never trust:
 
 ```bash
-grep -rlc 'Routed from interop\.' skills/*/SKILL.md | wc -l   # descriptions carrying the string
+grep -rl 'Routed from interop' skills/*/SKILL.md | wc -l    # descriptions carrying the string
+# NOT -lc: `grep -lc` gave -l semantics in one invocation here and -c semantics (a `file:0` line for
+# EVERY file scanned) in another on the same machine, so the piped count was sometimes the number of
+# files scanned. And no trailing `\.`: component-map used an em dash instead.
 python3 scripts/validate_skills.py                            # S7 lines, S8 tokens, S9 chars
 ```
 

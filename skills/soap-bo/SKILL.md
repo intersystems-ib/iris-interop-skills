@@ -1,8 +1,7 @@
 ---
 name: soap-bo
-description: SOAP wizard BO, WSDL, %Persistent payloads, CDA. Routed from interop. Triggers: SOAP, WSDL, SOAP Wizard, web service, BO SOAP, %SerialObject, %Persistent payload, CDA, cliente SOAP.
+description: SOAP wizard BO, WSDL, %Persistent payloads, CDA. Triggers: SOAP, WSDL, SOAP Wizard, web service, BO SOAP, %SerialObject, %Persistent payload, CDA, cliente SOAP.
 ---
-
 # SOAP Business Operations — Wizard-driven
 
 For SOAP destinations, IRIS provides a **SOAP Wizard** that generates a Business Operation class plus request/response message classes from a WSDL. This is almost always the right starting point — hand-rolling SOAP serialization in IRIS is rarely worth the effort.
