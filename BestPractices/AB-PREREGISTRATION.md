@@ -24,9 +24,19 @@ Counts above are stated once, at a version, and rot from that moment. Re-derive,
 
 ```bash
 grep -rl 'Routed from interop' skills/*/SKILL.md | wc -l    # descriptions carrying the string
-# NOT -lc: `grep -lc` gave -l semantics in one invocation here and -c semantics (a `file:0` line for
-# EVERY file scanned) in another on the same machine, so the piped count was sometimes the number of
-# files scanned. And no trailing `\.`: component-map used an em dash instead.
+# The earlier form of this line, `grep -rlc '…interop\.'`, undercounted. TWO INDEPENDENT DEFECTS, and
+# fixing either one alone still leaves a wrong number. Measured 2026-09-21 against the v1.119.0 tree,
+# where 16 of 20 descriptions carry the string:
+#   (a) `-l` AND `-c` together is unspecified, and the two greps on this machine disagree:
+#       /usr/bin/grep -lc  -> 36 output lines (a `file:count` line for ALL 20 files PLUS a name line
+#                             for each of the 16 that match), so `| wc -l` is neither count
+#       the `grep` on PATH -> 16 (clean -l semantics)
+#       ...because `grep` in a shell here is a FUNCTION shimming to ugrep 7.8.4, while
+#       `find … | xargs grep` execs /usr/bin/grep. The same command text runs two different programs
+#       depending on how it is invoked. Every reproduce command in this repo is written as `grep`.
+#   (b) the escaped period excluded component-map's variant, `Routed from interop — load it at …`
+#       (em dash, no period): 15 instead of 16. This is the defect that actually produced the wrong
+#       figure, and it survives fixing (a).
 python3 scripts/validate_skills.py                            # S7 lines, S8 tokens, S9 chars
 ```
 
