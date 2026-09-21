@@ -265,16 +265,43 @@ if not sizes:
 # PER SKILL, not a total, and that is the whole mechanism. A total would let one skill grow while
 # another shrinks, which is how the always-loaded cost creeps up unnoticed.
 #
-# THE REMEDY IS EVICTION, NOT RELOCATION OF THE NEW THING, and the first version of this text got it
-# wrong. It said to move the new material to references/ "where it costs nothing until read" --
-# measured with a marked guide card and both controls separating cleanly, `references/` + `assets/`
-# is 1 pickup in 44 across Haiku 4.5 AND Sonnet 4.6, with no difference between the models
-# (p = 1.00) -- so for a capability the task needs, relocating costs the whole capability rather
-# than nothing. Full table and provenance: BestPractices/AB-PREREGISTRATION.md, which is the single
-# record of these figures precisely so they are not restated here and left to rot. Worse, the queue this gate was aimed at (#339, #345, #347) is exactly the
-# queue that ADDS required content, so the old wording pointed every future fix at the place fixes
-# die. Fund an addition by evicting genuinely optional depth instead. The remaining issue queue (#339, #345, #347) all ADD content to large
-# skills, and this is what redirects those additions instead of quietly re-inflating what #337 fixed.
+# THE REMEDY IS EVICTION PLUS A DIRECTIVE POINTER, and this text has now been wrong twice in two
+# different ways. Both corrections are kept because the second one only makes sense against the first.
+#
+#   v1 said: move the new material to references/ "where it costs nothing until read".
+#   v2 said: never relocate anything needed, because bundled files are measured at 1 pickup in 44
+#            across Haiku 4.5 AND Sonnet 4.6 (p = 1.00 between them) -- so relocating a needed
+#            capability costs the whole capability.
+#
+# v2's NUMBER is right and its CONCLUSION is wrong, which is the more dangerous shape. It is not the
+# tier that fails, it is the VERB the file is pointed at with. Same card, same file, same `assets/`
+# directory, Sonnet 4.6, 6 reps per gate (#388/#379):
+#
+#   passive mention  ("plantilla en `assets/x.md`", "See [references/x.md](...)")  0/6
+#   directive + trigger ("Before writing a DTL, read assets/dtl-xdata.md")         5/6 - 6/6
+#                                                                 Fisher p = 0.0152
+#   relative vs absolute path                                     5/6 vs 6/6, p = 1.00 (not the cause)
+#
+# And the 1-in-44 is explained by construction rather than by any property of the tier: across the 20
+# SKILL.md bodies there are 113 citations of bundled files and ~5 carry an imperative verb anywhere
+# near them, none in the directive-with-trigger form. A measurement of "are bundled files read?" taken
+# over those 113 citations had to come back ~0.
+#
+# So eviction is safe, and it is the only remedy that fits the budget WITHOUT losing the capability --
+# but it has two parts and the second is not optional. Move the depth out AND rewrite the pointer as
+# an imperative with a trigger condition. Full table and provenance: BestPractices/AB-PREREGISTRATION.md,
+# which is the single record of these figures precisely so they are not restated here and left to rot.
+#
+# The queue this gate was aimed at (#339, #345, #347) is exactly the queue that ADDS required content,
+# so v2's wording pointed every future fix INTO the body -- inflating the very thing this gate exists
+# to protect, at the moment the contributor is deciding where material goes. That is why the wording
+# matters more than its age.
+#
+# SCOPE, because the previous version borrowed a number across tiers: the 0/6-vs-5/6 result above is
+# Sonnet 4.6 only, n=6 per gate, one task, one skill, one file. Haiku is NOT measured for the bundled
+# tier. The separate Haiku figure that used to appear here (27% inline vs Sonnet's 100%) is a BODY-tier
+# measurement and says nothing about references/ or assets/; it survives below only where it is
+# actually about the body.
 #
 # chars/4 is a conventional estimate, not a tokeniser. That is fine for a ratchet -- it only has to be
 # the SAME estimate on both sides of a comparison, and it is computed once here and recorded from the
@@ -302,15 +329,20 @@ else:
         elif tk > was:
             grew_tok.append("{}: ~{} body tokens, baseline ~{} (+{}) -- FUND IT by evicting "
                             "genuinely optional depth to skills/{}/references/, or re-record "
-                            "deliberately. Do NOT move the NEW material out unless nobody needs it "
-                            "to finish the task: measured, references/ and assets/ are picked up "
-                            "1 time in 44 across BOTH Haiku and Sonnet (p = 1.00 between them), so "
-                            "relocating a needed capability does not cost a little -- it costs the "
-                            "whole capability. And the body is not a safe fallback either on a small "
-                            "model: inline is 100% on Sonnet but 27% on Haiku, so anything that "
-                            "truly cannot fail belongs in a hook or a gate denial, not in prose. "
-                            "Table: BestPractices/AB-PREREGISTRATION.md".format(
-                                name, tk, was, tk - was, name))
+                            "deliberately. EVICTION HAS TWO PARTS AND THE SECOND IS NOT OPTIONAL: "
+                            "move the depth out, AND rewrite the pointer as an imperative with a "
+                            "trigger condition -- 'Before writing a DTL, read assets/dtl-xdata.md', "
+                            "not 'See [references/x.md](references/x.md)'. Measured on Sonnet 4.6, "
+                            "same file and same tier: the passive mention is read 0 times in 6 "
+                            "(indistinguishable from the card not existing), the directive form "
+                            "5-6 in 6, Fisher p = 0.0152; relative vs absolute path makes no "
+                            "difference (p = 1.00). Evicting behind a passive pointer still costs "
+                            "the whole capability -- evicting behind a directive one costs nothing. "
+                            "The body is not a free fallback either: inline is 100% on Sonnet but "
+                            "27% on Haiku (that figure is BODY-tier; the bundled tier is unmeasured "
+                            "on Haiku), so anything that truly cannot fail belongs in a hook or a "
+                            "gate denial, not in prose. Table: BestPractices/AB-PREREGISTRATION.md"
+                            .format(name, tk, was, tk - was, name))
 check("S8", "no SKILL.md body grew its always-loaded token cost (per-skill ratchet)", grew_tok)
 
 if _recorded:
