@@ -1,8 +1,7 @@
 ---
 name: alerting
-description: Ens.Alert router, alert dedup, production monitor, per-BO alert settings in IRIS Interoperability. Routed from interop. Triggers: Ens.Alert, Ens.AlertRequest, Send Alert on Error, alert on error, IRIS alert routing, alert dedup FunctionSet, AlertOperation, ProductionMonitorService, alerta, notificación, alerta de producción, ruta de alertas.
+description: Ens.Alert router, alert dedup, production monitor, per-BO alert settings in IRIS Interoperability. Triggers: Ens.Alert, Ens.AlertRequest, Send Alert on Error, alert on error, IRIS alert routing, alert dedup FunctionSet, AlertOperation, ProductionMonitorService, alerta, notificación, alerta de producción, ruta de alertas.
 ---
-
 # Alert circuit for IRIS Interop productions
 
 Every production needs an alert path. The default behaviour — exceptions land in the Event Log and stop there — is not operational; nobody is paging the Event Log at 02:00. This skill is the canonical wiring of the **alert circuit**, the **dedup function set** that keeps it from flooding, and the per-host settings that make alerts fire when they should.

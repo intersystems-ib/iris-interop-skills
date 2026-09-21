@@ -1,8 +1,7 @@
 ---
 name: bpl
-description: BPL processes, routing rules, message routers. Routed from interop. Triggers: MessageRouter, routing rule, enrutador, regla de enrutamiento, router, BPL, Ens.BusinessProcess, business process, fan-out.
+description: BPL processes, routing rules, message routers. Triggers: MessageRouter, routing rule, enrutador, regla de enrutamiento, router, BPL, Ens.BusinessProcess, business process, fan-out.
 ---
-
 # BPL Business Processes
 
 BPL (Business Process Language) is the visual orchestration language for IRIS Interop. Two distinct shapes use it: **HL7 Message Routers** (BPL under the hood, hidden behind the rule editor) and **custom BPL** (the activity diagram in the BPL editor). The customer-validated patterns below cover both.

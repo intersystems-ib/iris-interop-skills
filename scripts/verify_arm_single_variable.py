@@ -13,6 +13,9 @@ equal the arm tree byte-for-byte, then checks that the comparison can still fail
 """
 import subprocess, sys
 
+# The needle for arm-k7 vs arm-m3. It no longer appears on `main` -- v1.121.0 removed it from all 16
+# descriptions (#365) -- so this default is meaningful only against the PINNED arm shas. Run against
+# main the transform is a no-op and the script exits 1 on the degenerate pair, which is correct.
 DEFAULT = " Routed from interop."
 
 

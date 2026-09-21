@@ -1,8 +1,7 @@
 ---
 name: unit-tests
-description: %UnitTest framework - runner, storage, results. Routed from interop. Triggers: %UnitTest, unit test, prueba unitaria, test runner, %UnitTest.TestProduction, ^UnitTest.Result, RunTest, qualifiers.
+description: %UnitTest framework - runner, storage, results. Triggers: %UnitTest, unit test, prueba unitaria, test runner, %UnitTest.TestProduction, ^UnitTest.Result, RunTest, qualifiers.
 ---
-
 # %UnitTest framework — toolbox reference
 
 > **Workflow note**: for the *order of work* (spec → test → red → implement → green → refactor) and for **the baseline class you must extend** (`%UnitTest.TestProduction`, not `%UnitTest.TestCase`), see **`tdd`**. That's the entry point when you're starting a new Interop component. This skill is the lower-level reference for **how the framework itself works**: where tests live on disk, how to invoke runners, where results land, how to inspect them.

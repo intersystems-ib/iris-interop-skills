@@ -1,8 +1,7 @@
 ---
 name: message-search-debug
-description: Verify a run end-to-end, search messages, Visual Trace, Event Log, resend. Routed from interop. Load it whenever you are about to LOOK AT a running production — confirming a run worked counts, not only diagnosing a failure. Triggers EN: did it arrive, how many rows landed, verify end-to-end, check the run, Message Viewer, Visual Trace, Event Log, message search, resend, troubleshoot, queue depth. Triggers ES: verificar, comprobar, ha llegado, cuántos mensajes, ha funcionado, buscar mensaje, reenviar, depurar, traza, cola.
+description: Verify a run end-to-end, search messages, Visual Trace, Event Log, resend. Load it whenever you are about to LOOK AT a running production — confirming a run worked counts, not only diagnosing a failure. Triggers EN: did it arrive, how many rows landed, verify end-to-end, check the run, Message Viewer, Visual Trace, Event Log, message search, resend, troubleshoot, queue depth. Triggers ES: verificar, comprobar, ha llegado, cuántos mensajes, ha funcionado, buscar mensaje, reenviar, depurar, traza, cola.
 ---
-
 # Message Search & Debug
 
 Everything you do **after** a message enters a running production: confirming it arrived, following where it went, and resending it. Four tools cover 95% of the work (Message Viewer, Visual Trace, Event Log, Production Status); the remaining 5% is per-BO SOAP tracing, retention/purge tuning, and bulk-resend recipes.

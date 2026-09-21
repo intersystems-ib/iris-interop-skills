@@ -1,8 +1,7 @@
 ---
 name: hl7-schemas
-description: Custom HL7 v2 schemas, Z-segments, schema editor. Routed from interop. Triggers: custom HL7 schema, esquema HL7, Z-segment, DocType, schema editor, schema category, v2.x, ER7, segmento personalizado.
+description: Custom HL7 v2 schemas, Z-segments, schema editor. Triggers: custom HL7 schema, esquema HL7, Z-segment, DocType, schema editor, schema category, v2.x, ER7, segmento personalizado.
 ---
-
 # Custom HL7 Schemas
 
 Custom HL7 v2 schemas are how IRIS accommodates partner messages that deviate from the published HL7 standard — Z-segments, missing required segments, extended fields. Schemas live in **schema categories** in the namespace; the schema editor is in the Management Portal.

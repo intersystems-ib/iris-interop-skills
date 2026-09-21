@@ -1,8 +1,7 @@
 ---
 name: component-map
-description: Quick-reference map from a plain-English integration task to the exact IRIS component type, superclass, prebuilt adapter, and the key methods/settings. Routed from interop — load it at the START of a build to pick the right component before diving into the per-component skill. Triggers: which component, what class do I use, qué componente, qué adaptador, BS or BO, superclass, adapter for, scaffold, cómo empiezo, task to component.
+description: Quick-reference map from a plain-English integration task to the exact IRIS component type, superclass, prebuilt adapter, and the key methods/settings. Load it at the START of a build to pick the right component before diving into the per-component skill. Triggers: which component, what class do I use, qué componente, qué adaptador, BS or BO, superclass, adapter for, scaffold, cómo empiezo, task to component.
 ---
-
 # Task → Component map
 
 A lookup table that turns "I need to do X" into the **exact** IRIS Interop component type, its

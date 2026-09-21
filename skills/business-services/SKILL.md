@@ -1,8 +1,7 @@
 ---
 name: business-services
-description: BS inbound - File, TCP, SOAP, REST, Record Mapper CSV. Routed from interop. Triggers: Business Service, BS, inbound, File Service, RecordMap, CSV, REST inbound, TCP/MLLP, leer fichero, servicio de entrada, adapterless.
+description: BS inbound - File, TCP, SOAP, REST, Record Mapper CSV. Triggers: Business Service, BS, inbound, File Service, RecordMap, CSV, REST inbound, TCP/MLLP, leer fichero, servicio de entrada, adapterless.
 ---
-
 # Business Services — inbound entry points
 
 A Business Service is the boundary where external data enters a production. One BS = one source (one TCP port, one directory, one FTP location). One HL7 BS handles one schema version.

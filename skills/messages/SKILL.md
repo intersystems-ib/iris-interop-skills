@@ -1,8 +1,7 @@
 ---
 name: messages
-description: Message class design (Ens.Request+%Persistent, HL7, SOAP). Routed from interop. Triggers: message class, mensaje, Ens.Request, Ens.Response, %Persistent, HL7 message, request/response, definir mensaje, message body.
+description: Message class design (Ens.Request+%Persistent, HL7, SOAP). Triggers: message class, mensaje, Ens.Request, Ens.Response, %Persistent, HL7 message, request/response, definir mensaje, message body.
 ---
-
 # Messages — the foundational building block
 
 Messages are the **first thing to design** in any IRIS Interoperability production. They're the request/response types of every Business Process and Business Operation, and the response of Business Services. Get them wrong and you propagate damage through every component.
