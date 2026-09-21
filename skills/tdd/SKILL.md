@@ -125,15 +125,16 @@ Stepping over 1-2-3 ("just write the DTL first") is the most common anti-pattern
 ### Loop budget — stop at the third red
 
 The existing cap covers a test that **will not run** (`NO_TESTS_FOUND`, a compile error). It says
-nothing about a test that runs and **stays red**, which is the longer loop: every iteration costs a
-compile plus a production restart.
+nothing about a test that runs and **stays red**, where every iteration costs a compile plus a
+production restart.
 
 **Read the failure before editing anything, and branch on `failure_kind` rather than inferring the
 shape.** Every `failed_tests` record carries it: `"assert"` (an assertion and two compared values),
 `"runtime_error"` (an abort — `<PROPERTY DOES NOT EXIST>` and friends killed the test before any
 assert ran, so the symbol in the error *is* the finding), or **null**, meaning *unknown*, not assert
-— and a null `failure_assert` cannot tell those apart. Top level, `runtime_errors` counts the aborts,
-and `errors` stays **0** for them by design, so `errors: 0, failed: 3` does not mean nothing trapped.
+— and a null `failure_assert` cannot tell those apart. Top level, `runtime_errors` counts the aborts
+only on the path that sets `failure_kind`, and `errors` is a hardcoded **0** from this tool
+regardless. A zero in either means *not counted*, not *nothing trapped*.
 Needs MCP ≥ `v0.25.0-interop`.
 
 Read `failure_message` and `failure_location` first, and call `iris_get_log(log_id=…)` only when the
@@ -398,7 +399,7 @@ quoting here.
 - `business-operations` — keep BO methods thin so they're testable
 - `bpl` — BPL Business Processes (test via Testing Service)
 - `message-search-debug` — for inspecting Visual Trace after a Testing Service dispatch
-- `unit-tests` — runner mechanics (`Run()`, `DebugRunTestCase`, SqlProc wrapper, qualifier syntax), `^UnitTest.Result` global, the `%UnitTest.Portal` URL, where to store tests so they survive. **This skill is the workflow; that one is the toolbox.**
+- `unit-tests` — runner mechanics (`Run()`, `DebugRunTestCase`, SqlProc wrapper, qualifier syntax), `^UnitTest.Result` global, the `%UnitTest.Portal` URL. **This skill is the workflow; that one is the toolbox.**
 
 ## TL;DR
 
