@@ -211,6 +211,46 @@ if not _stated:
 
 check("S6", "shipped descriptions state the real hook count (#167)", bad_hookcount)
 
+# S10 -- the two manifests must state the SAME version, and each must state one.
+#
+# Measured 2026-09-21: plugin.json read 1.120.0 while marketplace.json still read 1.54.0 in BOTH of its
+# version fields -- 70 tags of drift, 1.54.0 having landed on 2026-09-18. The cause is mechanical: the
+# release procedure sed-bumped plugin.json and nothing else. Nothing caught it because the only check
+# that opens marketplace.json reads its DESCRIPTION for the hook count (S6) and never looked at the
+# version. Same shape as C9 and S7: a number nobody asserts rots, and this one is what the marketplace
+# listing advertises.
+#
+# A MISSING field is a failure, not agreement. Delete `version` from either manifest and a plain
+# equality test over what remains passes while the marketplace advertises nothing -- so the fields are
+# enumerated by name and their absence is reported.
+_VERSION_FIELDS = (".claude-plugin/plugin.json:version",
+                   ".claude-plugin/marketplace.json:metadata.version",
+                   ".claude-plugin/marketplace.json:plugins[0].version")
+_versions = []
+for _f in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
+    with open(os.path.join(ROOT, _f)) as fh:
+        _d = _json.load(fh)
+    if "version" in _d:
+        _versions.append(("{}:version".format(_f), _d["version"]))
+    if isinstance(_d.get("metadata"), dict) and "version" in _d["metadata"]:
+        _versions.append(("{}:metadata.version".format(_f), _d["metadata"]["version"]))
+    for _i, _p in enumerate(_d.get("plugins", [])):
+        if "version" in _p:
+            _versions.append(("{}:plugins[{}].version".format(_f, _i), _p["version"]))
+
+bad_version = []
+if len({_v for _, _v in _versions}) > 1:
+    bad_version.append("the manifests disagree -- " + "; ".join(
+        "{} = {}".format(_w, _v) for _w, _v in _versions)
+        + ". Bump BOTH .claude-plugin/ files in the same commit as the release")
+_seen_fields = [_w for _w, _ in _versions]
+for _need in _VERSION_FIELDS:
+    if _need not in _seen_fields:
+        bad_version.append("{} is MISSING -- a manifest that states no version cannot be compared, "
+                           "and an equality test over the fields that remain would pass".format(_need))
+
+check("S10", "both .claude-plugin manifests state the same version", bad_version)
+
 # S7 -- the 500-line discipline was won BY HAND and nothing held it (#355, finishing #337).
 #
 # v1.91.0-v1.93.0 brought 20 of 20 SKILL.md under the published limit one file at a time. Not one
