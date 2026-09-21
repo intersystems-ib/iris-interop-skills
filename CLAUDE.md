@@ -123,6 +123,13 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
     mirror.
 - `.claude-plugin/` — `marketplace.json` + `plugin.json` (this repo is both a
   single-plugin marketplace and the plugin itself; plugin `source` is the repo root).
+  **A release bumps the version in BOTH files — three fields: `plugin.json:version`,
+  `marketplace.json:metadata.version`, `marketplace.json:plugins[0].version`.** `validate_skills.py`
+  **S10** fails the build when they disagree, or when any of the three is missing (a manifest that
+  states no version cannot be compared, and an equality test over what is left would pass). It exists
+  because `plugin.json` reached **1.120.0** while `marketplace.json` still advertised **1.54.0** — 70
+  tags of drift from 2026-09-18, because the release step bumped one file and nothing compared them.
+  The marketplace field is what the listing shows, so this is the version a user sees.
 
 ## Conventions for editing skills
 
