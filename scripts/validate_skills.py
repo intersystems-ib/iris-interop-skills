@@ -265,16 +265,57 @@ if not sizes:
 # PER SKILL, not a total, and that is the whole mechanism. A total would let one skill grow while
 # another shrinks, which is how the always-loaded cost creeps up unnoticed.
 #
-# THE REMEDY IS EVICTION, NOT RELOCATION OF THE NEW THING, and the first version of this text got it
-# wrong. It said to move the new material to references/ "where it costs nothing until read" --
-# measured with a marked guide card and both controls separating cleanly, `references/` + `assets/`
-# is 1 pickup in 44 across Haiku 4.5 AND Sonnet 4.6, with no difference between the models
-# (p = 1.00) -- so for a capability the task needs, relocating costs the whole capability rather
-# than nothing. Full table and provenance: BestPractices/AB-PREREGISTRATION.md, which is the single
-# record of these figures precisely so they are not restated here and left to rot. Worse, the queue this gate was aimed at (#339, #345, #347) is exactly the
-# queue that ADDS required content, so the old wording pointed every future fix at the place fixes
-# die. Fund an addition by evicting genuinely optional depth instead. The remaining issue queue (#339, #345, #347) all ADD content to large
-# skills, and this is what redirects those additions instead of quietly re-inflating what #337 fixed.
+# THE REMEDY IS EVICTION PLUS A DIRECTIVE POINTER, and this text has now been wrong twice in two
+# different ways. Both corrections are kept because the second one only makes sense against the first.
+#
+#   v1 said: move the new material to references/ "where it costs nothing until read".
+#   v2 said: never relocate anything needed, because bundled files are measured at 1 pickup in 44
+#            across Haiku 4.5 AND Sonnet 4.6 (p = 1.00 between them) -- so relocating a needed
+#            capability costs the whole capability.
+#
+# v2's NUMBER is right and its CONCLUSION is wrong, which is the more dangerous shape. It is not the
+# tier that fails, it is the VERB the file is pointed at with. Same card, same file, same `assets/`
+# directory, Sonnet 4.6, 6 reps per gate (#388/#379):
+#
+#   passive mention  ("plantilla en `assets/x.md`", "See [references/x.md](...)")  0/6
+#   directive + trigger ("Before writing a DTL, read assets/dtl-xdata.md")         5/6 - 6/6
+#                                                                 Fisher p = 0.0152
+#   relative vs absolute path                                     5/6 vs 6/6, p = 1.00 (not the cause)
+#
+# And the 1-in-44 is explained by construction rather than by any property of the tier: across the 20
+# SKILL.md bodies there are 113 citations of bundled files and ~5 carry an imperative verb anywhere
+# near them, none in the directive-with-trigger form. A measurement of "are bundled files read?" taken
+# over those 113 citations had to come back ~0.
+#
+# So eviction is safe, and it is the only remedy that fits the budget WITHOUT losing the capability --
+# but it has two parts and the second is not optional. Move the depth out AND rewrite the pointer as
+# an imperative with a trigger condition. Full table and provenance: BestPractices/AB-PREREGISTRATION.md,
+# which is the single record of these figures precisely so they are not restated here and left to rot.
+#
+# The queue this gate was aimed at (#339, #345, #347) is exactly the queue that ADDS required content,
+# so v2's wording pointed every future fix INTO the body -- inflating the very thing this gate exists
+# to protect, at the moment the contributor is deciding where material goes. That is why the wording
+# matters more than its age.
+#
+# THE FIX IS MODEL-SPECIFIC, and this is now measured rather than assumed. Haiku 4.5 was run on the
+# same VM, same day, same card, same assets/ file, 6 reps per gate (#388):
+#
+#                                      Haiku        Sonnet      Fisher
+#   prompt (control +)                 6/6  100%    6/6  100%
+#   nothing (control -)                0/6    0%    0/6    0%
+#   directive, all three gates         1/18   6%   17/18  94%    p = 0.00000007
+#
+#   Haiku: directive 1/18 vs control -    p = 1.0000   <-- indistinguishable from no file at all
+#   Haiku: prompt 6/6  vs directive 1/18  p = 0.000052 <-- and the instrument DOES work on Haiku
+#
+# So the directive pointer recovers the bundled tier on Sonnet and does NOT recover it on Haiku: for a
+# small model, moving something needed into a file is still deleting it, whatever verb points at it.
+# The previous version of this text guessed exactly that and had no number for it; it borrowed the 27%
+# BODY-tier figure to argue about references/ and assets/, which is a different tier. That borrowing is
+# gone -- 1/18 is from the tier this paragraph is about.
+#
+# LIMITS: one task, one skill, one file, n=6 per gate. Not tested whether repeating the pointer every
+# turn, or firing it from a hook, reaches Haiku.
 #
 # chars/4 is a conventional estimate, not a tokeniser. That is fine for a ratchet -- it only has to be
 # the SAME estimate on both sides of a comparison, and it is computed once here and recorded from the
@@ -302,15 +343,24 @@ else:
         elif tk > was:
             grew_tok.append("{}: ~{} body tokens, baseline ~{} (+{}) -- FUND IT by evicting "
                             "genuinely optional depth to skills/{}/references/, or re-record "
-                            "deliberately. Do NOT move the NEW material out unless nobody needs it "
-                            "to finish the task: measured, references/ and assets/ are picked up "
-                            "1 time in 44 across BOTH Haiku and Sonnet (p = 1.00 between them), so "
-                            "relocating a needed capability does not cost a little -- it costs the "
-                            "whole capability. And the body is not a safe fallback either on a small "
-                            "model: inline is 100% on Sonnet but 27% on Haiku, so anything that "
-                            "truly cannot fail belongs in a hook or a gate denial, not in prose. "
-                            "Table: BestPractices/AB-PREREGISTRATION.md".format(
-                                name, tk, was, tk - was, name))
+                            "deliberately. EVICTION HAS TWO PARTS AND THE SECOND IS NOT OPTIONAL: "
+                            "move the depth out, AND rewrite the pointer as an imperative with a "
+                            "trigger condition -- 'Before writing a DTL, read assets/dtl-xdata.md', "
+                            "not 'See [references/x.md](references/x.md)'. Measured on Sonnet 4.6, "
+                            "same file and same tier: the passive mention is read 0 times in 6 "
+                            "(indistinguishable from the card not existing), the directive form "
+                            "5-6 in 6, Fisher p = 0.0152; relative vs absolute path makes no "
+                            "difference (p = 1.00). Evicting behind a passive pointer still costs "
+                            "the whole capability -- evicting behind a directive one costs nothing "
+                            "ON SONNET (94% across the three directive gates, n=18, vs 0% passive). "
+                            "It does NOT recover on Haiku 4.5: 1 of 18, statistically indistinguishable "
+                            "from the file not existing (p = 1.00 against the negative control) even "
+                            "though the same content pasted into the prompt lands 6/6. For a small "
+                            "model, moving something needed into a file is still deleting it, whatever "
+                            "verb points at it -- so anything that TRULY cannot fail belongs in a hook "
+                            "or a gate denial, not in prose and not behind a pointer. "
+                            "Table: BestPractices/AB-PREREGISTRATION.md"
+                            .format(name, tk, was, tk - was, name))
 check("S8", "no SKILL.md body grew its always-loaded token cost (per-skill ratchet)", grew_tok)
 
 if _recorded:

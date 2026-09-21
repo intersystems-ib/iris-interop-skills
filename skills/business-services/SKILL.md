@@ -163,7 +163,7 @@ Prefer Async unless there is a specific reason to wait. Sync ties up a BS pool s
 - **Hand-rolled CSV parser** → use Record Mapper. Hand-rolled parsing fails on quoted fields, embedded delimiters, encoding edge cases.
 - **Sending Sync when Async would do** → blocks pool slots, kills throughput.
 - **Skipping `OnInit` validation** → bugs surface at first message instead of at production start.
-- **An `OnInit()` override on a prebuilt `EnsLib.*` service that never calls `##super()`** → the base class never initialises the parser (`..recordMapFull`, `..%Parser`), so the service starts green, eats and deletes its input, and emits nothing at all — no message, no Event Log entry, no error. See [references/oninit-validation.md](references/oninit-validation.md). Not applicable to a plain `Ens.BusinessService` + `Parameter ADAPTER` subclass.
+- **An `OnInit()` override on a prebuilt `EnsLib.*` service that never calls `##super()`** → the base class never initialises the parser (`..recordMapFull`, `..%Parser`), so the service starts green, eats and deletes its input, and emits nothing at all — no message, no Event Log entry, no error. **Before overriding `OnInit()` on any prebuilt `EnsLib.*` service, read [references/oninit-validation.md](references/oninit-validation.md)** — it carries the `##super()` contract and the two properties to check. Not applicable to a plain `Ens.BusinessService` + `Parameter ADAPTER` subclass.
 - **Multiple targets in one chain** → if you fan out to multiple operations, route through a Message Router; don't list them in `TargetConfigNames` for orchestration.
 - **Pool size of 1 for high-volume sources** → set Pool Size to expected concurrency. (Default `PoolSize=1` is correct for everything until you measure a bottleneck — don't raise it preemptively.)
 - **Diagnosing an FTPS `Unexpected SSL EOF` as a TLS problem** → it is often a failed `LIST *.csv` against a server that doesn't glob. Set `MLSD=1` — and then rewrite `FileSpec` as a regex (see the FTPS section below).
@@ -462,12 +462,6 @@ None of it is needed for a standard file, HL7 or REST intake.
 
 Cheat-sheet moved to [references/sql-dialect.md](references/sql-dialect.md) — it is a SQL
 topic, not an inbound-service one.
-
-## Failing loud on misconfiguration
-
-Validating settings in `OnInit()` so a bad configuration fails at production start:
-[references/oninit-validation.md](references/oninit-validation.md). A hardening pattern —
-not needed to get an intake working.
 
 ## See also
 
