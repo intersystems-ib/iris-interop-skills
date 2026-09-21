@@ -82,8 +82,8 @@ BS.Lab    →  Router.Lab    →  BO.LIS
 - BPL **context variables** persist across the BPL's lifetime — survive a `<call>` and resume after the response. Use them for state that crosses async calls.
 - IRIS 2026 introduces **delete-on-context** for persistent properties on the BPL context, so message-body bloat from long-lived BPLs is reduced. (Validate the exact syntax via docs before relying on it.)
 - When BPL becomes hard to read (>30 activities, deep nesting), consider a custom
-  `Ens.BusinessProcess` in plain ObjectScript — sometimes more maintainable. **Gated example:**
-  `assets/bp-class-based-async.cls`. Until 1.19.0
+  `Ens.BusinessProcess` in plain ObjectScript — sometimes more maintainable. **Before writing one,
+  read `assets/bp-class-based-async.cls`.** Until 1.19.0
   this skill recommended that shape while the bank held only `Ens.BusinessProcessBPL`, so "BP" and
   "BPL" were effectively synonyms here.
   - **The third argument of `SendRequestAsync` is the whole difficulty.** Measured by running both
@@ -381,7 +381,7 @@ Four shapes cover most orchestration needs. Reach for the closest match before a
 | **Custom BPL business process** | Sync `<call>` to a BO with context-vars, response handlers, and decision logic on the returned data. Drive it under test via `EnsLib.Testing.Service.SendTestRequest` (see `tdd`). |
 | **Alerts router rule** | Subscribes to `Ens.AlertRequest`, fans out to a file-logger BO; xref `alerting` for the dedup function-set pattern that goes on top. |
 
-Worked examples, all compiled against live IRIS 2026.1:
+**Before writing either, read its example** — compiled against live IRIS 2026.1:
 
 - Custom BPL — `assets/bpl-order-process.cls` (§5.6): `<context>` property, a sync `<call>` with `callrequest` bindings, a `<code>` activity.
 - Fan-out routing rule — `assets/routing-rule-fanout.cls` (§5.8): one `<rule>` per source `msgClass`, two `<send>` inside one `<when>`, correct engine/assist pairing, and the `!=` / `Document.` condition traps in its header.

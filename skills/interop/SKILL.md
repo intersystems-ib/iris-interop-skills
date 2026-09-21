@@ -293,8 +293,9 @@ On `SQLCODE -30` (Table not found), the next call is introspection — never ano
 
 ### Running what `iris_execute` cannot
 
-The headless bootstrap, and addressing a `[SqlProc]` from SQL (the proc name is **not** the
-class name): see [references/headless-probes.md](references/headless-probes.md).
+**Before a headless probe, read
+[references/headless-probes.md](references/headless-probes.md)** — the bootstrap, and addressing a
+`[SqlProc]` from SQL (the proc name is **not** the class name).
 
 ## Sibling skill index
 

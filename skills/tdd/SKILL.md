@@ -42,8 +42,8 @@ Two consequences that are easy to get wrong (verified on IRIS 2026.1):
 - **A class that hit `#5001` never compiled, so to the test runner it does not exist** — a later
   `NO_TESTS_FOUND` is a correct answer about a missing class, not a discovery bug. Measured across
   an eval campaign, this single omission accounted for **every** zero-tests-run failure. Diagnosis
-  path: the `NO_TESTS_FOUND` recovery recipe in
-  [references/no-tests-found.md](references/no-tests-found.md).
+  path: when you get `NO_TESTS_FOUND`, read
+  [references/no-tests-found.md](references/no-tests-found.md) and work its recovery recipe.
 - The value must be **non-empty**, but it need not name an *existing* production to compile —
   existence is asserted at runtime when the lifecycle starts the production. Name the real
   production anyway; a wrong name just moves the failure to run time.
@@ -254,8 +254,8 @@ component that was never built.
 > `#5559 … non-matching {} or () characters`. HL7 work is where this bites, because the message
 > type is `ADT_A01`. See `interop` §"Invariants when writing ANY ObjectScript class".
 
-> **A compiled, mutation-checked worked example** lives at
-> `assets/tdd-testproduction-dtl.cls`. It tests the DTL that ships beside it, and its
+> **Before writing a DTL suite, read `assets/tdd-testproduction-dtl.cls`** — compiled and
+> mutation-checked. It tests the DTL that ships beside it, and its
 > header records the mutation result: breaking the transform leaves `$$$AssertStatusOK` and
 > `$$$AssertTrue($IsObject(...))` **both passing** while only the assertion on a written field
 > fails. The vacuous green, demonstrated rather than asserted.
@@ -266,9 +266,9 @@ component that was never built.
 
 ## Canonical skeletons
 
-Copy the skeleton for what you are testing — DTL, HL7 fixtures, routing rule, BO method, or BPL
-via the Testing Service, plus how to enable the Testing Service:
-see [references/skeletons.md](references/skeletons.md).
+**Before writing the test class, read [references/skeletons.md](references/skeletons.md)** and copy
+the skeleton for what you are testing — DTL, HL7 fixtures, routing rule, BO method, or BPL via the
+Testing Service, plus how to enable it.
 
 ## Running the tests
 
@@ -365,7 +365,7 @@ See `business-operations` and `bpl` for the runtime side of the same rule.
   disk falls behind — there is no signal anywhere in the loop. Write the file alongside every
   inline put, and `iris_doc(mode=get)` the production class after every item change. See
   `production-lifecycle`.
-- **`TestingEnabled="true"` left in a deployed production** — treat it like a debug flag. See "Enabling the Testing Service" in [references/skeletons.md](references/skeletons.md) (security note).
+- **`TestingEnabled="true"` left in a deployed production** — treat it like a debug flag; security note in `references/skeletons.md`.
 - **Asserting only on `$$$LOGINFO` presence in the event log** ("INSERT OK paciente_id=...") instead of on the row's actual contents → the log proves the BO method ran, not that the destination has the right values. Add at least one assert that reads the side-effect back: a `SELECT` via psql/`Adapter` in `OnAfterAllTests`, or a small **verifier BO** callable via `..SendRequest(verifier, query, .resp, 1)` that returns the row for property-by-property asserts. The log is necessary but insufficient.
 - **A test still red immediately after `iris_compile` may be measuring the OLD code.** A running host
   job does not reload a class because you recompiled it — `UpdateProduction` does not restart jobs

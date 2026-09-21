@@ -40,16 +40,16 @@ iris_execute(namespace="HSLIB", code="Do ##class(HS.Util.Installer.Foundation).I
 
 Then the FHIR server itself, per HXFHIRINS section 2.3.1:
 
-The class that does it, compiled by the gate so its three `HS.*` signatures cannot rot:
-[references/foundation-install.md](references/foundation-install.md).
+**Before installing a Foundation namespace, read
+[references/foundation-install.md](references/foundation-install.md)** — compiled by the gate, so
+its three `HS.*` signatures cannot rot.
 
 Two things that surprise people afterwards: `Install()` also creates a
 `<NS>PKG.FoundationProduction`, so a production you did not write shows up in
 `iris_production(action=status)`; and if you use SDA3 transformations you must import the SDA3
 schema separately (AFNS section 4, Management Portal → Health → *namespace* → Schema Documentation).
 
-Worked, compile-gated example of the interop wiring:
-`assets/production-fhir-facade.cls`
+**Before wiring the interop side, read `assets/production-fhir-facade.cls`** — compile-gated.
 
 ## Decision tree — Façade vs Repository
 

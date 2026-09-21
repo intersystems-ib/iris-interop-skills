@@ -29,7 +29,7 @@ What's the input?
 
 **First decide whether you need a custom BS at all.** For a RecordMap flow you usually do not —
 configure the prebuilt `EnsLib.RecordMap.Service.FileService` and put any reshaping in a DTL on the
-router. See [references/recordmap.md](references/recordmap.md) for the prebuilt-component table.
+router — the prebuilt-component table is in [references/recordmap.md](references/recordmap.md).
 
 **And know what subclassing `FileService` actually gives you**, because the obvious move does not
 work. Verified against IRIS for Health 2026.1 with `%Dictionary.CompiledMethod`:
@@ -160,12 +160,12 @@ Prefer Async unless there is a specific reason to wait. Sync ties up a BS pool s
 
 - **`##class(Pkg.BS.X).%New()` to test the service directly** → a BS does not instantiate. `Ens.BusinessService` declares no `%New`; a subclass returns `""`, and the error surfaces a line later as `<INVALID OREF>`. See `tdd` §"Pitfalls specific to Interop TDD".
 - **One BS handling multiple HL7 schema versions** → not allowed; each BS is one schema. Create separate BSes for v2.3 and v2.5.
-- **Hand-rolled CSV parser** → use Record Mapper. Hand-rolled parsing fails on quoted fields, embedded delimiters, encoding edge cases.
+- **Hand-rolled CSV parser** → use Record Mapper; hand parsing fails on quoted fields, embedded delimiters and encodings.
 - **Sending Sync when Async would do** → blocks pool slots, kills throughput.
-- **Skipping `OnInit` validation** → bugs surface at first message instead of at production start.
+- **Skipping `OnInit` validation** → bugs surface at the first message, not at production start.
 - **An `OnInit()` override on a prebuilt `EnsLib.*` service that never calls `##super()`** → the base class never initialises the parser (`..recordMapFull`, `..%Parser`), so the service starts green, eats and deletes its input, and emits nothing at all — no message, no Event Log entry, no error. **Before overriding `OnInit()` on any prebuilt `EnsLib.*` service, read [references/oninit-validation.md](references/oninit-validation.md)** — it carries the `##super()` contract and the two properties to check. Not applicable to a plain `Ens.BusinessService` + `Parameter ADAPTER` subclass.
 - **Multiple targets in one chain** → if you fan out to multiple operations, route through a Message Router; don't list them in `TargetConfigNames` for orchestration.
-- **Pool size of 1 for high-volume sources** → set Pool Size to expected concurrency. (Default `PoolSize=1` is correct for everything until you measure a bottleneck — don't raise it preemptively.)
+- **Pool size of 1 for high-volume sources** → set Pool Size to expected concurrency. (`PoolSize=1` is the right default until you measure a bottleneck.)
 - **Diagnosing an FTPS `Unexpected SSL EOF` as a TLS problem** → it is often a failed `LIST *.csv` against a server that doesn't glob. Set `MLSD=1` — and then rewrite `FileSpec` as a regex (see the FTPS section below).
 - **Forcing `SourceFilename` / `SourceLine` onto a Record Mapper-generated `.Record`** → Record Mapper doesn't emit those properties; a manual subclass that adds them won't get them populated at runtime either. If you need CSV-line forensics, capture the filename in a **custom BS** (not Record Mapper) or read it from `Ens.MessageHeader` propagated by the adapter (`%Source` / `%FileName`).
 
@@ -231,13 +231,13 @@ Five more, each of which costs a compile:
 `<map class>.Record`. After generating, **export the `.Record` class to disk**: the generator writes
 it into the namespace only, and CR-12 fails a class that exists nowhere else.
 
-Fixed-width, building a map programmatically, testing the parser, and FTP/FTPS:
-[references/recordmap.md](references/recordmap.md).
+**Before building a RecordMap by hand, read [references/recordmap.md](references/recordmap.md)** —
+fixed-width, building a map programmatically, testing the parser, and FTP/FTPS.
 
 ## REST inbound — three routes, and they are not interchangeable
 
 - **The adapter's own port** (`EnsLib.HTTP.InboundAdapter`) and **a hand-written `%CSP.REST`
-  dispatcher**: [references/rest-csp.md](references/rest-csp.md).
+  dispatcher** — both in `references/rest-csp.md`.
 - **Spec-first** — one Swagger 2.0 document generates the dispatcher and an implementation stub.
 
 ### Spec-first — the whole sequence
@@ -279,8 +279,9 @@ Pkg.REST.impl   GENERATED 1x  Extends %REST.Impl — your method bodies. Edits S
    the production — an adapterless BS (`Parameter ADAPTER = "";`) invoked through
    `##class(Ens.Director).CreateBusinessService(.tService)` is the conformant route.
 
-Depth, including auth guards and the web-application wiring:
-[references/rest-spec-first.md](references/rest-spec-first.md).
+**Before generating from a Swagger document, read
+[references/rest-spec-first.md](references/rest-spec-first.md)** — auth guards and the web-application
+wiring.
 
 ## Testing / how to verify
 
@@ -434,17 +435,18 @@ If the messages are **Ad-hoc** — Z-segments, custom structures, fields the sta
 
 ## BS that exposes an inbound SOAP service
 
-See [references/soap-inbound.md](references/soap-inbound.md) for the class shape and
-for HTTP Basic Auth on it.
+**Before writing an inbound SOAP BS, read [references/soap-inbound.md](references/soap-inbound.md)**
+— the class shape, and HTTP Basic Auth on it.
 
 ## HTTP Basic Auth on an inbound SOAP BS
 
-See [references/soap-inbound.md](references/soap-inbound.md).
+In `references/soap-inbound.md`, with the class shape.
 
 ## REST/CSP entry point, and endpoint permissions
 
-A BS with no adapter used as a CSP/REST entry point, and the web-app permissions an
-inbound endpoint needs: see [references/rest-csp.md](references/rest-csp.md).
+**Before exposing a BS as a CSP/REST endpoint, read
+[references/rest-csp.md](references/rest-csp.md)** — the no-adapter shape and the web-app permissions
+it needs.
 
 ## When NOT to use this skill — fall back to docs
 
@@ -454,14 +456,14 @@ inbound endpoint needs: see [references/rest-csp.md](references/rest-csp.md).
 
 ## Scheduled, and order-sensitive, services
 
-Wall-clock vs interval scheduling, `PoolSize` concurrency, and the synchronous chain for
-sources with ordering dependencies: [references/scheduling.md](references/scheduling.md).
-None of it is needed for a standard file, HL7 or REST intake.
+**Before scheduling a service, read [references/scheduling.md](references/scheduling.md)** —
+wall-clock vs interval, `PoolSize` concurrency, and the synchronous chain for ordering-dependent
+sources. None of it is needed for a standard file, HL7 or REST intake.
 
 ## IRIS SQL dialect
 
-Cheat-sheet moved to [references/sql-dialect.md](references/sql-dialect.md) — it is a SQL
-topic, not an inbound-service one.
+**When SQL dialect is the question, read [references/sql-dialect.md](references/sql-dialect.md)** —
+the cheat-sheet moved there: it is a SQL topic, not an inbound-service one.
 
 ## See also
 

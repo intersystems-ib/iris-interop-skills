@@ -111,15 +111,15 @@ The wizard-generated classes **are meant to be edited**. Document every patch yo
 
 The WS-Policy assertion is not used at runtime by the IRIS client — the actual TLS / signing policy is configured separately on the BO (SSL config setting, credentials, etc.). The XData block is dead weight that happens to break compilation.
 
-Worked example: `assets/soap-wsdl-policyreference-fix.cls`.
+Before deleting a WS-Policy XData block, read `assets/soap-wsdl-policyreference-fix.cls`.
 
 ### Vendor rejects `xsi:type` attributes
 
 Even when types match the schema, some vendor SOAP servers (notably SAP and certain Spanish public-sector services) return errors when the request contains `xsi:type` attributes on element bodies.
 
-**Fix**: `Parameter OUTPUTTYPEATTRIBUTE = 0;` on the generated SOAP client class. See `messages` for the same setting in the XML-projection context.
+**Fix**: `Parameter OUTPUTTYPEATTRIBUTE = 0;` on the generated SOAP client class.
 
-Worked example: `assets/soap-xsi-type-suppress.cls`.
+Before setting `OUTPUTTYPEATTRIBUTE`, read `assets/soap-xsi-type-suppress.cls`.
 
 ### Drop `REQUIRED=1` flags on generated properties
 
@@ -127,7 +127,7 @@ Some vendor services accept SOAP messages with fewer fields than the WSDL declar
 
 **Fix**: drop `[ Required ]` (`REQUIRED=1` in CDL) from the affected generated properties. Document each one in the patch comments.
 
-Worked example: `assets/soap-required-flag-drop.cls`.
+Before dropping a `Required` flag, read `assets/soap-required-flag-drop.cls`.
 
 ### Strongly-typed dates / times — downgrade to `%String`
 
@@ -135,15 +135,15 @@ Where the WSDL declares `xs:date` or `xs:time` and the vendor server cannot actu
 
 The transmitted lexical form (`2026-05-13` for date, `14:30:00` for time) is correct regardless — the IRIS-side type was forcing a normalization step the vendor couldn't reverse. With `%String`, the field passes through unchanged.
 
-Worked example: `assets/soap-typed-dates-to-string.cls`.
+Before retyping a date property, read `assets/soap-typed-dates-to-string.cls`.
 
 ### `RESPONSENAMESPACE` doesn't match what the vendor actually returns
 
 The WSDL specifies one response namespace; the actual SOAP responses come back with a different one. Strict parsers reject the mismatch.
 
-**Fix**: override `Parameter RESPONSENAMESPACE` on the generated proxy to the actual namespace the vendor returns. **General rule** for any SOAP integration: don't trust the WSDL blindly — capture an actual response (with `message-search-debug` SOAP tracing) and align the generated client to what's on the wire.
+**Fix**: override `Parameter RESPONSENAMESPACE` on the generated proxy to the actual namespace the vendor returns. **General rule**: capture an actual response (`message-search-debug` SOAP tracing) and align the client to the wire rather than trusting the WSDL.
 
-Worked example: `assets/soap-response-namespace-override.cls`.
+Before overriding `RESPONSENAMESPACE`, read `assets/soap-response-namespace-override.cls`.
 
 ### XML namespace alias must literally be `urn`
 
@@ -201,8 +201,8 @@ XData MessageMap
 > but puts the class name in code. The adapter also carries a `WebServiceClientClass` **setting** —
 > see `security` — which puts the name in the production instead, at the cost that `..Adapter.%Client`
 > is typed `%SOAP.WebClient` and the generated operations go late-bound through `$METHOD`. Neither is
-> wrong; know which you picked. The configuration form is compiled and tested at
-> `assets/soap-bo-typed-adapter.cls`, with its two
+> wrong; know which you picked. Before wiring either form, read
+> `assets/soap-bo-typed-adapter.cls` — compiled and tested with its two
 > message siblings and §6.16. Also measured there: `WebServiceURL` defaults to the **literal string**
 > `"<default>"`, so a `= ""` guard never fires.
 
@@ -392,7 +392,7 @@ When you're on the **other side** — exposing a SOAP service that an external c
 
 - Web app config (Security.Applications): `AutheEnabled=32` — `32` is the password (Instance Authentication) bit, the one HTTP Basic exercises. `4` is **Kerberos** (`AutheK5API`), not password, and answers `Negotiate` rather than `Basic`; `96` is `32+64` and also admits unauthenticated callers, so use it only when anonymous access is intended. See `business-services` for the bit table.
 - The authenticated user must have **read access to the system globals** the SOAP framework touches (`^ISCSOAP`). The error `<PROTECT> OnPage+9^%SOAP.WebService.1 ^ISCSOAP("LogMaxFileSize")` is the symptom of missing it. **Do not grant `%All` to reach it** — not even in a workshop. `%All` is instance superuser, and a service account is the one principal an external caller controls the credentials of. Three resources cover it: `U` on the web application, `RW` on `%DB_<NAMESPACE>`, and `R` on `%DB_IRISSYS`. `security` has the compiled recipe, and the reason the shortcut looks necessary is usually that the **anonymous** principal was given `%All` first — fix that end, not this one.
-- `Parameter SERVICENAME` and `Parameter NAMESPACE` (the XML target namespace) drive the WSDL. They must match what clients expect from `<service name>` and `targetNamespace` respectively.
+- `Parameter SERVICENAME` and `Parameter NAMESPACE` (the XML target namespace) drive the WSDL, and must match the `<service name>` and `targetNamespace` clients expect.
 
 ### Registering the service as a production item — two silent misconfigurations
 

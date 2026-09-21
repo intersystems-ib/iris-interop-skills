@@ -88,10 +88,10 @@ re-plan from scratch and it never rewrites silently.
    the test class's own setup, **read, not assumed**. Compare it against the destination the task
    names. If the review cannot name it, that is a CR-13 finding, not a pass. A destination the
    session **created** during this build is a CR-13 finding regardless of the test result. Skip this
-   step only when the tests touch no external system at all.
+   step only when the tests touch no external system.
 
-   **Read it with the gated helper rather than by hand** —
-   `assets/tdd-destination-assert.cls`:
+   **Before asserting a destination, read `assets/tdd-destination-assert.cls`** rather than
+   hand-rolling it:
 
    ```
    SELECT Example_Tests.DestinationAssert_NameDestination('<Pkg>.Production','BO.AdtOut','FilePath')
@@ -123,8 +123,8 @@ re-plan from scratch and it never rewrites silently.
 
    **Anchor on the total, not on a list of bad codes.** `9` (Completed) is the only terminal success,
    so the question is "what share is **not 9**" — a review that greps for `Status=8` lets Discarded,
-   Suspended and Aborted read clean. The nine codes and what each one means at rest:
-   [references/message-status.md](references/message-status.md).
+   Suspended and Aborted read clean. **Before judging a status, read
+   [references/message-status.md](references/message-status.md)** — the nine codes.
 
    Report the split as a fraction of the total and name the worst `TargetConfigName`. Any non-`9`
    share above zero contradicts a green test and has to be either explained or reported.

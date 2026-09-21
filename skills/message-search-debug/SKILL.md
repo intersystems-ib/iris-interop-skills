@@ -315,9 +315,9 @@ Four things, each of which produces no error when wrong:
   rows with no error**.
 
 Renaming one is a new registration plus a cleanup: the `Ens_Config.SearchTableProp` row outlives the
-class, so a renamed table collides with an orphan whose class no longer exists. That trap, the
-`DELETE` that clears it, and the full property syntax:
-[references/search-tables.md](references/search-tables.md).
+class, so a renamed table collides with an orphan whose class no longer exists. **Before adding or
+renaming a SearchTable, read [references/search-tables.md](references/search-tables.md)** — it carries
+that trap, the `DELETE` that clears it, and the full property syntax.
 
 ## Searching by message body content
 
@@ -331,8 +331,8 @@ Not efficiently searchable when:
 
 ## Resending
 
-Headless resend, edit-and-resend without breaking the trail, and bulk resend:
-see [references/resending.md](references/resending.md).
+**Before resending anything, read [references/resending.md](references/resending.md)** — headless
+resend, edit-and-resend without breaking the trail, and bulk resend.
 
 ## What this skill does NOT yet do
 
@@ -342,9 +342,9 @@ see [references/resending.md](references/resending.md).
 
 ## Pitfalls to surface
 
-- Searching by body content on a message that's not `%Persistent` → very slow.
-- Confusing **Session ID** with **Message ID** — a session is the whole flow, a message is one hop.
-- Resending a message that mutates external state without the destination expecting a duplicate → check idempotency first.
+- Body-content search on a non-`%Persistent` message → very slow.
+- Confusing **Session ID** with **Message ID**: a session is the flow, a message one hop.
+- Resending a message that mutates external state → check idempotency.
 - **Re-sending a message body through `EnsLib.Testing.Service` instead of resending the message.**
   Starts a NEW session, so the resend never appears in the original's trace and nothing records that
   it was a resend. Use `Ens.MessageHeader::ResendDuplicatedMessage`.
@@ -363,9 +363,9 @@ see [references/resending.md](references/resending.md).
 
 ## Operating it over time
 
-Per-BO SOAP envelope tracing, and message retention / purge tasks:
-[references/operations.md](references/operations.md). Neither is needed to find, resend
-or triage a message.
+**Before enabling SOAP tracing or a purge task, read
+[references/operations.md](references/operations.md).** Neither is needed to find or triage a
+message.
 
 ## See also
 

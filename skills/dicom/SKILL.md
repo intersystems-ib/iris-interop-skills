@@ -413,11 +413,11 @@ For all of the above: IRIS DICOM docs + the vendored sample + the upstream
 - `fhir` — `ImagingStudy` / `DiagnosticReport` for DICOM→FHIR.
 - `security` — TLS configuration for DIMSE mutual auth.
 
-## Worked examples in this repo — compile-gated, and not the vendored snapshot
+## Before building a DICOM leg, read its worked example here
 
-The snapshot below is a whole working production and stays the canonical end-to-end reference. These
-are the narrower measured traps, each compiled by CI on every release, each with its subject example
-and its `%UnitTest` sibling:
+The snapshot below is a whole working production and stays the canonical end-to-end reference. Read
+the one matching the leg you are building — each is a narrower measured trap, compiled by CI on every
+release with its `%UnitTest` sibling:
 
 - **Modality Worklist date parsing** (§15.4) — `$ZDATEH(value, 5)` and the error trap that stops one
   bad date aborting the whole C-FIND:

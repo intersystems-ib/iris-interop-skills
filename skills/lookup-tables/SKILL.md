@@ -180,8 +180,8 @@ The `NormalizeKey` helper is a plain class method — test with `%UnitTest.TestP
 > **`import` picks replace or merge off the `table` value, and the destructive one is the default
 > reading.** `iris_lookup_transfer` passes `table` straight to `Ens.Util.LookupTable.%Import` as
 > `pForceTableName`, whose documented behaviour is: *"If `pForceTableName` is specified then the
-> particular Lookup Table will be **replaced if it exists** … If `pForceTableName` is not specified
-> and the Lookup Table exists then entries … will be **merged**."*
+> particular Lookup Table will be **replaced if it exists** … If not specified and the Lookup Table
+> exists then entries … will be **merged**."*
 >
 > | `table` | what happens |
 > |---|---|
@@ -230,12 +230,11 @@ ClassMethod ImportLookups() As %String [ SqlProc ]
 **Embedded `&sql` is NOT compile-verified** — do not reach for it expecting that. Measured, with
 forced fresh compiles: `(TableName, KeyNam, DataValue)` and `INSERT INTO Ens_Util.LookupTabl` both
 **compile clean**, and fail at runtime with `SQLCODE -29` and `-30`. The error text says why —
-*"compiling embedded cached query"* — an embedded query is compiled on first execution. Checking
-`SQLCODE` and counting rows is the only protection.
+*"compiling embedded cached query"* — an embedded query compiles on first execution. Checking
+`SQLCODE` and counting rows is the only guard.
 
-Worked example, run and mutation-checked:
-`assets/lookup-bootstrap-sqlproc.cls` and
-`assets/tdd-lookup-bootstrap.cls`.
+**Before writing a bootstrap SqlProc, read `assets/lookup-bootstrap-sqlproc.cls`** and its
+mutation-checked test `assets/tdd-lookup-bootstrap.cls`.
 
 Invoke from MCP: `SELECT MyApp.Bootstrap_ImportLookups()` — schema `MyApp`, function
 `Bootstrap_ImportLookups`; the all-underscores form resolves to `SQLUSER` and returns `-359`.

@@ -46,7 +46,7 @@ Set tSC = ..Adapter.InvokeMethod("methodName", .tResponse, ...)
 
 Expose an X.509 `SAMLCredentials` BO setting that aliases an IRIS credentials configuration. This decouples the signing certificate from the code so the cert can be rotated per-environment without redeployment.
 
-Worked example: `assets/saml2-custom-security-header.cls`.
+Before writing the header, read `assets/saml2-custom-security-header.cls`.
 
 ## SAML 1.1
 
@@ -82,7 +82,7 @@ Use IRIS as an OAuth 2.0 broker between a third-party SaaS app and on-premise Ac
 
 May also need to patch `OAuth2.Server.Client.ValidateRedirectURL` when the redirect URI host is externally constrained.
 
-Worked example: `assets/oauth2-server-validate-ldap.cls` — a **subclass** of `%OAuth2.Server.Validate` overriding `ValidateUser` only. Do not copy the vendor class: measured on 2026.1, the copy this replaced emptied `SupportedClaims` from 6 claims to 0 and declared a five-parameter `ValidateUser` against the vendor's six, which compiles and runs without error while making two-factor unrequestable.
+Before overriding `ValidateUser`, read `assets/oauth2-server-validate-ldap.cls` — a **subclass** of `%OAuth2.Server.Validate` overriding `ValidateUser` only. Do not copy the vendor class: measured on 2026.1, the copy this replaced emptied `SupportedClaims` from 6 claims to 0 and declared a five-parameter `ValidateUser` against the vendor's six, which compiles and runs without error while making two-factor unrequestable.
 
 ### Mobile clients (PKCE)
 

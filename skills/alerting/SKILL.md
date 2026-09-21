@@ -49,8 +49,7 @@ Production XML excerpt for the alert circuit:
       ClassName="Ens.MonitorService" PoolSize="1" Enabled="true"/>
 ```
 
-A complete, **compiled** production with this wiring lives in
-`assets/production-alert-circuit.cls`, with its
+**Before wiring an alert circuit, read `assets/production-alert-circuit.cls`** — compiled, with its
 rule in `alert-routing-rule.cls`.
 
 It replaced an `.xml` export in 1.21.0, and the conversion is worth knowing about: because the file

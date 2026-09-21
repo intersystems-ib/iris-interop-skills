@@ -34,8 +34,8 @@ namespace. Both directions had happened, and nothing made it visible.
 
 The check is cheap, and it has to report **both** directions to earn the words "in sync":
 
-**Gated, compiled and RUN:**
-`assets/drift-report-disk-vs-namespace.cls`
+**Before writing a drift check, read `assets/drift-report-disk-vs-namespace.cls`** — gated,
+compiled and RUN
 (`Example.UTL.DriftReport`). It lived here as two **bare `ClassMethod`s**, so no tier compiled it —
 which mattered more than usual, because its earlier form did not compile at all (see the first trap
 below) and this is the one snippet this skill tells you to run at the end of every build.
@@ -162,8 +162,8 @@ Three consequences for this skill specifically:
 
 ## Hot-swap vs. restart — when code changes don't take effect
 
-A compiled change that has not taken effect is a hot-swap question, not a compile question:
-see [references/hot-swap.md](references/hot-swap.md).
+A compiled change that has not taken effect is a hot-swap question, not a compile question.
+**Before recompiling again, read [references/hot-swap.md](references/hot-swap.md).**
 
 ## Pre-flight validation before restart
 
@@ -288,7 +288,7 @@ Beyond BS/Router/BO, every production should ship with:
 - **`Ens.Alert` router** (`EnsLib.MsgRouter.RoutingEngine`) wired as the alert target. Without it, exceptions land in the Event Log but don't fan out.
 - **Alert sink BO** — at minimum a file logger (`EnsLib.File.PassthroughOperation` writing to a dedicated alerts directory). Optional email BO (`EnsLib.EMail.OutboundAdapter`) for prod.
 - **`Ens.Util.Tasks.Purge` task** scheduled daily. Persistent messages accumulate forever otherwise; the message-class table grows unbounded. Set `NumDaysToKeep` per retention policy (typically 30–90).
-- **External Language Server reference** when JDBC is in use — the BO's `JGService` setting points to an `EnsLib.JavaGateway.Service` **item in the same production**, whose `%gatewayName` is the ELS name (`%JDBC Server` is the IRIS-shipped default). That item is **required, not optional and not deprecated**: ESQL §2.1 *"Adding the Java Gateway Service (for JDBC)"* prescribes it, and ESQL §3.1 marks `JGService` **IMPORTANT** — *"required for all JDBC data sources, even if you are using a working SQL gateway connection with JDBC. For JDBC connections to work, a business service of type `EnsLib.JavaGateway.Service` must be present."* The scaffold above ships exactly that item; keep it.
+- **External Language Server reference** when JDBC is in use — the BO's `JGService` setting points to an `EnsLib.JavaGateway.Service` **item in the same production**, whose `%gatewayName` is the ELS name (`%JDBC Server` is the IRIS-shipped default). That item is **required, not optional and not deprecated**: ESQL §2.1 *"Adding the Java Gateway Service (for JDBC)"* prescribes it, and ESQL §3.1 marks `JGService` **IMPORTANT** — *"required for all JDBC data sources, even if you are using a working SQL gateway connection with JDBC."* The scaffold above ships exactly that item; keep it.
 
   > **A JDBC BO needs `JGService` pointing at a Java Gateway item in the same production.** Without
   > it the BO terminates at startup, and the error is an `<INVALID OREF>` inside
@@ -328,8 +328,8 @@ Wildcards (`*`) work in Default Site Settings — apply a value to all File-adap
 
 ## When the production will NOT start
 
-There is a recovery ladder and the order matters:
-see [references/wont-start.md](references/wont-start.md).
+**Before trying anything, read [references/wont-start.md](references/wont-start.md)** — there is a
+recovery ladder and the order matters.
 
 ## Deployment: export → import
 
@@ -393,19 +393,20 @@ Pick a tool early. Manual per-env maintenance scales poorly past three integrati
 
 ## Windows, HL7 schema export, and migration
 
-Git on a shared dev IRIS, the ZPM paradox, manual HL7 schema export (HIGH severity), migrating a
-production, `Ens.<X>` shadowing, UNC service accounts, Ensemble-vs-IRIS ports, and the
-`irissession` stdin gotcha: see [references/windows-migration.md](references/windows-migration.md).
+**Before exporting or importing a production, read
+[references/windows-migration.md](references/windows-migration.md)** — git on a shared dev IRIS, the
+ZPM paradox, manual HL7 schema export (HIGH severity), `Ens.<X>` shadowing, UNC service accounts,
+Ensemble-vs-IRIS ports, and the `irissession` stdin gotcha.
 
 ## Common pitfalls
 
-- **Editing settings in the production XML directly** in TEST/PROD instead of using Default Site Settings → values get blown away on next deploy.
-- **Stop/Start when Update would do** → unnecessary downtime.
-- **Restart-then-act without waiting for Running** → poll `Ens.Director.IsProductionRunning()` after every restart — see §"Hot-swap vs. restart" above.
-- **Re-issuing an identical `start` after a refusal** → the refusal never clears on retry; the state must change first. See [references/wont-start.md](references/wont-start.md).
+- **Editing settings in the production XML directly** in TEST/PROD rather than Default Site Settings → values are blown away on the next deploy.
+- **Stop/Start when Update would do** → needless downtime.
+- **Restart-then-act without waiting for Running** → poll `Ens.Director.IsProductionRunning()` after every restart (§"Hot-swap vs. restart").
+- **Re-issuing an identical `start` after a refusal** → the refusal never clears on retry; the state must change first (`references/wont-start.md`).
 - **Answering `ErrProductionSuspendedMismatch` with `recover`** → `recover` is for `ErrProductionNotShutdownCleanly`. On a **suspended** production it reports success and changes nothing — EGDV §12.3: *"If the production is not Troubled, the method simply returns."* Watch for the giveaway: `action=recover` answering `{"state":"Running","success":true}` on a production that `action=status` reports `Suspended` seconds later. That is the documented no-op, not a fixed production.
-- **Probing credentials with `IDKeyExists()`** → the method does not exist; use `%OpenId()` + `$IsObject()` — see §"Probing for an existing credential" above.
-- **Ignoring the rollback file** after a botched import → manual recovery is much harder.
+- **Probing credentials with `IDKeyExists()`** → it does not exist; use `%OpenId()` + `$IsObject()` (§"Probing for an existing credential").
+- **Ignoring the rollback file** after a botched import → manual recovery is far harder.
 - **Items disabled in DEV that get re-enabled by import** because the export captured them as `Enabled=true`.
 - **Auditing `PoolSize=1` as a defect** → it's the correct default everywhere. Raise only with measured evidence.
 - **Production XML edited by two people simultaneously** → merge conflicts in XML; coordinate via source control.
