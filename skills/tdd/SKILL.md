@@ -125,37 +125,38 @@ Stepping over 1-2-3 ("just write the DTL first") is the most common anti-pattern
 ### Loop budget — stop at the third red
 
 The existing cap covers a test that **will not run** (`NO_TESTS_FOUND`, a compile error). It says
-nothing about a test that runs and **stays red**, which is the longer loop: the model edits, re-runs,
-edits, re-runs, and each iteration costs a compile plus a production restart.
+nothing about a test that runs and **stays red**, which is the longer loop: every iteration costs a
+compile plus a production restart.
 
-**Read the failure before editing anything — and a red test has two shapes.** An **assert failure**
-has an assertion and two compared values. An **abort** has neither: `<PROPERTY DOES NOT EXIST>`,
-`<METHOD DOES NOT EXIST>` and friends kill the test before the assert runs, so there is nothing to
-compare and the symbol named in the error *is* the finding. Looking for an assertion in an abort is
-the commonest way to read a red wrongly.
+**Read the failure before editing anything, and branch on `failure_kind` rather than inferring the
+shape.** Every `failed_tests` record carries it: `"assert"` (an assertion and two compared values),
+`"runtime_error"` (an abort — `<PROPERTY DOES NOT EXIST>` and friends killed the test before any
+assert ran, so the symbol in the error *is* the finding), or **null**, meaning *unknown*, not assert
+— and a null `failure_assert` cannot tell those apart. Top level, `runtime_errors` counts the aborts,
+and `errors` stays **0** for them by design, so `errors: 0, failed: 3` does not mean nothing trapped.
+Needs MCP ≥ `v0.25.0-interop`.
 
-`iris_test` returns `failure_message` and `failure_location` inline in `failed_tests` — read those
-first. Call `iris_get_log(log_id=…)` only when they come back **empty**, which is today's abort case,
-or when `failed_tests_truncated` is true. Do not expect a `.cls` line number from
-`failure_location`: it is a raw `.INT` frame (`Method+offset^Pkg.Class.1`), nothing maps it back on
-IRIS 2026.1, and it is worth reading only when it names a class of yours rather than library code.
+Read `failure_message` and `failure_location` first, and call `iris_get_log(log_id=…)` only when the
+message is **empty** or `failed_tests_truncated` is true. `failure_location` has three measured
+shapes: `Label+offset^Pkg.Class.cls` for an assert — the offset is the line in the method body, the
+label the method that *raised* it, often a helper rather than the test; `Label+offset^Pkg.Class.1` for
+an abort, a raw `.INT` frame nothing maps back on IRIS 2026.1; and **null** when the abort came out of
+platform code with no frame at all (`#5035 General exception`), where the message is the finding.
 
-Two edits that leave the failure mode unchanged mean the hypothesis is wrong — not that the fix was
-too small — and the next edit will be the third guess in a row.
+Two edits that leave the failure mode unchanged mean the hypothesis is wrong, not that the fix was
+too small.
 
-**At the third red that told you nothing new, stop and report the blocker**: the class, the assertion,
-and what you have ruled out. That is more useful than a fourth variation.
+**At the third red that told you nothing new, stop and report the blocker**: the class, the failure
+text, and what you have ruled out.
 
 The budget is deliberately **advisory, not a hard stop.** Measured over a workshop cohort: of the six
 red streaks of three or more in 120 steps, **five went green with no intervention**. A gate that
 blocked at three would have aborted five runs that were about to succeed. A `PostToolUse` hook says so
 once, at the third consecutive red on the same target, and then keeps quiet.
 
-One specific cause to rule out first, because it makes a correct fix look wrong: **a test still red
-immediately after `iris_compile` may be running the old code.** A running host job does not reload a
-recompiled class, and `UpdateProduction` does not restart jobs. Recycle that one item —
-`iris_production(action=restart, item="<Item>")` — and re-run before editing again. See
-`production-lifecycle` §"Hot-swap vs. restart".
+One cause to rule out first, because it makes a correct fix look wrong: **a test still red
+immediately after `iris_compile` may be running the old code** — recycle that one item and re-run
+before editing again, per the `iris_compile` pitfall below.
 
 ### Step 3 is the load-bearing one — a test that never went red proves nothing
 

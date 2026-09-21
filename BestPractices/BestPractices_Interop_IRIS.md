@@ -2062,7 +2062,30 @@ run is not optional — results accumulate, so an unscoped reader sums every run
 measured, five runs of one 8-method suite reported `methods=40`, with a mutation's failure still
 showing three runs after it was reverted.
 
-- **Validity.** Verified against IRIS for Health 2026.1; both readers were run against one real failing result set.
+**An ABORT and a failed ASSERT write to different columns — and the assert writes to both.** Measured
+2026-09-21 on 2026.1, one five-method suite run through `RunTest` and read back with the query the
+IRIS MCP's `iris_test` uses:
+
+| method shape | `TestMethod.ErrorDescription` | `TestAssert` row | `TestMethod.ErrorAction` |
+|---|---|---|---|
+| failed assert | `There are failed TestAsserts` | the assert, with `Description` / `Location` / `Action` | empty |
+| abort | ` ERROR #5002: ObjectScript error: <METHOD DOES NOT EXIST>TestX+1^Pkg.Cls.1 *%New,%Library.RegisteredObject` | **none** | the method name |
+| passed | empty | the `LogMessage` row only | empty |
+
+Two consequences. An abort creates **no `TestAssert` row**, so a reader built only on that table
+reports it as a red with no detail at all. And because a failed assert *also* fills
+`ErrorDescription`, a reader that consults the abort column first reports every assert failure as a
+runtime error carrying the useless message `There are failed TestAsserts` — the assert column has to
+win, and that precedence is load-bearing rather than cosmetic.
+
+The frame is the other asymmetry. An assert's `Location` ends `^Pkg.Cls.cls` and its offset counts
+lines **in the method body** — `Helper+1` when a private helper raised it, naming the method that
+raised rather than the test method. An abort has no `Location` column: its frame is inside the error
+text and names the generated routine, `^Pkg.Cls.1`. And an abort raised inside platform code can
+carry **no frame at all** — `##class(%Library.DynamicObject).%FromJSON("{not json")` yields
+`ERROR #5035: General exception Name 'Parsing error' Code '3' Data ''`, with no `^` to extract.
+
+- **Validity.** Verified against IRIS for Health 2026.1; both readers were run against one real failing result set, and the abort/assert column split against a suite carrying one of each.
 - **Severity.** High — this is the mechanism by which a self-graded test claims a pass.
 - **Example.** `examples/ch05_bpl_dtl/unittest-sqlproc-result-reader.cls`
 
