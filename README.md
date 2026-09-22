@@ -104,9 +104,10 @@ self-contained binary.
    /plugin install iris-interop-skills@iris-interop-skills
    ```
 
-   This installs everything that ships with the plugin: the **20 skills**, the ten **hooks**
-   (a SessionStart conventions bootstrap, two PreToolUse gates that can block non-conformant calls,
-   six PostToolUse guards, and a blocking Stop gate — auto-enabled; see *Hooks* below), and
+   This installs everything that ships with the plugin: the **20 skills**, the eleven **hooks**
+   (a SessionStart conventions bootstrap, a UserPromptSubmit topic router, two PreToolUse gates that
+   can block non-conformant calls, six PostToolUse guards, and a blocking Stop gate — auto-enabled;
+   see *Hooks* below), and
    the four **agents** (`interop-builder`, `deploy-smoke-test`, `introspect-dont-guess`,
    `conformance-reviewer` — auto-registered; see *Agents* below).
 
@@ -255,7 +256,7 @@ Raise the budget in your **own** settings — `~/.claude/settings.json` (user) o
 
 ## Hooks
 
-Ten hooks ship in `hooks/` and auto-enable when the plugin is installed (wired via
+Eleven hooks ship in `hooks/` and auto-enable when the plugin is installed (wired via
 `hooks/hooks.json`, referenced from `plugin.json`). They need a Python interpreter on PATH —
 resolved as **`python3` → `python` → `py`** (so Windows, where the interpreter is `python`/`py`
 rather than `python3`, works too); if none is found they degrade to a no-op. The two `PreToolUse`
@@ -265,6 +266,7 @@ guards are advisory.
 | Hook | Event | Fires on | What it does |
 |---|---|---|---|
 | `interop-bootstrap` | `SessionStart` | every session | Injects the core interop conventions (naming, adapter rule, router rule, MCP-only, TDD) so they hold even before any skill loads. |
+| `interop-route` | `UserPromptSubmit` | every user turn | Names the two or three skills that turn actually needs. SessionStart names three FIXED skills before the task is known, and its context never reaches a subagent (#218). |
 | `interop-conformance-gate` | `PreToolUse` (**blocking**) | IRIS write/execute tools (`iris_doc`, `iris_compile`, `iris_execute`, production / credential / lookup tools) | Blocks convention violations — wrong class naming, extending the adapter, hand-`OnRequest` routing — and class loads/compiles smuggled through `iris_execute`. |
 | `src-before-iris` | `PreToolUse` (**blocking**) | `iris_doc(mode=put)` | The filesystem is the source of truth: the class must exist under `src/` before it is pushed to the namespace. |
 | `silent-execute-guard` | `PostToolUse` | `iris_execute` returning empty output (`success:true`, no captured output) | Reminds that HTTP CodeMode returns only what you `write`; wrap side-effecting code as a `[SqlProc]` and SELECT it, or verify with `iris_query`. |
@@ -274,6 +276,23 @@ guards are advisory.
 | `tdd-first-green` | `PostToolUse` | `iris_test` | Detects test-after-code: a test class whose **first ever** run is green never went red, so it proves nothing — asks for one currently-failing case. |
 | `src-drift-guard` | `PostToolUse` | `iris_doc(mode=put)` whose inline content differs from the file on disk; any mutating `iris_production_item` | Presence is not agreement: `src-before-iris` checks the file *exists*, this one notices the namespace has moved *ahead* of it. Tests run against the namespace, so nothing else signals the drift. |
 | `conformance-stop-gate` | `Stop` (**blocking**) | the moment the model would finish, in a session that wrote classes into IRIS | Refuses once on CR-12 (a class in IRIS with no file on disk) or on "the conformance pass never ran". Fires at most once per session. |
+
+**The enforcement layer is Claude Code only, and that is a deliberate scope decision (#115).**
+`hooks.json` is a Claude Code plugin mechanism. Measured structurally over a 1292-run corpus, the
+SessionStart bootstrap appears in **318 of 318 `claude` runs, 0 of 676 `codex`, and 0 of 289
+`opencode`** — the single `opencode` hit was a run that read a config file quoting the text. Other
+CLIs load the **skills** and never execute a hook, so every gate here — both `PreToolUse` denials,
+the six `PostToolUse` guards and the `Stop` gate — is inert for 958 of those 1292 runs.
+
+Two consequences worth stating rather than discovering:
+
+- **The skills are the portable layer.** Anything that must hold on every CLI belongs in a `SKILL.md`,
+  not in a hook. Where a rule lives in both, the hook is the enforcement and the skill is the fallback.
+- **A hook change can only be measured on the `claude` arm.** Pooling arms dilutes any real effect
+  toward zero.
+
+Extending hook coverage to the other CLIs is **not a goal**: it is not a thing this plugin can do —
+the mechanism belongs to the host.
 
 Not installing as a plugin? Add the equivalent `hooks` block to your `settings.json`, pointing at
 the `hooks/*.sh` wrappers.
