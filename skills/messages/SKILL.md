@@ -47,29 +47,30 @@ Property Department As %String(MAXLEN=80);
 **Before declaring a `%Persistent` message class, read
 `assets/msg-persistent-leftmost.cls`** and its
 test `…/tdd-message-own-extent.cls`. The test was mutation-checked — it passes as shipped and
-**fails** when the superclass order is reversed, which no other check in that repo does.
+**fails** when the superclass order is reversed, which no other check does.
 
 
-IRIS treats the **leftmost superclass as primary**, and the primary superclass is what drives
-storage. `Ens.Request` is *already* persistent — it inherits `Ens.MessageBody`, which owns
-`^Ens.MessageBodyD` — so putting it first makes your message inherit that **shared** extent. Listing
+IRIS treats the **leftmost superclass as primary**, and the primary drives storage. `Ens.Request` is
+*already* persistent — it inherits `Ens.MessageBody`, which owns `^Ens.MessageBodyD` — so putting it
+first makes your message inherit that **shared** extent. Listing
 `%Persistent` merely somewhere in the list is necessary but **not sufficient**; only being *first*
 makes IRIS generate its own `DataLocation`/`IdLocation`/`IndexLocation`/`StreamLocation`.
 
-Measured on IRIS for Health 2026.1 — two classes identical but for the order of their superclasses:
+Measured on IRIS for Health 2026.1 — two classes identical but for the order of their superclasses.
+**The instrument is `iris_table_info`** — it reports `data_global`, `stream_global` and `id_global`,
+so one call settles which extent a message got:
 
 | `Extends` clause | resulting `data_global` |
 |---|---|
-| `(Ens.Request, %Persistent)` | `^Ens.MessageBodyD` — **shared with every other message body** |
+| `(Ens.Request, %Persistent)` | `^Ens.MessageBodyD` — **shared with every other body** |
 | `(%Persistent, Ens.Request)` | `^MyApp.MSG.PatientCensusRequestD` — own extent ✅ |
 
-Both compile, both project an SQL table, and both read and write their properties correctly, so
-nothing in the build or the tests distinguishes them. What the shared extent costs you is
-searchability by property, independent purge/retention, and a message table that grows with every
-other body class in the namespace.
+Both compile, both project an SQL table, both read and write correctly — nothing in the build or the
+tests distinguishes them. The shared extent costs searchability by property, independent
+purge/retention, and a table that grows with every other body class in the namespace.
 
 The `%Persistent`-first form is still a fully-fledged message: `%Extends("Ens.Request")` and
-`%Extends("Ens.MessageBody")` both remain true, and it saves, reopens and routes normally.
+`%Extends("Ens.MessageBody")` both stay true, and it saves, reopens and routes normally.
 
 Do **not hand-author** a `Storage` block: IRIS generates it on first compile, from the primary
 superclass. `iris_doc(mode=put)` refuses a hand-written one with `STORAGE_STRIP_BLOCKED` until
@@ -256,8 +257,7 @@ Before setting any of these three, read `assets/xml-projection-settings.cls`.
 
 - **Custom message without `%Persistent`** → bodies stored in `Ens.MessageBodyD`, unsearchable by property, slow to purge.
 - **`%Persistent` present but NOT leftmost** (`Extends (Ens.Request, %Persistent)`) → same outcome as
-  omitting it, and nothing fails: it compiles and the SQL table projects, so only `iris_table_info`
-  reveals it. See §**Why `%Persistent` must be leftmost**.
+  omitting it, and nothing fails — see §**Why `%Persistent` must be leftmost**.
 - **Hand-written `Storage` block** → refused by the guard; see §**Canonical pattern — custom persistent message**.
 - **Subclassing `EnsLib.HL7.Message`** → almost always wrong; HL7 is structurally defined by DocType, not by class hierarchy.
 - **Putting business properties on the carrier instead of the payload** in SOAP scenarios → wizard regeneration overwrites them.
