@@ -142,12 +142,18 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   reintroduce client/site names, internal document names, or real endpoints when
   editing — keep examples vendor-neutral (`Demo.*` package names, `example.org`
   hosts, generic descriptors).
-- **Don't add PROSE to a `description:`; trigger words are free** (#127). Measured on the
-  `alerting` probe cells, codex / `gpt-5.6-luna`, n=100 per cell: 60 filler words added to the
-  prose half cost **13.3 points of precision** (90.3% → 77.0%, p=0.006) and bought
-  **+0.7 points of recall** (90.3% → 91.0%, p=1.000). The identical 60 words added to the
-  `Triggers:` list cost nothing on either side (+1.7 precision, +3.7 recall, both null). Prose
-  broadens the match surface without improving it — a tax, not a dial.
+- **Don't add PROSE to a `description:`; trigger words are free** (#127). Two arms on the `alerting`
+  probe, codex, the same sixty filler words in each. Raw counts as #127 reports them, not derived
+  percentages — the deltas here were restated once and drifted:
+
+  | probe | control | +60 PROSE | +60 TRIGGERS |
+  |---|---|---|---|
+  | NEGATIVE — passing = stayed silent | 100/111 (90%) | **77/100 (77%)**, −13.1 pt, p=0.014 | 92/100 (92%), null |
+  | POSITIVE — passing = fired | 109/120 (91%) | 91/100 (91%), +0.2 pt, **p=1.000** | 94/100 (94%), null |
+
+  Prose costs 13 points of precision and buys nothing measurable in recall — **a tax, not a dial**.
+  One caveat #127 pre-registered and that still binds: the positive probe sits near a ceiling, so its
+  null is decisive against the dial only in the direction of a *fall*.
   **This licenses not-adding, not shortening**: the probe measured *adding* 60 words, and whether
   removing words is symmetric is untested. So a description edit still needs a before/after
   (#126, #127) — with **one decided exception, 2026-09-21 (#365, v1.121.0)**: the string
