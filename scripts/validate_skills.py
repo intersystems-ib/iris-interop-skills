@@ -200,6 +200,20 @@ for _f in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
         if _m:
             _stated.append((_f, int(_m.group(1))))
 
+# README.md was NOT read here until v1.124.0, and that is exactly where the count rotted: the
+# manifests said 11 while the README said "the ten hooks" in two places AND its table was missing the
+# UserPromptSubmit router altogether. A check that reads two of the three places a number lives
+# reports green while the third drifts. Words, because the README spells it "Eleven hooks ship in".
+_WORDS = {"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,
+          "ten":10,"eleven":11,"twelve":12,"thirteen":13,"fourteen":14,"fifteen":15}
+with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as fh:
+    _readme = fh.read()
+for _m in re.finditer(r"\b([A-Za-z]+|\d+)\s+\*{0,2}hooks\*{0,2}\b", _readme):
+    _tok = _m.group(1).lower()
+    _n = int(_tok) if _tok.isdigit() else _WORDS.get(_tok)
+    if _n is not None:
+        _stated.append(("README.md", _n))
+
 bad_hookcount = ["{} says {} hooks; hooks.json has {} ({})".format(
                      _f, _n, _actual,
                      ", ".join("{} {}".format(len([h for e in _v for h in e.get("hooks", [])]), _k)
@@ -209,7 +223,14 @@ if not _stated:
     bad_hookcount.append("no shipped description states a hook count — the claim this check "
                          "guards has vanished, which is a silent pass, not a clean one")
 
-check("S6", "shipped descriptions state the real hook count (#167)", bad_hookcount)
+_rows = len(re.findall(r"^\| `[a-z-]+` \| `(?:SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|Stop)`",
+                       _readme, re.M))
+if _rows != _actual:
+    bad_hookcount.append("README.md's hook table has {} rows; hooks.json has {} commands -- a hook "
+                         "nobody documents is one nobody knows to expect".format(_rows, _actual))
+
+check("S6", "shipped descriptions AND the README state the real hook count (#167, #115)",
+      bad_hookcount)
 
 # S10 -- the two manifests must state the SAME version, and each must state one.
 #
