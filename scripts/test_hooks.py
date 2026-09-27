@@ -769,6 +769,40 @@ for _label, _action, _want in [
          "tool_input": {"action": _action, "item": "BS.In", "production": "Demo.Production"},
          "tool_response": {"ok": True}}, _tmp))
 
+# #401 item 2: the remedy must tell the model to VERIFY before writing. The old text was
+# "iris_doc(mode=get) the production class and Write it to src/", and that is wrong while
+# iris-interop-dev#408 is open -- the item tools change the namespace without saving the class,
+# so `get` returns the production WITHOUT the new item and following the advice writes a stale
+# production to disk. In one timed run that cost ~3 minutes: the model hand-rebuilt the XML,
+# lost the &lt;/&gt; escaping and hit ErrInvalidProduction.
+#
+# COVERAGE: this checks the WORDING of the remedy, not that the model follows it, and not that
+# #408 behaves as described. It guarantees the instruction cannot silently drift back to the
+# unverified form.
+_pi_reason = json.loads(subprocess.run(
+    [sys.executable, DRIFT], input=json.dumps(
+        {"tool_name": "mcp__iris__iris_production_item",
+         "tool_input": {"action": "add", "item": "BS.In", "production": "Demo.Production"},
+         "tool_response": {"ok": True}}),
+    capture_output=True, text=True,
+    env=dict(os.environ, CLAUDE_PROJECT_DIR=_tmp)).stdout)[
+        "hookSpecificOutput"]["additionalContext"]
+
+# Four distinct strings: one `in` test would be satisfied by any of them.
+check("remedy orders a check before writing", True, "Check the returned XData" in _pi_reason)
+# Tied to the step-2 phrasing on purpose: a bare "`BS.In` appears somewhere" also passed
+# against the OLD text, which named the item in its first line. That made it vacuous as a
+# guard of this change.
+check("remedy names the item to look for", True,
+      "actually contains `BS.In`" in _pi_reason)
+check("remedy cites the open upstream cause", True, "iris-interop-dev#408" in _pi_reason)
+check("remedy gives the on-disk fallback", True,
+      "iris_production(action=update)" in _pi_reason)
+check("remedy warns about the entity escaping", True, "&lt;" in _pi_reason)
+# The old unverified wording must be gone, or both forms ship and the model picks one.
+check("the bare get-and-write advice is gone", False,
+      "the production class and Write it to `src/`" in _pi_reason)
+
 # The marker must reach the emitted text, not merely exist in the source (the lesson the
 # #162 section below records): a guard whose marker never ships is undetectable downstream.
 _emitted_drift = subprocess.run(
