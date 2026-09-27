@@ -117,8 +117,12 @@ cleanly: card **in the prompt** 5/5 in both models, card **nowhere** 0/4.
   suffices and a gate is luxury. The channel that reaches both at the moment of decision — a hook's
   injected text, or a gate's denial message — is the only one measured at 100 % for Haiku, and it is
   **untested**: see `bench/arm-denial`.
-- **Moving a capability into `references/` is deleting it**, for either model. That is what S8's
-  remedy text enforces; this table is the evidence behind it.
+- **Moving a capability into `references/` is deleting it — on Haiku, whatever verb points at it**
+  (1 of 18 with a directive pointer, p = 1.00 against the no-file control). **On Sonnet it is not:**
+  the same card in the same `assets/` file lands 5/6 - 6/6 once the pointer is an order rather than a
+  mention. What S8's remedy text enforces is the pair that follows from that — evict the depth **and**
+  rewrite the pointer as an imperative with a trigger condition — not eviction alone. Superseded by
+  the banner above; the pre-correction wording read "for either model".
 
 This section is the single record of these figures. Everything else in the repo points here rather
 than restating them, because a number restated in prose rots and a number with one owner does not.
