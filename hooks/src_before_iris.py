@@ -34,7 +34,7 @@ Scope, deliberately narrow:
 The fix it asks for is one extra step, and it is the step that makes `src/` real: write the
 file, then put the same content.
 """
-import sys, json, os, re, glob
+import sys, json, os, re
 
 # Generated-in-IRIS artefacts: authored by a generator, exported afterwards, never hand-written.
 GENERATED = re.compile(r"(?:^|\.)(?:WSC|SOAPENC)\.|\.Record$|\.Record\.cls$", re.I)
@@ -45,7 +45,11 @@ GENERATED = re.compile(r"(?:^|\.)(?:WSC|SOAPENC)\.|\.Record$|\.Record\.cls$", re
 # workspace has grown a src/ directory yet.
 INTEROP_NAME = re.compile(r"\.(BS|BP|BO|DT|DTS|RUL|MSG|DAT|ADP|UTL|HL7)\.[^.]+$")
 
-SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".idea", ".vscode"}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import iis_scope
+except Exception:
+    iis_scope = None    # a broken sibling must not make this gate crash or deny wrongly
 
 
 def deny(rule, reason):
@@ -63,34 +67,53 @@ def project_root():
 
 
 def has_source_tree(root):
-    """True when this project keeps .cls sources on disk."""
-    for pat in ("src", "*/src", "*/*/src", "*/*/*/src"):
-        for d in glob.glob(os.path.join(root, pat)):
-            if os.path.isdir(d):
-                return True
-    return False
+    """True when this project keeps .cls sources on disk.
+
+    Delegates to iis_scope so "what counts as a source root" has exactly one definition
+    across the three hooks that ask (#401) -- including a project that declares its own in
+    `.claude/iis-source-roots` because its sources are not under `src/`.
+    """
+    if iis_scope is None:
+        return False
+    return iis_scope.scoped(root)
+
+
+def _match(paths, cls):
+    """The first path that names this class, or None.
+
+    Matches the Atelier nested layout the `interop` skill mandates (`src/Pkg/BO/Name.cls`)
+    and, tolerantly, the legacy flat-dotted form.
+    """
+    tail = "/" + "/".join(cls.split(".")) + ".cls"           # /Pkg/BO/Name.cls
+    flat = "/" + cls + ".cls"                                # /Pkg.BO.Name.cls
+    for path in paths:
+        norm = path.replace("\\", "/")
+        if norm.endswith(tail) or norm.endswith(flat):
+            return norm
+    return None
 
 
 def on_disk(root, cls):
-    """True if a file for this class exists anywhere under the project.
+    """(found_in_source_root, path_found_elsewhere).
 
-    Matches the Atelier nested layout the `interop` skill mandates
-    (`src/Pkg/BO/Name.cls`) and, tolerantly, the legacy flat-dotted form.
+    Before #401 this searched the WHOLE project and any hit counted. A demo project that
+    keeps a reset seed beside `src/` -- `seed/diet/Diet/BO/Login.cls` -- therefore satisfied
+    the gate with nothing written to `src/` at all, which is the one thing this gate exists
+    to prevent. Now the question is asked of the project's SOURCE ROOTS.
+
+    The second element is the whole difference between a useful deny and a baffling one. If
+    a copy exists outside the source root, say where -- otherwise the message claims "no
+    file was found" while the model is looking straight at one, which is how a gate earns a
+    line in someone's CLAUDE.md telling the model to ignore it.
     """
-    parts = cls.split(".")
-    tail = ("/" + "/".join(parts) + ".cls")                  # /Pkg/BO/Name.cls
-    flat = "/" + cls + ".cls"                                # /Pkg.BO.Name.cls
-    # os.walk rather than glob("**"): glob silently skips dot-directories, so a class
-    # staged under one reads as missing and the gate denies a file that is right there.
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-        for fn in filenames:
-            if not fn.lower().endswith(".cls"):
-                continue
-            norm = os.path.join(dirpath, fn).replace("\\", "/")
-            if norm.endswith(tail) or norm.endswith(flat):
-                return True
-    return False
+    if iis_scope is None:
+        return True, None       # degrade to allowing, never to denying on a hook bug
+    hit = _match(iis_scope.walk_files(root), cls)
+    if hit:
+        return True, None
+    if not iis_scope.scoped(root):
+        return False, None      # nothing was narrowed, so "elsewhere" has no meaning
+    return False, _match(iis_scope.walk_files(root, whole_project=True), cls)
 
 
 def main():
@@ -127,15 +150,47 @@ def main():
         # convention, so it is gated from the first put. Anything else keeps the original
         # scratch exemption.
         return
-    if on_disk(root, cls):
+    found, elsewhere = on_disk(root, cls)
+    if found:
         return
 
-    rel = "src/" + cls.replace(".", "/") + ".cls"
+    rel = iis_scope.conventional_path(root, cls) if iis_scope \
+        else "src/" + cls.replace(".", "/") + ".cls"
+
+    # Two different situations, and conflating them is what made this gate ignorable. "No
+    # file anywhere" is the original case. "A file exists but outside the source root" is
+    # #401: the model has written something, so telling it nothing was found reads as a
+    # broken hook rather than a rule.
+    if elsewhere:
+        where = os.path.relpath(elsewhere, os.path.normpath(root)).replace(os.sep, "/")
+        # The escape hatch takes a DIRECTORY, so name the directory, not the file. Strip the
+        # class's own <Pkg>/<Tipo>/<Name>.cls tail off the hit and what is left is exactly the
+        # root that would make it resolve -- `seed/diet` for `seed/diet/Diet/BO/Login.cls`.
+        # Telling someone to declare a .cls path in a roots file is advice that cannot be
+        # followed, which is the same defect as the remedy this issue is about.
+        tail = "/".join(cls.split(".")) + ".cls"
+        cand = where[:-len(tail)].rstrip("/") if where.endswith(tail) else os.path.dirname(where)
+        cand = cand or "."
+        situation = (
+            "Source-of-truth: `" + cls + "` has a file at `" + where + "`, but that is OUTSIDE "
+            "this project's source root. A copy there is not the source of truth -- a seed, a "
+            "fixture or an export can be restored, regenerated or deleted without anyone "
+            "noticing the live class went with it.\n\n"
+            "If `" + cand + "` is genuinely where this project keeps its sources, add that "
+            "directory to `.claude/iis-source-roots` (one per line) and this gate will accept "
+            "it. To keep a seed or fixture tree out of these checks entirely, list it in "
+            "`.claude/iis-ignore`.\n\n"
+        )
+    else:
+        situation = (
+            "Source-of-truth: `" + cls + "` would exist only in the IRIS namespace. No file for "
+            "it was found under this project's source root, and the namespace is not "
+            "version-controlled, not reviewable, and does not survive the instance.\n\n"
+        )
+
     deny(
         "DISK",
-        "Source-of-truth: `" + cls + "` would exist only in the IRIS namespace. No file for it "
-        "was found under this project, and the namespace is not version-controlled, not "
-        "reviewable, and does not survive the instance.\n\n"
+        situation +
         "Write the class to disk FIRST, then put the same content:\n"
         "  1. Write  " + rel + "   (Atelier nested layout: one directory per package level)\n"
         "  2. iris_doc(mode=put, name=\"" + cls + ".cls\", content=<same content>)\n\n"

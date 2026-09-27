@@ -85,6 +85,10 @@ try:
     from conformance_prescan import cr15_verdict as _cr15_verdict
 except Exception:
     _cr15_verdict = None      # a broken sibling must degrade this branch, never crash the gate
+try:
+    import iis_scope
+except Exception:
+    iis_scope = None          # same rule: degrade to the pre-#401 whole-project walk
 
 # Every exit path in this hook is silent by design — an allowing hook writes no
 # attachment and produces no transcript event. That makes a hook that never fires
@@ -120,6 +124,31 @@ CLASS_DECL = re.compile(r"^[ \t]*Class[ \t]+([A-Za-z0-9_.%]+)", re.M)
 XML_DECL = re.compile(r"<Class\s+name=[\"\']([A-Za-z0-9_.%]+)[\"\']", re.I)
 
 
+def _candidate_files(root):
+    """Files that could define a class, under the project's SOURCE ROOTS (#401).
+
+    Scope only. How presence is DECIDED is untouched -- see the docstring below for why this
+    gate reads the class name out of the file rather than matching its path, and why that must
+    not change. Before #401 the walk covered the whole project, so a reset seed kept beside
+    `src/` counted as "on disk" and CR-12 passed for a class that was never written to the
+    source tree, which is the exact orphan CR-12 exists to catch.
+
+    Falls back to the whole project when iis_scope is unavailable or when the project has no
+    source root at all -- that is this plugin's own repo, whose bank lives under
+    BestPractices/examples/ with no src/ anywhere.
+    """
+    exts = (".cls", ".cls.xml", ".xml")
+    if iis_scope is None:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for fn in filenames:
+                if fn.lower().endswith(exts):
+                    yield os.path.join(dirpath, fn)
+        return
+    for path in iis_scope.walk_files(root, exts=exts):
+        yield path
+
+
 def classes_on_disk(root):
     """Every class name actually DEFINED by a file under the project, mapped to its path.
 
@@ -140,24 +169,19 @@ def classes_on_disk(root):
     under one reads as missing (#95 cost a cycle to that).
     """
     found = {}
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-        for fn in filenames:
-            low = fn.lower()
-            if not (low.endswith(".cls") or low.endswith(".cls.xml") or low.endswith(".xml")):
-                continue
-            path = os.path.join(dirpath, fn)
-            try:
-                with open(path, encoding="utf-8", errors="replace") as fh:
-                    text = fh.read()
-            except OSError:
-                continue
-            for name in CLASS_DECL.findall(text) + XML_DECL.findall(text):
-                found.setdefault(name, path)
-            # a file named for its class counts even if the body cannot be parsed
-            base = fn[:-4] if low.endswith(".cls") else None
-            if base and "." in base:
-                found.setdefault(base, path)
+    for path in _candidate_files(root):
+        fn = os.path.basename(path)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for name in CLASS_DECL.findall(text) + XML_DECL.findall(text):
+            found.setdefault(name, path)
+        # a file named for its class counts even if the body cannot be parsed
+        base = fn[:-4] if fn.lower().endswith(".cls") else None
+        if base and "." in base:
+            found.setdefault(base, path)
     return found
 
 
