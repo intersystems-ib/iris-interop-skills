@@ -291,6 +291,37 @@ Two consequences worth stating rather than discovering:
 - **A hook change can only be measured on the `claude` arm.** Pooling arms dilutes any real effect
   toward zero.
 
+### Telling the disk checks where your sources are
+
+`src-before-iris`, `src-drift-guard` and `conformance-stop-gate`'s CR-12 all ask the same question:
+"does this class have a file?" They ask it of your project's **source roots**, resolved in this
+order:
+
+1. every directory listed in `.claude/iis-source-roots`, if that file exists;
+2. otherwise every directory named `src` down to three levels deep (so a monorepo's
+   `services/orders/src` counts);
+3. otherwise the whole project — unchanged from before, so a project laid out any other way keeps
+   working.
+
+Two optional files tune it. Both are plain text, one entry per line, `#` comments, and neither
+exists by default:
+
+| file | holds | for |
+|---|---|---|
+| `.claude/iis-source-roots` | directories to treat as source roots | a project whose classes live in `app/cls/` rather than `src/` |
+| `.claude/iis-ignore` | `fnmatch` globs, project-relative, of directories to skip | a seed, fixture or export tree that should never satisfy a disk check. A bare `seed` excludes `seed/` and everything under it. |
+
+**Why this exists (#401).** Before 1.127.0 the checks walked the whole project and accepted a match
+anywhere in it. A project that keeps a reset seed beside `src/` — `seed/diet/Diet/BO/Login.cls`, to
+restore a namespace between demo runs — satisfied all three with **nothing written to `src/` at
+all**: the disk-first gate passed, the drift guard told the model to write to `seed/`, and CR-12
+counted the seed copy as on disk. That project's own `CLAUDE.md` ended up instructing the model to
+disregard the drift messages, which is what a gate looks like when it has been switched off in
+practice but not in code.
+
+`.gitignore` is deliberately **not** consulted: a seed or fixture tree is usually committed, so it
+is not in `.gitignore`, so honouring it would not have helped the case above.
+
 Extending hook coverage to the other CLIs is **not a goal**: it is not a thing this plugin can do —
 the mechanism belongs to the host.
 

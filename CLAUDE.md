@@ -99,6 +99,14 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   able to disagree about what fires.
   The conformance gate also sits on `Write|Edit`, scoped to `.cls` paths only, so an illegal
   identifier is caught before the VS Code sync carries the class into IRIS (#219).
+  `hooks/iis_scope.py` is **not a hook** — it is the shared answer to "which directories count as
+  on disk", imported by the three checks that ask (`src-before-iris`, `src-drift-guard`,
+  `conformance-stop-gate`'s CR-12). It existed as three separate walks and they disagreed: a reset
+  seed beside `src/` satisfied all three while `src/` stayed empty (#401). **A fourth disk check
+  imports it rather than walking the project itself**; `test_hooks.py` asserts the existing three
+  do. How a match is DECIDED is deliberately still per-hook — CR-12 reads the class name out of the
+  file, because this bank names files by topic and a path-only check called 25 of 25 real classes
+  missing.
 - **Required user setting:** raise the skill-listing budget (`skillListingBudgetFraction: 0.03`,
   `skillListingMaxDescChars: 2048`) in `~/.claude/settings.json` so `interop`/`tdd` don't get evicted.
 - `BestPractices/` — the worked-example bank the skills cite:

@@ -18,6 +18,7 @@ GATE = os.path.join(ROOT, "hooks", "interop_conformance_gate.py")
 STOP = os.path.join(ROOT, "hooks", "conformance_stop_gate.py")
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
 import conformance_stop_gate as g  # noqa: E402
+import iis_scope  # noqa: E402
 
 NOW = time.time()
 failures = []
@@ -1294,6 +1295,137 @@ check("a .md discussing a hand BP does not fire CR-1", "silent",
       _md_verdict("A class that Extends Ens.BusinessProcess and calls SendRequestAsync( needs "
                   "OnResponse. See CR-15."))
 
+
+# --------------------------------------------------------------------------------------
+print("\n#401  the disk checks are scoped to the project's SOURCE ROOTS")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# All three disk checks walked the WHOLE project and accepted a match anywhere. Found while
+# rehearsing a live demo over 5 timed runs: that project keeps a reset seed beside src/ --
+# `seed/diet/Diet/BO/Login.cls` -- and the seed copy satisfied every one of them. A class
+# built live passed the disk-first gate with nothing in src/, [IIS-DRIFT] told the model to
+# write to seed/, and CR-12 counted the seed as on disk. The project's CLAUDE.md ended up
+# telling the model to disregard the drift messages.
+#
+# COVERAGE: these assert the SCOPE of the walk. They say nothing about whether a project's
+# declared roots are the right ones, and the whole section is a no-op on codex/opencode,
+# where no hook executes at all (#115).
+SRCGATE = os.path.join(ROOT, "hooks", "src_before_iris.py")
+
+
+def srcgate(root, cls, content="Class X {}"):
+    payload = {"tool_name": "mcp__iris__iris_doc",
+               "tool_input": {"mode": "put", "name": cls + ".cls", "content": content}}
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=root)
+    p = subprocess.run([sys.executable, SRCGATE], input=json.dumps(payload),
+                       capture_output=True, text=True, env=env)
+    if p.returncode != 0 or p.stderr.strip():
+        return "CRASH: " + (p.stderr.strip().splitlines()[-1][:120] if p.stderr.strip() else "rc")
+    return "DENY" if p.stdout.strip() else "ALLOW"
+
+
+def srcgate_reason(root, cls):
+    payload = {"tool_name": "mcp__iris__iris_doc",
+               "tool_input": {"mode": "put", "name": cls + ".cls", "content": "Class X {}"}}
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=root)
+    p = subprocess.run([sys.executable, SRCGATE], input=json.dumps(payload),
+                       capture_output=True, text=True, env=env)
+    if not p.stdout.strip():
+        return ""
+    return json.loads(p.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def proj(files, **cfg):
+    """A throwaway project. Every file declares the class its path implies."""
+    root = tempfile.mkdtemp()
+    for rel in files:
+        f = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(f), exist_ok=True)
+        parts = rel[:-4].split("/")
+        # the class name is the last three path segments, which is the Atelier layout
+        with open(f, "w") as fh:
+            fh.write("Class " + ".".join(parts[-3:]) + " {}\n{\n}")
+    for name, body in cfg.items():
+        d = os.path.join(root, ".claude")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, name.replace("_", "-")), "w") as fh:
+            fh.write(body)
+    return root
+
+
+SEED_ONLY = ["src/Other/BO/Keep.cls", "seed/diet/Diet/BO/Login.cls"]
+BOTH = ["src/Diet/BO/Login.cls", "seed/diet/Diet/BO/Login.cls"]
+
+# THE REPORTED DEFECT. This was ALLOW before #401.
+check("seed-only class is denied", "DENY", srcgate(proj(SEED_ONLY), "Diet.BO.Login"))
+check("...and in src/ it is allowed", "ALLOW", srcgate(proj(BOTH), "Diet.BO.Login"))
+# Absence must keep denying, or the fix has only moved the hole.
+check("absent everywhere still denies", "DENY", srcgate(proj(SEED_ONLY), "Diet.BO.Ghost"))
+
+# NON-REGRESSION, and the most important case here: a project with no src/ behaves exactly
+# as it did before. That is THIS repo -- the bank lives under BestPractices/examples/ -- so
+# getting this wrong would deny every example in the plugin's own tree.
+check("no src/ anywhere -> unchanged", "ALLOW",
+      srcgate(proj(["app/Diet/BO/Login.cls"]), "Diet.BO.Login"))
+check("positive control — this repo has no source root", False, iis_scope.scoped(ROOT))
+# ...and a count, not a boolean: the scoped walk must still see the whole bank.
+check("positive control — bank still in scope", True,
+      sum(1 for _ in iis_scope.walk_files(ROOT)) > 100)
+
+# The two escape hatches, because a stricter gate with no way out gets disabled.
+# The fixture MUST contain a src/, or this passes for the wrong reason: with no src/ the
+# walk is unscoped anyway and the seed copy resolves whether or not the override is read. A
+# first draft omitted it and a mutant that disabled the override entirely SURVIVED.
+check("declared source root is honoured", "ALLOW",
+      srcgate(proj(["src/Other/BO/Keep.cls", "seed/diet/Diet/BO/Login.cls"],
+                   iis_source_roots="seed/diet\n"), "Diet.BO.Login"))
+# ...and the differential that proves the line above is doing the work.
+check("...the same tree without it is denied", "DENY",
+      srcgate(proj(["src/Other/BO/Keep.cls", "seed/diet/Diet/BO/Login.cls"]), "Diet.BO.Login"))
+check("ignore list does not break src/", "ALLOW",
+      srcgate(proj(BOTH, iis_ignore="seed\n"), "Diet.BO.Login"))
+
+# The deny must EXPLAIN itself, or it reads as a broken hook rather than a rule. Three
+# distinct strings: a single `in reason` test would pass on any one of them.
+_r = srcgate_reason(proj(SEED_ONLY), "Diet.BO.Login")
+check("names the file it found", True, "seed/diet/Diet/BO/Login.cls" in _r)
+check("names the DIRECTORY to declare", True, "`seed/diet` is genuinely" in _r)
+check("points the write at src/", True, "Write  src/Diet/BO/Login.cls" in _r)
+
+# The three disk checks must SHARE the definition of a source root, or they drift apart
+# again -- which is how they came to disagree in the first place (three copies of one walk).
+#
+# COVERAGE, per the #151 convention: this asserts the import, not the use. A hook could
+# import iis_scope and still walk the project itself, and a FOURTH disk check added later is
+# not covered at all. It catches the cheap regression (someone reverts one hook to a local
+# walk), not the expensive one.
+_unshared = [os.path.basename(f) for f in (
+    os.path.join(ROOT, "hooks", "src_before_iris.py"),
+    os.path.join(ROOT, "hooks", "src_drift_guard.py"),
+    os.path.join(ROOT, "hooks", "conformance_stop_gate.py"))
+    if "import iis_scope" not in io.open(f, encoding="utf-8").read()]
+check("all three disk checks share iis_scope", 0, len(_unshared))
+for _u in _unshared:
+    print("          - {} does not import iis_scope".format(_u))
+
+# CR-12 in the Stop gate, same defect. It decides presence by the class name INSIDE the
+# file, so this is not the same code path as the gate above and needs its own case.
+_seed = proj(SEED_ONLY)
+t = transcript([rec(-300, "iris_doc", {"mode": "put", "name": "Diet.BO.Login.cls",
+                                      "content": "Class Diet.BO.Login {}"})])
+clear(t)
+check("CR-12 counts a seed copy as orphan", "BLOCK/orphan", stop(t, _seed))
+_both = proj(BOTH)
+clear(t)
+check("...and not when it is in src/", "BLOCK/no-review", stop(t, _both))
+
+# The drift guard must fall SILENT on a seed-only class: that is absence, which
+# src_before_iris owns, not divergence.
+clear(t)
+check("drift guard silent on seed-only", "SILENT",
+      drift_out(doc_post("put", "Class Diet.BO.Login { /* changed */ }",
+                         {"open_uri": "isfs://x/Diet/BO/Login.cls"},
+                         name="Diet.BO.Login.cls"), _seed))
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:

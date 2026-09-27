@@ -31,7 +31,11 @@ import sys, json, os, re, glob
 # switch a corpus detector off. One grep for `[IIS-` finds every gate and guard.
 MARKER = "[IIS-DRIFT] "
 
-SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".idea", ".vscode"}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import iis_scope
+except Exception:
+    iis_scope = None    # a broken sibling must leave this guard silent, never noisy
 
 # Same exemption as src_before_iris: these are produced in the namespace by design and
 # exported afterwards, so the disk copy legitimately lags until the export step.
@@ -115,18 +119,26 @@ def project_root():
 
 
 def disk_path(root, cls):
-    """The file for this class, or None. Atelier nested layout, plus the legacy flat form."""
-    parts = cls.split(".")
-    tail = "/" + "/".join(parts) + ".cls"
+    """The file for this class under the project's SOURCE ROOTS, or None.
+
+    Atelier nested layout, plus the legacy flat form. Scoped via iis_scope since #401: this
+    searched the whole project, so a reset seed at `seed/diet/Diet/BO/Login.cls` was both
+    what the guard compared against AND what it told the model to write to. Two bugs from
+    one walk -- the remedy pointed outside `src/`, and the comparison was against whichever
+    copy os.walk happened to reach first when a class existed in both trees.
+
+    Returning None when the only copy is outside the source root is correct and deliberate:
+    that is absence, not drift, and `src_before_iris` owns absence. It denies the put, so
+    this guard never sees it.
+    """
+    if iis_scope is None:
+        return None
+    tail = "/" + "/".join(cls.split(".")) + ".cls"
     flat = "/" + cls + ".cls"
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-        for fn in filenames:
-            if not fn.lower().endswith(".cls"):
-                continue
-            norm = os.path.join(dirpath, fn).replace("\\", "/")
-            if norm.endswith(tail) or norm.endswith(flat):
-                return norm
+    for path in iis_scope.walk_files(root):
+        norm = path.replace("\\", "/")
+        if norm.endswith(tail) or norm.endswith(flat):
+            return norm
     return None
 
 
