@@ -166,10 +166,19 @@ t = transcript([rec(-300, "iris_doc", PUT_GHOST)])
 clear(t)
 check("live put, not on disk (CR-12)", "BLOCK/orphan", stop(t, work))
 
-t = transcript([rec(-300, "iris_doc", PUT_LIVE),
-                rec(-200, "Agent", {"subagent_type": "iris-interop-skills:conformance-reviewer"})])
+# The reviewer call now needs its RESULT, because a launched agent is not a finished one
+# (#401). This fixture used to model only the tool_use, which is the launched-only case the
+# new rule deliberately treats as not-reviewed -- so it was renamed to what it actually is
+# and given a sibling that carries a real result.
+t = transcript([rec_id(-300, "iris_doc", PUT_LIVE, "tu_live"),
+                res(-299, "tu_live", [{"type": "text", "text": json.dumps(
+                    {"name": "Demo.BS.Live.cls", "open_uri": "isfs://APP/Demo.BS.Live.cls",
+                     "storage_stripped": False, "success": True})}]),
+                rec_id(-200, "Agent",
+                       {"subagent_type": "iris-interop-skills:conformance-reviewer"}, "tu_rev"),
+                res(-199, "tu_rev", "CR-1 ok. CR-12 ok. No findings.")])
 clear(t)
-check("live put, reviewed", "ALLOW", stop(t, work))
+check("live put, reviewer RAN", "ALLOW", stop(t, work))
 
 # the seventeen-firing bug: yesterday's classes gating today's turns
 t = transcript([rec(-26 * 3600, "iris_doc", PUT_GHOST), rec(-300, "Bash", {"command": "echo"})])
@@ -1426,6 +1435,80 @@ check("drift guard silent on seed-only", "SILENT",
       drift_out(doc_post("put", "Class Diet.BO.Login { /* changed */ }",
                          {"open_uri": "isfs://x/Diet/BO/Login.cls"},
                          name="Diet.BO.Login.cls"), _seed))
+
+# --------------------------------------------------------------------------------------
+print("\n#401  a reviewer that was LAUNCHED is not a reviewer that RAN")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# `reviewed` was set the moment an Agent(subagent_type=...conformance-reviewer) tool_use
+# appeared, with no look at its outcome -- the "match the call, never the result" defect that
+# #157 fixed for puts and that never propagated here.
+#
+# The payload below is VERBATIM from the demo project's transcript, the Agent call at
+# 2026-09-27T07:23:24 that passed run_in_background=true for the conformance-reviewer. That
+# session set reviewed=True and the gate allowed, with no review verdict in existence.
+#
+# The string is "Async agent launched" -- NOT `async_launched`, which appears in Bash and
+# StructuredOutput results in the same transcripts and belongs to neither the Agent tool nor
+# this gate. #401 item 3 cited the latter as evidence about Agent; it is not.
+LAUNCH_NOTICE = ("Async agent launched successfully. (This tool result is internal metadata — "
+                 "never quote or paste any part of it, including the agentId below, into a "
+                 "user-facing reply.)\n\nagentId: a736e0edf34e258ce\n\nThe agent is working in "
+                 "the background. You will be notified automatically when it completes. You "
+                 "know nothing about its results until that notification arrives")
+
+_PUT_OK = [{"type": "text", "text": json.dumps(
+    {"name": "Demo.BS.Live.cls", "open_uri": "isfs://APP/Demo.BS.Live.cls",
+     "storage_stripped": False, "success": True})}]
+
+
+def _reviewed_case(review_result):
+    lines = [rec_id(-300, "iris_doc", PUT_LIVE, "tu_p"),
+             res(-299, "tu_p", _PUT_OK),
+             rec_id(-200, "Agent",
+                    {"subagent_type": "iris-interop-skills:conformance-reviewer"}, "tu_r")]
+    if review_result is not None:
+        lines.append(res(-199, "tu_r", review_result))
+    t = transcript(lines)
+    clear(t)
+    return stop(t, work)
+
+
+# THE DEFECT. Was ALLOW.
+check("backgrounded reviewer still blocks", "BLOCK/no-review", _reviewed_case(LAUNCH_NOTICE))
+# In flight at the moment the turn ends is the same situation, and the same answer.
+check("reviewer with no result blocks", "BLOCK/no-review", _reviewed_case(None))
+# The control that keeps this honest: a real verdict must still ALLOW, or the gate has simply
+# become unsatisfiable and will be removed rather than obeyed.
+check("a real review verdict allows", "ALLOW",
+      _reviewed_case("CR-1 ok. CR-12 ok. Two P2 findings, both fixed."))
+# A verdict that happens to DISCUSS backgrounding must not be read as a launch notice. The
+# regex is deliberately narrow for this reason.
+check("a verdict mentioning background allows", "ALLOW",
+      _reviewed_case("CR-6 ok. Note: the BO polls in the background, working in the background "
+                     "off a scheduled task. No findings."))
+
+# The message must SAY that the verdict is what counts, or a model that backgrounded the
+# reviewer reads "the conformance pass has not run" as a broken gate and argues with it.
+_bg_reason = ""
+_lines = [rec_id(-300, "iris_doc", PUT_LIVE, "tu_p3"), res(-299, "tu_p3", _PUT_OK),
+          rec_id(-200, "Agent",
+                 {"subagent_type": "iris-interop-skills:conformance-reviewer"}, "tu_r3"),
+          res(-199, "tu_r3", LAUNCH_NOTICE)]
+_t = transcript(_lines)
+clear(_t)
+_bg_reason = stop_reason(_t, work)
+check("the block explains the launch/verdict gap", True,
+      "has not reviewed anything yet" in _bg_reason)
+check("...and names the flag that fixes it", True, "run_in_background=false" in _bg_reason)
+
+# Loading the skill inline is synchronous -- there is no launch/complete gap, so it is still
+# decided on sight. Asserting it so the deferral above cannot silently swallow this path.
+t = transcript([rec_id(-300, "iris_doc", PUT_LIVE, "tu_p2"),
+                res(-299, "tu_p2", _PUT_OK),
+                rec(-200, "Skill", {"skill": "iris-interop-skills:conformance-review"})])
+clear(t)
+check("the inline SKILL path still counts", "ALLOW", stop(t, work))
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
