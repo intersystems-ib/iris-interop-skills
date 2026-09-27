@@ -197,10 +197,23 @@ def check_production_item(ti, resp):
         "Source drift: `iris_production_item(action=" + action + ")` changed " + who +
         (" (item `" + item + "`)" if item else "") + " in the NAMESPACE only. No `.cls` was "
         "written, so nothing has updated the production class on disk and no gate sees this.\n\n"
-        "Pull it back: `iris_doc(mode=get)` the production class and Write it to `src/`. "
-        "Tests run against the namespace and will stay green either way, which is exactly why "
-        "this goes unnoticed until a conformance byte-compare (CR-12) finds the tree no longer "
-        "reproduces what is running."
+        "Pull it back, and VERIFY before you write (#401):\n"
+        "  1. `iris_doc(mode=get)` the production class.\n"
+        "  2. Check the returned XData actually contains " +
+        ("`" + item + "`" if item else "the item you just changed") + ". Do not skip this: "
+        "`iris_production_item` may change the namespace WITHOUT saving the class, in which "
+        "case `get` returns the production as it was and writing it to disk makes the tree "
+        "stale in the other direction (iris-interop-dev#408, open).\n"
+        "  3. If it IS there, Write it to `src/` and you are done.\n"
+        "  4. If it is NOT, edit the file on disk instead -- add the `<Item>` inside the "
+        "existing `</Production>`, keep every `&lt;` / `&gt;` entity exactly as it is in the "
+        "surrounding XML, then `iris_doc(mode=put)` and `iris_production(action=update)`.\n\n"
+        "Step 2 exists because the old advice was just \"get it and write it\": hand-rebuilding "
+        "the XML after that produced a lost escape and `ErrInvalidProduction`, about 3 minutes "
+        "in a timed run. A check that can be performed beats advice that assumes an answer.\n\n"
+        "Tests run against the namespace and stay green either way, which is why this goes "
+        "unnoticed until a conformance byte-compare (CR-12) finds the tree no longer reproduces "
+        "what is running."
     )
 
 
