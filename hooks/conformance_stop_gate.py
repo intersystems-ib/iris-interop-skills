@@ -460,6 +460,52 @@ def put_reached_iris(block):
     return True
 
 
+# A reviewer that was LAUNCHED is not a reviewer that RAN.
+#
+# `reviewed` used to be set the moment an Agent(subagent_type=...conformance-reviewer) tool_use
+# appeared, with no look at its outcome -- the same "match the call, never the result" defect
+# #157 fixed for puts. It never propagated here.
+#
+# Measured, not inferred. In the demo project's transcripts, 28 Agent calls: 26 resolved with a
+# real result, and 2 were launched with run_in_background=true -- one of them the
+# conformance-reviewer, at 2026-09-27T07:23:24. Its whole tool_result is the launch notice:
+#
+#   "Async agent launched successfully. ... The agent is working in the background. You will be
+#    notified automatically when it completes. You know nothing about its results until that
+#    notification arrives"
+#
+# So that session set reviewed=True, the Stop gate allowed, and the turn could end with no
+# review verdict in existence -- the gate's one job, defeated by a flag.
+#
+# NOTE for anyone chasing this from #401: the string to match is "Async agent launched", NOT
+# `async_launched`. The latter appears in Bash and StructuredOutput results in the same
+# transcripts and belongs to neither the Agent tool nor this gate; #401 item 3 cited it as
+# evidence about Agent and it is not.
+# BOTH alternatives are strings only a launch notice says. "working in the background" was in a
+# first draft and taken out: a reviewer legitimately describing a polling BO could write it, and
+# that would make a REAL verdict read as a launch. A guard on a blocking gate must not be wider
+# than the thing it names.
+LAUNCH_ONLY = re.compile(
+    r"Async agent launched"
+    r"|know nothing about its results until that notification", re.I)
+
+
+def review_ran(block):
+    """True when a reviewer Agent call produced an actual result.
+
+    Errs toward BLOCKING, deliberately, and the cost is bounded: this gate fires at most once
+    per session (the latch), so a review that really did finish in the background costs one
+    extra interruption, which the model clears by saying so and stopping again. A review that
+    never ran costs an unreviewed production shipped as done. Those are not symmetrical.
+
+    No result at all is the in-flight case and also reads as not-run -- if the turn is ending
+    while the reviewer has not reported, that is precisely the situation to interrupt.
+    """
+    if not isinstance(block, dict):
+        return False
+    return not LAUNCH_ONLY.search(_result_text(block))
+
+
 def get_says_absent(block):
     """True only for the exact NOT_FOUND envelope iris_doc returns for a missing document.
 
@@ -534,8 +580,13 @@ def scan_transcript(path, cutoff=0.0):
                     if not isinstance(inp, dict):
                         continue
 
+                    # Deferred, not decided here: the tool_result arrives LATER in the
+                    # transcript, and whether the reviewer actually RAN is in that result.
+                    # Same shape as the puts below -- see review_ran().
                     if REVIEWER_AGENT in str(inp.get("subagent_type") or ""):
-                        reviewed = True
+                        events.append(("review", block.get("id"), None, None))
+                    # Loading the skill is synchronous: there is no launch/complete gap to
+                    # care about, so this one is decided on sight.
                     if REVIEW_SKILL in str(inp.get("skill") or ""):
                         reviewed = True
 
@@ -575,6 +626,9 @@ def scan_transcript(path, cutoff=0.0):
         if kind == "del":
             put.discard(cname)
             srcs.pop(cname, None)
+        elif kind == "review":
+            if review_ran(results.get(tid)):
+                reviewed = True
         elif kind == "get":
             if get_says_absent(results.get(tid)):
                 put.discard(cname)
@@ -774,6 +828,9 @@ def main():
             "  Agent(subagent_type=\"iris-interop-skills:conformance-reviewer\")\n"
             "    — the full pass; re-verifies tests through the real iris_test rather than "
             "trusting a self-graded [SqlProc], which is CR-7.\n"
+            "    WAIT FOR ITS RESULT. A reviewer launched in the background has not reviewed "
+            "anything yet, and this gate counts the verdict, not the launch — so pass "
+            "run_in_background=false, or stop again once the notification has arrived.\n"
             "  or Skill(iris-interop-skills:conformance-review) to review inline.\n\n"
             "If the criteria genuinely do not apply here, say so and stop again — this will not "
             "fire again for the same classes. It fires again only if you write NEW classes into "
