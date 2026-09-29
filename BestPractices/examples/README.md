@@ -110,6 +110,12 @@ its siblings.
 | §5.22 | Oracle: each absence asserted next to a presence from the same query, plus the `element_key` type split | `ch05_bpl_dtl/tdd-list-collection-projection.cls` |
 | §5.23 | Oracle: asserts that `tdd`'s two weak assertions BOTH pass on a BPL whose every `<call>` failed | `ch05_bpl_dtl/tdd-testproduction-bpl.cls` |
 | §5.23 | Fixture, deliberately carrying the §5.21 defect so the assertion gap is demonstrable | `ch05_bpl_dtl/bpl-scope-swallow-fixture.cls` |
+| §5.26 | BPL `<foreach>` accumulate template — N driven by the DATA, not by branches written at authoring time (contrast §5.19) | `ch05_bpl_dtl/bpl-foreach-accumulate.cls` |
+| §5.26 | The accumulating DTL: `create='existing'` beyond subtransforms, so one DTL called N times ADDS to one target | `ch05_bpl_dtl/dtl-append-into-existing.cls` |
+| §5.26 | Process input — the collection the `<foreach>` walks | `ch05_bpl_dtl/msg-cycle-req.cls` |
+| §5.26 | One call's answer, carrying the key BACK because `<transform aux=>` is parsed by nothing | `ch05_bpl_dtl/msg-facility-cycle-rsp.cls` |
+| §5.26 | The accumulating target — one for the whole loop, hence `instantiate='1'` | `ch05_bpl_dtl/msg-cycle-batch-req.cls` |
+| §5.26 | Oracle: asserts on state after the SECOND call, the only place `create='new'` and `create='existing'` differ | `ch05_bpl_dtl/tdd-foreach-accumulate.cls` |
 | §5.23 | Fixture: the swallowing and propagating BPLs in one production, so the contrast is asserted | `ch05_bpl_dtl/production-bpl-assertions.cls` |
 | §5.24 | A message holding the same data as a typed list AND a legacy delimited string | `ch05_bpl_dtl/msg-dual-representation.cls` |
 | §5.24 | The transform that fills both — `Serialize()` before `$ListToString`, and rejects a delimiter collision | `ch05_bpl_dtl/dtl-fill-both-representations.cls` |

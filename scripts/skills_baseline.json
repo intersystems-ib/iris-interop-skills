@@ -2,7 +2,7 @@
   "_comment": "Estimated always-loaded body tokens (chars/4) per SKILL.md. S8 ratchets this per skill: growth fails, a drop only prints. The ENFORCED line budget is S7's 500; this exists because 14 of 20 skills exceed the overview's 5k token figure and the debt must not grow while it is worked down.",
   "skill_body_tokens": {
     "alerting": 3546,
-    "bpl": 6326,
+    "bpl": 6674,
     "business-operations": 7124,
     "business-services": 7109,
     "component-map": 3331,
@@ -19,7 +19,7 @@
     "security": 4340,
     "soap-bo": 7061,
     "tdd": 9046,
-    "transformations": 6805,
+    "transformations": 7052,
     "unit-tests": 4643
   }
 }

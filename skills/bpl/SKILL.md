@@ -379,13 +379,28 @@ Four shapes cover most orchestration needs. Reach for the closest match before a
 | **Generic message router rule (fan-out)** | One source `msgClass`, multiple `<send>` to SQL + SOAP + REST destinations in the same `<when>` block. The canonical fan-out pattern (see the `<ruleSet>` example above). |
 | **Custom BPL business process** | Sync `<call>` to a BO with context-vars, response handlers, and decision logic on the returned data. Drive it under test via `EnsLib.Testing.Service.SendTestRequest` (see `tdd`). |
 | **Alerts router rule** | Subscribes to `Ens.AlertRequest`, fans out to a file-logger BO; xref `alerting` for the dedup function-set pattern that goes on top. |
+| **`<foreach>` accumulate** | One `<call>` per element of a collection ON THE REQUEST, the answers appended to a `collection='list'` context property, and a `<transform>` whose DTL runs `create='existing'` so every turn ADDS to one target. Reach for this when N comes from the data; reach for `<flow>`/`<sync>` when you know N as you write the XML. |
 
 **Before writing either, read its example** — compiled against live IRIS 2026.1:
 
 - Custom BPL — `assets/bpl-order-process.cls` (§5.6): `<context>` property, a sync `<call>` with `callrequest` bindings, a `<code>` activity.
 - Fan-out routing rule — `assets/routing-rule-fanout.cls` (§5.8): one `<rule>` per source `msgClass`, two `<send>` inside one `<when>`, correct engine/assist pairing, and the `!=` / `Document.` condition traps in its header.
+- **Before writing a loop that gathers N answers into one request, read**
+  `references/foreach-accumulate.md` — which shape to pick, the four things that make it
+  work (three silent when wrong), and why `aux` is not how you pass the key. Template:
+  `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch05_bpl_dtl/bpl-foreach-accumulate.cls`
+  (§5.26). **`create='new'` compiles identically and delivers only the LAST answer.**
 
 The pre-flight `ValidateProduction()` validator shown above is the full version (item-class check **plus** rule-XData parsing of `transform=`/`target=`). A lighter starter that only checks item classes is fine early on — extend it with the rule-XData parser as the production matures.
+
+## `<transform aux='...'>` is parsed by nothing — the value arrives EMPTY
+
+`Ens.BPL.Parser:parseTransform` reads **`class`, `source` and `target` only** (measured, IRIS for
+Health 2026.1 Build 235U), even though `Ens.BPL.Transform` has an `Aux` property its generator
+emits. So `<transform ... aux='context.Key'/>` compiles clean, generates
+`Transform(source, .iscTemp, "")`, and the DTL sees an empty string — no compile error, no runtime
+error, just a value that never arrives. **Carry it on the source message, or on the target before
+the `<transform>`; keep `aux` for DTLs the router or your own code calls.**
 
 ## What this skill does NOT yet do
 
