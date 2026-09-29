@@ -30,9 +30,23 @@ What's the source/target shape?
 |---|---|---|
 | **New** | Empty | Different version, different structure, or you want explicit control over every segment. |
 | **Copy** | Full copy of source | Same shape, only a few fields change (e.g. add facility code in MSH:6). Most efficient when the structure matches. |
-| **Existing** | Whatever the caller passed in | Subtransforms — the caller has already initialised the target and is calling you to mutate part of it. |
+| **Existing** | Whatever the caller passed in | Two uses. Subtransforms — the caller has already initialised the target and is calling you to mutate part of it. **And accumulation** — a BPL `<transform>` calling the same DTL once per loop turn so each call ADDS to one target (see below). |
 
 Default: **Copy** for same-version HL7, **New** for cross-version or cross-shape. Never default to New "to be safe" — Copy is safer when shapes match because nothing gets accidentally dropped.
+
+## `Create=Existing` as the accumulate channel
+
+A BPL calling the same DTL once per `<foreach>` turn needs each call to add to ONE target. That is
+`create='existing'` — the DTL fills the object it was **handed**, so the same OREF comes back and the
+appends survive the turn (which is why the BPL context property needs `instantiate='1'`).
+**`create='new'` compiles identically** and the process then delivers only the last answer, with
+nothing in the Event Log.
+
+**Before writing an accumulating DTL, read** `references/create-existing-accumulate.md` — the
+generated-code mechanism, the four artefacts (§5.26) and why `aux` cannot carry the key.
+`Ens.BPL.Parser` reads `class`/`source`/`target` only, so `<transform ... aux='…'/>` compiles clean
+and the DTL receives `""`; put the value on the source message, or on the target before the
+transform.
 
 ## Subtransforms
 

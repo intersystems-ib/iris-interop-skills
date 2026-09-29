@@ -2692,6 +2692,85 @@ is raised anywhere. Same family as §7.1 — the rule matched nothing and said s
 - **Example.** The complete skeleton is inline in `bpl`'s SKILL.md (and compiled by tier 3 there);
   `examples/ch05_bpl_dtl/routing-rule-fanout.cls` is the full worked case.
 
+### 5.26 Gathering N responses into ONE target: `<foreach>` + a collection context property + `create='existing'`
+
+"Call the same operation once per key, combine the answers into one request, make one final call."
+It is an ordinary requirement — an hourly cycle for every facility, a price for every vendor — and
+the declarative shape for it was in none of these skills, so the thing a model reaches for instead
+is a string-merge method on a message class or a `<code>` block, which is the imperative habit §5.7
+exists to break.
+
+**It is not §5.19's `<flow>`/`<sync>`**, and the difference decides which one you want:
+
+| | branches | order | join |
+|---|---|---|---|
+| `<flow>` / `<sync>` (§5.19) | written at **authoring** time | parallel | `<sync calls='a,b'>` by call NAME |
+| `<foreach>` (here) | driven by the **data** | sequential | accumulated into one target |
+
+A facility list that arrives *in the request* cannot be a `<flow>`: you would have to know N when
+you wrote the XML.
+
+The template is `examples/ch05_bpl_dtl/bpl-foreach-accumulate.cls` with
+`dtl-append-into-existing.cls`. Four things make it work, and three of them are silent when wrong:
+
+1. **`instantiate='1'` on the target context property.** `create='existing'` hands the DTL the
+   object the process is holding. Handed a null one, it has nothing to fill.
+2. **`action='append'` on the response assign.** `set` keeps only the last answer.
+3. **`<scope>` INSIDE the `<foreach>`.** One failed call becomes a recorded skip and the loop goes
+   on; a `<faulthandlers>` outside the loop ends the process on the first failure.
+4. **`create='existing'` on the DTL.** `transformations` presents this attribute for
+   *subtransforms* only — "the caller has already initialised the target". Same attribute, second
+   use: it is what lets a BPL call one DTL once per turn and have each call ADD to one target.
+
+Why (4) works, read off the generated thread code rather than assumed:
+
+```
+Set iscTemp = context.Batch
+Set status  = ##class(Example.DT.AppendCycle).Transform(source, .iscTemp, aux)
+Set context.Batch = iscTemp
+```
+
+The DTL fills the object it was handed, so the same OREF comes back and the appends survive the
+turn. `create='new'` **compiles identically** and the process then delivers only the last answer,
+with nothing in the Event Log. `tdd-foreach-accumulate.cls` asserts on state after the SECOND call
+for exactly that reason — a `create='new'` mutant is killed by three of its four tests.
+
+#### `<transform aux='...'>` is parsed by nothing — the value arrives EMPTY
+
+The natural way to tell that DTL *which* facility an answer came from is `aux`, and it looks
+supported from every direction: `aux` is documented for DTLs (the third argument of `Transform()`,
+filled by the router for a rule's `<send transform>` — `aux.RuleReason`, `aux.RuleUserData`), and
+`Ens.BPL.Transform` **carries an `Aux` property** whose own comment reads *"the name of the
+auxiliary value passed to the Transform() method"*, which its code generator emits and its XML
+writer writes back.
+
+**`Ens.BPL.Parser:parseTransform` reads three attributes.** Measured on IRIS for Health 2026.1
+(Build 235U), the whole 31-line method:
+
+```
+Set tTransform.Class  = ^||%ISC.Ens.BPLData(..Key,pIndex,"a","class")
+Set tTransform.Source = ^||%ISC.Ens.BPLData(..Key,pIndex,"a","source")
+Set tTransform.Target = ^||%ISC.Ens.BPLData(..Key,pIndex,"a","target")
+```
+
+No `aux`, and none of the attribute names the parser reads across all BPL elements is `aux` or a
+variant. So `<transform class='...' source='...' target='...' aux='context.Key'/>` compiles clean
+and generates `Transform(source, .iscTemp, "")`. No compile error, no runtime error, and a DTL line
+that reads `aux` produces empty output while everything else about the transform works — which is
+how it was found: appended items correct, the key column blank.
+
+This is a **missing BPL feature, not a broken documented one**: the BPL `<transform>` element
+documents only `class`, `source` and `target`, in both the BPL reference and *Developing BPL
+Processes*, and the Portal BPL editor has no field for it either.
+
+**Carry the value instead, in this order:**
+
+1. **On the source message.** `Example.MSG.FacilityCycleRsp.FacilityCode` exists for this reason —
+   the operation echoes the key back and the transform reads it off `source`.
+2. **On the target, before the `<transform>`.** With `create='existing'` the DTL receives that same
+   object, so the target is a declarative channel from the process into the DTL.
+3. **Keep `aux` for DTLs called from a routing rule or from code**, where the platform fills it.
+
 ### 6.1 Generated SOAP/WSDL gotchas — patterns to fix on every import
 
 When you import a vendor WSDL in Ensemble/IRIS, the generated SOAP client classes nearly always need at least one of these patches.
