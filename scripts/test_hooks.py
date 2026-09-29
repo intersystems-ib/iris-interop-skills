@@ -1544,6 +1544,44 @@ t = transcript([rec_id(-300, "iris_doc", PUT_LIVE, "tu_p2"),
 clear(t)
 check("the inline SKILL path still counts", "ALLOW", stop(t, work))
 
+# --------------------------------------------------------------------------------------
+print("\n#401 item 3  the bootstrap must tell the caller to WAIT for a delegated agent")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# MEASURED, and I had this backwards once. In HEADLESS `claude -p` runs an Agent call with
+# run_in_background UNSET starts in the BACKGROUND -- 3 of 3, from Claude Code's own
+# `subagent_stats.started_in_background: 1` in the type=result record -- and the tool_result is
+# only the launch notice. Control: the same subagent_type with the flag False returns a real
+# 1132-char result and started_in_background: 0.
+#
+#   rh/i3-p3  interop-builder       UNSET -> launch notice   started_in_background=1
+#   rh/i3-p4  interop-builder       UNSET -> launch notice   started_in_background=1
+#   rh/i3-p6  conformance-reviewer  UNSET -> launch notice   started_in_background=1
+#   rh/i4-p3  interop-builder       False -> real result      started_in_background=0
+#
+# My first pass called this premise unsupported, measuring the INTERACTIVE transcripts under
+# ~/.claude/projects/, where a flagless call does resolve foreground. Different population from
+# the headless rehearsal runs the report was about. Recorded here because the wrong corpus is
+# what made a correct report look wrong.
+#
+# COVERAGE: this asserts the bootstrap SAYS it. It cannot make a caller comply -- the Stop gate's
+# reviewer branch is the enforcement for the one delegation that can be checked after the fact.
+sys.path.insert(0, os.path.join(ROOT, "hooks"))
+import interop_bootstrap as _boot  # noqa: E402
+
+check("bootstrap names the flag", True, "run_in_background=false" in _boot.MSG)
+check("...and says to wait for the result", True, "wait for its" in _boot.MSG)
+# It must cover EVERY delegation, not only the builder: i3-p6 was the conformance-reviewer.
+check("...scoped to every Agent delegation", True,
+      "EVERY Agent(...) delegation" in _boot.MSG)
+# Positive control: the MSG really is what the hook emits, not a constant nothing reads.
+_emitted = subprocess.run(
+    [sys.executable, os.path.join(ROOT, "hooks", "interop_bootstrap.py")],
+    input=json.dumps({"hook_event_name": "SessionStart"}), capture_output=True, text=True)
+_ctx = json.loads(_emitted.stdout)["hookSpecificOutput"]["additionalContext"]
+check("positive control — it reaches the output", True,
+      "run_in_background=false" in _ctx and _ctx.startswith("[IIS-BOOTSTRAP] "))
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)
