@@ -99,6 +99,22 @@ def _msg(root=None):
 )
 
 
+def _scm_warning(root):
+    """Surface an unrecognised IRIS_INTEROP_SCM once, at session start.
+
+    Falling back to `files` on a typo is right -- it keeps blocking gates exactly as they were --
+    but doing it SILENTLY leaves an operator who meant `ccr` with every CCR gate inactive and no
+    signal. The MCP reports the same thing as `scm_mode_warning` on check_config.
+    """
+    if iis_scm is None:
+        return ""
+    try:
+        w = iis_scm.unrecognised(root)
+    except Exception:
+        return ""
+    return ("\n\n" + iis_scm.MARKER + w) if w else ""
+
+
 def _root(data):
     """The project dir, for iis_scm's .claude/iis-scm fallback.
 
@@ -124,7 +140,7 @@ def main():
         pass
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "SessionStart",
-        "additionalContext": MARKER + _msg(_root(data))}}))
+        "additionalContext": MARKER + _msg(_root(data)) + _scm_warning(_root(data))}}))
 
 
 if __name__ == "__main__":

@@ -1682,6 +1682,20 @@ os.environ["IRIS_INTEROP_SCM"] = "CRR"
 check("a typo falls back to files", "files", iis_scm.scm_mode(_proj410()))
 del os.environ["IRIS_INTEROP_SCM"]
 
+# A typo must fall back to files AND SAY SO. Silence there leaves an operator who meant ccr with
+# every CCR gate inactive and no way to find out -- the negative-fact shape this repo keeps
+# removing. The MCP reports the same thing as `scm_mode_warning` on check_config, which is where
+# this idea came from.
+check("a typo is reported, not swallowed", True,
+      "not a source-control mode" in iis_scm.unrecognised(_proj410(iis_scm="CRR\n")))
+check("...naming the raw value", True, "'CRR'" in iis_scm.unrecognised(_proj410(iis_scm="CRR\n")))
+check("a valid mode warns about nothing", "", iis_scm.unrecognised(_proj410(iis_scm="ccr\n")))
+check("and neither does an absent one", "", iis_scm.unrecognised(_proj410()))
+# Case and whitespace are accepted, matching the MCP side exactly -- one setting must not mean two
+# things across the two halves (their catch; verified both ways before answering).
+for _v in ("CCR", " Ccr ", "ccr"):
+    check("`%s` resolves to ccr" % _v, "ccr", iis_scm.scm_mode(_proj410(iis_scm=_v + "\n")))
+
 # --- src_before_iris: THE gate that blocked a CCR session
 check("ccr, document never read -> DENY", "DENY", srcgate410(_C410))
 check("ccr, an earlier iris_doc get -> ALLOW", "ALLOW", srcgate410(_C410, [_GET]))
@@ -1691,7 +1705,8 @@ check("ccr, an earlier iris_doc head -> ALLOW", "ALLOW", srcgate410(_C410, [_HEA
 # Per document, not "any read happened".
 check("ccr, a get of a DIFFERENT class -> DENY", "DENY", srcgate410(_C410, [_OTHER]))
 # Accepted so nothing needs changing when iris-interop-dev#417 exposes the tool. Not reachable
-# today: iris_source_control is not one of the 32 names in INTEROP_TOOLS.
+# today: iris_source_control is not in INTEROP_TOOLS. (No count here -- it is about to become 33
+# as the MCP exposes the tool, and a number in prose always rots. Read the list.)
 check("ccr, a checkout (pending #417) -> ALLOW", "ALLOW", srcgate410(_C410, [_CHECKOUT]))
 # Must fail OPEN: denying because the hook could not look is the failure this mode removes.
 check("ccr, unreadable transcript -> ALLOW", "ALLOW",

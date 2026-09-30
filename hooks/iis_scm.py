@@ -72,6 +72,28 @@ def scm_mode(root=None):
     return FILES
 
 
+def unrecognised(root=None):
+    """The raw value when it resolves to `files` by FALLBACK rather than by intent, else "".
+
+    A SWALLOWED TYPO IS A NEGATIVE FACT, which is the shape this repo keeps removing: the debug
+    trace above is invisible unless IRIS_INTEROP_HOOK_DEBUG is set, so an operator who typed
+    `IRIS_INTEROP_SCM=CRR` would sit in `files` mode with every CCR gate silently inactive and no
+    way to find out. The bootstrap surfaces this once per session.
+
+    Matching the MCP side, which returns the same thing as `scm_mode_warning` on `check_config`
+    (iris-interop-dev#417) -- their idea, and they were right that the trace alone is not enough.
+    """
+    raw = os.environ.get("IRIS_INTEROP_SCM")
+    src = "IRIS_INTEROP_SCM"
+    if not (raw or "").strip():
+        raw, src = _from_file(root), SCM_FILE
+    val = (raw or "").strip()
+    if not val or val.lower() in (FILES, CCR):
+        return ""
+    return "%s=%r is not a source-control mode; using %r. Valid: %r or %r." % (
+        src, val[:40], FILES, FILES, CCR)
+
+
 def _from_file(root):
     if not root:
         return ""
@@ -97,7 +119,7 @@ def is_ccr(root=None):
 # Stop, SubagentStop, SessionStart and UserPromptSubmit alike, so a PreToolUse gate can read it.
 #
 # THE CHECKOUT BRANCH IS NOT REACHABLE TODAY AND THAT IS DELIBERATE. `iris_source_control` exists
-# in the MCP (crates/.../src/tools/scm.rs) but is NOT one of the 32 names in `INTEROP_TOOLS`, which
+# in the MCP (crates/.../src/tools/scm.rs) but is NOT in `INTEROP_TOOLS`, which
 # is the profile this plugin targets -- exposing it is iris-interop-dev#417. So no transcript can
 # contain a checkout call yet. It is accepted here anyway so that the day #417 lands nothing needs
 # changing, and every message this mode writes prescribes `iris_doc(mode=get)`, which works now.
