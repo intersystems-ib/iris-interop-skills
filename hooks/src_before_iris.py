@@ -50,6 +50,10 @@ try:
     import iis_scope
 except Exception:
     iis_scope = None    # a broken sibling must not make this gate crash or deny wrongly
+try:
+    import iis_scm
+except Exception:
+    iis_scm = None      # a broken sibling leaves the default (git) gate exactly as it is
 
 
 def deny(rule, reason):
@@ -116,6 +120,33 @@ def on_disk(root, cls):
     return False, _match(iis_scope.walk_files(root, whole_project=True), cls)
 
 
+def ccr_reason(cls):
+    """Why the put is refused, and the one action that clears it.
+
+    Deliberately prescribes a call the agent can make TODAY. `iris_source_control` exists in the
+    MCP but is NOT among the 32 names in INTEROP_TOOLS, which is the profile this plugin targets
+    (exposing it is iris-interop-dev#417), so telling anyone to "check it out" as the first step
+    would be advice that cannot be followed here yet. `iris_doc` can be.
+    """
+    return (
+        "`" + cls + "` has not been read in this session, and this project is in CCR mode "
+        "(IRIS_INTEROP_SCM=ccr). Under CCR the IRIS namespace is the source of truth, so a put "
+        "that has not read the current version can silently replace work that is only on the "
+        "server -- there is no local copy to notice it afterwards.\n\n"
+        "Read it first. Either call clears this gate, and which one you use is the answer to "
+        "\"does it already exist?\":\n"
+        "  - it exists      iris_doc(mode=get,  name=\"" + cls + ".cls\", namespace=\"<NS>\")\n"
+        "  - it is new      iris_doc(mode=head, name=\"" + cls + ".cls\", namespace=\"<NS>\")\n\n"
+        "Then edit and put. Check the document out first if your workflow requires it, and undo "
+        "the check-out on anything you did not change.\n\n"
+        "This gate cannot ask IRIS who holds the check-out, so it reads the session transcript "
+        "instead: a get or a head of this document is the evidence. A check-out made outside this "
+        "session is invisible to it -- read the document and the gate is satisfied.\n\n"
+        "NEVER Bundle, Upload, move a CCR through its workflow or peer-review your own change; "
+        "those are the human's."
+    )
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -134,7 +165,24 @@ def main():
     if not cls or GENERATED.search(name):
         return
 
-    root = project_root()
+    root = data.get("cwd") or project_root()
+
+    # --- #410: under CCR the whole question changes ------------------------------------------
+    #
+    # There, the BASE namespace is the source of truth and a local src/ is invisible to CCR, so
+    # "does this class have a file on disk?" is the wrong question -- and unanswerable anyway,
+    # because CCR exports classes as XML by default while this gate only ever matched `.cls`.
+    # A CCR session was therefore blocked on its first edit with no way to comply.
+    #
+    # The right question is whether this session has READ the document before overwriting it, and
+    # that a hook CAN answer: `transcript_path` is present on PreToolUse -- verified against 24 of
+    # 24 real captured payloads, not assumed.
+    if iis_scm is not None and iis_scm.is_ccr(root):
+        if iis_scm.seen_document(data.get("transcript_path"), cls):
+            return
+        deny("CCR", ccr_reason(cls))
+    # -----------------------------------------------------------------------------------------
+
     if not has_source_tree(root) and not INTEROP_NAME.search(cls):
         # Scratch namespace, no source tree, and the class is not named like an interop
         # component -> genuinely none of this hook's business.

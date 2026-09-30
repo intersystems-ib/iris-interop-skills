@@ -89,6 +89,10 @@ try:
     import iis_scope
 except Exception:
     iis_scope = None          # same rule: degrade to the pre-#401 whole-project walk
+try:
+    import iis_scm
+except Exception:
+    iis_scm = None            # same rule: degrade to the default (git) behaviour
 
 # Every exit path in this hook is silent by design — an allowing hook writes no
 # attachment and produces no transcript event. That makes a hook that never fires
@@ -659,6 +663,23 @@ def strip_cls(name):
     return re.sub(r"\.cls$", "", name, flags=re.I)
 
 
+def _ccr_put_list(ccr, put):
+    """In CCR mode, name the documents this session wrote so the human can reconcile them.
+
+    Empty string in the default mode, so the git message is byte-identical to before (#410).
+    """
+    if not ccr or not put:
+        return ""
+    listed = "\n".join("  - " + c for c in sorted(put)[:20])
+    more = "\n  ... and {} more".format(len(put) - 20) if len(put) > 20 else ""
+    return ("\n\n" + iis_scm.MARKER + "CR-12 is skipped in CCR mode: the namespace is the source of "
+            "truth, so comparing it against `src/` would ask you to put a stale local copy back. "
+            "Instead, these {} document(s) were written into IRIS this session — the human should "
+            "confirm each one appears in the CCR uncommitted-changes queue, and undo the check-out "
+            "on anything not actually changed. This hook cannot read that queue.\n\n{}{}"
+            .format(len(put), listed, more))
+
+
 def block(rule, reason):
     """Block with a stable leading marker (#162).
 
@@ -701,7 +722,19 @@ def main():
     # same problem, so the more faithfully a student followed a one-component-per-step workbook,
     # the more often the hook stopped them.
     root = project_root(data)
-    orphans = find_orphans(root, put)
+    ccr = iis_scm is not None and iis_scm.is_ccr(root)
+
+    # #410: CR-12 does not apply under CCR. It asks the namespace and `src/` to agree byte for
+    # byte, and there the namespace IS the truth -- "make them agree" is an instruction to put a
+    # stale local copy back over the checked-out server version, which is the one outcome CCR
+    # users must not be pushed toward.
+    #
+    # The issue proposed replacing it with a Stop-gate listing of the documents put this session,
+    # for the human to reconcile against the CCR uncommitted queue. That listing is here, but it
+    # rides on the review block rather than becoming a NEW interruption: a gate that stops every
+    # CCR session at the end just to print a list is the kind that gets muted, and the hook cannot
+    # query the queue itself so the list is advisory either way.
+    orphans = [] if ccr else find_orphans(root, put)
 
     # --- #169: the remedy has to be RECOVERABLE, not just mandatory ----------
     #
@@ -835,6 +868,7 @@ def main():
             "If the criteria genuinely do not apply here, say so and stop again — this will not "
             "fire again for the same classes. It fires again only if you write NEW classes into "
             "IRIS without reviewing them.".format(len(put))
+            + _ccr_put_list(ccr, put)
         )
 
 

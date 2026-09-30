@@ -23,7 +23,7 @@ documented introspection path and are never gated (#221); system packages are no
 
 Everything else is allowed (no output = allow). Deny is emitted as a PreToolUse permissionDecision.
 """
-import sys, json, re
+import sys, json, re, os
 
 # wrong name segment -> correct Tipo abbreviation
 NONSTD = {
@@ -267,6 +267,32 @@ NS_REQUIRED = {
 }
 
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import iis_scm
+except Exception:
+    iis_scm = None      # a broken sibling leaves every rule blocking, exactly as today
+
+
+def advise(rule, reason):
+    """Say it without blocking — the CCR-mode form of the naming rule (#410).
+
+    CCR work is mostly brownfield: an existing customer system with its own conventions. Denying a
+    put because a class is called `Pkg.Service.Foo` blocks EDITING it at all, and renaming under
+    CCR is a delete plus an add -- a bigger change record and every production reference broken.
+    So the rule keeps teaching and stops refusing.
+
+    PostToolUse is the wrong event for this (the put has already happened by then), so it is
+    emitted as PreToolUse additionalContext: the model sees it before it acts, and nothing is
+    refused.
+    """
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "additionalContext": iis_scm.MARKER + reason,
+    }}))
+    sys.exit(0)
+
+
 def deny(rule, reason):
     """Emit a deny whose reason LEADS with a stable marker (#162).
 
@@ -445,7 +471,11 @@ def main():
         type_segs = segs[1:-1] if len(segs) > 2 else []
         for seg in type_segs:
             if seg in NONSTD:
-                deny(
+                _name_verdict = deny
+                if iis_scm is not None and iis_scm.is_ccr(
+                        data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR")):
+                    _name_verdict = advise
+                _name_verdict(
                     "NAME",
                     "Naming convention: '%s' uses the non-standard package segment '.%s.' for a "
                     "class you are AUTHORING. iris-interop uses <Package>.<Tipo>.<Name> with Tipo "

@@ -36,6 +36,10 @@ try:
     import iis_scope
 except Exception:
     iis_scope = None    # a broken sibling must leave this guard silent, never noisy
+try:
+    import iis_scm
+except Exception:
+    iis_scm = None      # same rule: a broken sibling leaves the default (git) behaviour
 
 # Same exemption as src_before_iris: these are produced in the namespace by design and
 # exported afterwards, so the disk copy legitimately lags until the export step.
@@ -217,11 +221,31 @@ def check_production_item(ti, resp):
     )
 
 
+def _ccr(data):
+    """True when this project uses CCR (#410), so this guard must stay quiet.
+
+    BOTH of its warnings assume the git model and are wrong under CCR. The doc warning compares a
+    put against a local file, but the namespace is the truth there and "make them agree" invites
+    putting the stale local copy back. The production warning tells the model to pull the class to
+    `src/`, and CCR exports productions DECOMPOSED into PTD items, so there is no local
+    Production.cls to be stale.
+
+    Inverting them ("your local copy is behind the server") would need server state a hook cannot
+    see, so silence is the honest option rather than a guess.
+    """
+    if iis_scm is None:
+        return False
+    root = (data.get("cwd") if isinstance(data, dict) else None) or None
+    return iis_scm.is_ccr(root)
+
+
 def main():
     try:
         data = json.load(sys.stdin)
     except Exception:
         return                                   # never disturb a session on a hook bug
+    if _ccr(data):
+        return                                   # #410: both warnings assume git -- see _ccr
     tool = str(data.get("tool_name") or "")
     ti = data.get("tool_input", {}) or {}
     resp = data.get("tool_response", data.get("tool_output", {}))
