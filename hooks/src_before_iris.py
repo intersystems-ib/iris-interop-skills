@@ -124,7 +124,7 @@ def ccr_reason(cls):
     """Why the put is refused, and the one action that clears it.
 
     Deliberately prescribes a call the agent can make TODAY. `iris_source_control` exists in the
-    MCP but is NOT among the 32 names in INTEROP_TOOLS, which is the profile this plugin targets
+    MCP but is NOT in INTEROP_TOOLS, which is the profile this plugin targets
     (exposing it is iris-interop-dev#417), so telling anyone to "check it out" as the first step
     would be advice that cannot be followed here yet. `iris_doc` can be.
     """
