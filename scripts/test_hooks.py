@@ -1766,6 +1766,45 @@ check("...naming the document", True, "Demo.BO.Ghost" in _ccr_reason410)
 # The git message must be byte-identical to before: no CCR text leaks into files mode.
 check("no CCR text in the files-mode block", False, "CCR" in _files_verdict)
 
+# --------------------------------------------------------------------------------------
+print("\n#410/#411  the CCR mode must be discoverable WITHOUT a hook")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# Hooks do not run on codex or opencode -- 0 of 676 and 0 of 289 measured runs (#115) -- so on
+# those CLIs nothing injects the mode, and the three "Under CCR" blocks are conditional on a mode
+# the model cannot determine. Worse than inert: the router's own default is "scaffold on local
+# disk", which under CCR is the stale-overwrite the whole mode exists to prevent, with no gate to
+# catch it afterwards.
+#
+# So the ROUTER -- always loaded, and the plugin's documented entry point -- must tell the model to
+# establish the mode by READING, which every agent can do on every CLI.
+#
+# COVERAGE: this asserts the instruction is present and ordered. It cannot make a non-Claude agent
+# follow it; that is the difference between a fallback and an enforcement, and it is why the hook
+# still exists for the one CLI that runs hooks.
+_router = io.open(os.path.join(ROOT, "skills", "interop", "SKILL.md"), encoding="utf-8").read()
+# Whitespace-normalised, because the prose is hard-wrapped and a line-sensitive substring test
+# fails on a sentence that IS present -- the same reason C17 normalises before comparing.
+_router_flat = _re.sub(r"\s+", " ", _router)
+
+check("router tells the model to establish the mode", True,
+      "ESTABLISH WHICH SOURCE-CONTROL MODEL" in _router)
+# All four sources, in precedence order, because "check the env var" alone strands an untrusted
+# folder and "read the file" alone ignores the tool that will soon answer it.
+for _n, _src in (("check_config", "`check_config`"), ("env var", "`IRIS_INTEROP_SCM`"),
+                 ("the file", "`.claude/iis-scm`")):
+    check("...naming %s as a source" % _n, True, _src in _router)
+check("...and defaulting to files", True, "unrecognised → **`files`**" in _router_flat)
+# The operative instruction, not just the switch: an unread put is the harm.
+check("...and the never-overwrite-unread rule", True,
+      "never put a local copy over a version you have not read" in _router_flat)
+# It must say the hooks do not cover this, or a reader assumes a gate has their back.
+check("...and that hooks do not run on codex", True,
+      "Hooks do not run on codex or opencode" in _router_flat)
+# Pointers to where the per-topic detail lives -- the three skills #411 changed.
+for _sk in ("production-lifecycle", "hl7-schemas", "conformance-review"):
+    check("...pointing at %s" % _sk, True, "`" + _sk + "`" in _router)
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)
