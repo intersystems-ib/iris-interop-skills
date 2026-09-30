@@ -343,8 +343,17 @@ for _path in sorted(_glob.glob(os.path.join(ROOT, "hooks", "*.py"))):
                 isinstance(t, _ast.Name) and t.id == "MARKER" for t in _node.targets):
             _lit = getattr(_node.value, "value", None)
             _markers.setdefault(str(_lit), []).append("%s:%d" % (_fn, _node.lineno))
-    if "additionalContext" in _src and "MARKER" not in _src:
-        _unmarked.append("%s  emits additionalContext with no MARKER" % _fn)
+    # A COMMENT MUST NOT SATISFY A GUARD ABOUT CODE. The first version of this line asked only
+    # whether the string "MARKER" appeared anywhere in the file, and #410 walked straight through
+    # it: interop_conformance_gate.py gained an additionalContext emitter with a HARDCODED marker
+    # literal, and the check passed because an unrelated comment two hundred lines away said
+    # "See MARKERS below". Strip comments first, then require an actual assignment or a use of the
+    # shared constant.
+    _code = "\n".join(l.split("#", 1)[0] for l in _src.splitlines())
+    if "additionalContext" in _code and not (
+            _re.search(r"^\s*MARKER\s*=", _code, _re.M) or "iis_scm.MARKER" in _code):
+        _unmarked.append("%s  emits additionalContext with no MARKER constant "
+                         "(a hardcoded literal or a comment does not count)" % _fn)
 
 _dupes = ["%s at %s" % (k, ", ".join(v)) for k, v in sorted(_markers.items()) if len(v) > 1]
 check("every deny/block/guard site is marked", 0, len(_unmarked))
@@ -1569,11 +1578,15 @@ print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
 sys.path.insert(0, os.path.join(ROOT, "hooks"))
 import interop_bootstrap as _boot  # noqa: E402
 
-check("bootstrap names the flag", True, "run_in_background=false" in _boot.MSG)
-check("...and says to wait for the result", True, "wait for its" in _boot.MSG)
+# MSG became _msg(root) in #410 so rule 7 can differ by source-control mode. The delegation
+# clause is mode-INDEPENDENT, so it is asserted on both renderings -- if it ever moves into the
+# git-only half, CCR sessions would silently lose it.
+_boot_files = _boot._msg(None)
+check("bootstrap names the flag", True, "run_in_background=false" in _boot_files)
+check("...and says to wait for the result", True, "wait for its" in _boot_files)
 # It must cover EVERY delegation, not only the builder: i3-p6 was the conformance-reviewer.
 check("...scoped to every Agent delegation", True,
-      "EVERY Agent(...) delegation" in _boot.MSG)
+      "EVERY Agent(...) delegation" in _boot_files)
 # Positive control: the MSG really is what the hook emits, not a constant nothing reads.
 _emitted = subprocess.run(
     [sys.executable, os.path.join(ROOT, "hooks", "interop_bootstrap.py")],
@@ -1581,6 +1594,177 @@ _emitted = subprocess.run(
 _ctx = json.loads(_emitted.stdout)["hookSpecificOutput"]["additionalContext"]
 check("positive control — it reaches the output", True,
       "run_in_background=false" in _ctx and _ctx.startswith("[IIS-BOOTSTRAP] "))
+
+# --------------------------------------------------------------------------------------
+print("\n#410  IRIS_INTEROP_SCM=ccr — the disk-first gates invert under CCR")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# Under CCR the IRIS BASE namespace is the source of truth, a local src/ is invisible to CCR, and
+# CCR exports classes as XML while src_before_iris only ever matched `.cls` -- so a CCR session was
+# BLOCKED on its first edit with no way to comply, and nothing could switch the gate off.
+#
+# A hook cannot reach IRIS, so every CCR-mode check reads the session transcript instead. That is
+# sound: `transcript_path` is present on 24 of 24 real PreToolUse payloads captured from a live
+# project, along with PostToolUse, Stop, SubagentStop, SessionStart and UserPromptSubmit.
+#
+# COVERAGE: these assert the MODE SWITCH and each hook's verdict. They cannot check that a CCR
+# server accepts the result, and the whole section is a no-op on codex/opencode where no hook runs
+# at all (#115).
+sys.path.insert(0, os.path.join(ROOT, "hooks"))
+import iis_scm  # noqa: E402
+
+SRCGATE_410 = os.path.join(ROOT, "hooks", "src_before_iris.py")
+CG_410 = os.path.join(ROOT, "hooks", "interop_conformance_gate.py")
+
+
+def _scm_env(ccr, root):
+    e = dict(os.environ, CLAUDE_PROJECT_DIR=root)
+    if ccr:
+        e["IRIS_INTEROP_SCM"] = "ccr"
+    else:
+        e.pop("IRIS_INTEROP_SCM", None)
+    return e
+
+
+def _tr410(uses):
+    """A transcript of tool_use blocks: (tool, input) pairs."""
+    return transcript([
+        json.dumps({"message": {"content": [{"type": "tool_use", "name": t, "input": i}]}})
+        for t, i in uses])
+
+
+def _proj410(files=(), **cfg):
+    root = tempfile.mkdtemp()
+    for rel in files:
+        f = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(f), exist_ok=True)
+        with open(f, "w") as fh:
+            fh.write("Class X {}")
+    for name, val in cfg.items():
+        d = os.path.join(root, ".claude")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, name.replace("_", "-")), "w") as fh:
+            fh.write(val)
+    return root
+
+
+def srcgate410(cls, uses=(), ccr=True, files=(), root=None, transcript_path=None):
+    root = root or _proj410(files)
+    payload = {"tool_name": "mcp__iris__iris_doc",
+               "tool_input": {"mode": "put", "name": cls + ".cls",
+                              "content": "Class %s {}" % cls},
+               "cwd": root}
+    payload["transcript_path"] = transcript_path if transcript_path is not None else _tr410(uses)
+    p = subprocess.run([sys.executable, SRCGATE_410], input=json.dumps(payload),
+                       capture_output=True, text=True, env=_scm_env(ccr, root))
+    if p.returncode != 0 or p.stderr.strip():
+        return "CRASH: " + (p.stderr.strip().splitlines()[-1][:120] if p.stderr.strip() else "rc")
+    if not p.stdout.strip():
+        return "ALLOW"
+    return "DENY"
+
+
+_C410 = "Diet.BO.Login"
+_GET = ("mcp__iris__iris_doc", {"mode": "get", "name": _C410 + ".cls"})
+_HEAD = ("mcp__iris__iris_doc", {"mode": "head", "name": _C410 + ".cls"})
+_OTHER = ("mcp__iris__iris_doc", {"mode": "get", "name": "Other.BO.X.cls"})
+_CHECKOUT = ("iris_source_control", {"action": "checkout", "name": _C410 + ".cls"})
+
+# --- mode resolution
+check("default mode is files", "files", iis_scm.scm_mode(_proj410()))
+check("`.claude/iis-scm` selects ccr", "ccr", iis_scm.scm_mode(_proj410(iis_scm="ccr\n")))
+# The env var wins, which is the documented precedence.
+os.environ["IRIS_INTEROP_SCM"] = "files"
+check("env beats the file", "files", iis_scm.scm_mode(_proj410(iis_scm="ccr\n")))
+del os.environ["IRIS_INTEROP_SCM"]
+# A typo must NOT silently switch blocking gates off.
+os.environ["IRIS_INTEROP_SCM"] = "CRR"
+check("a typo falls back to files", "files", iis_scm.scm_mode(_proj410()))
+del os.environ["IRIS_INTEROP_SCM"]
+
+# --- src_before_iris: THE gate that blocked a CCR session
+check("ccr, document never read -> DENY", "DENY", srcgate410(_C410))
+check("ccr, an earlier iris_doc get -> ALLOW", "ALLOW", srcgate410(_C410, [_GET]))
+# head is how you clear it for a document you believe is NEW -- it closes #410's own gap, since a
+# hook cannot tell an existing document from a new one.
+check("ccr, an earlier iris_doc head -> ALLOW", "ALLOW", srcgate410(_C410, [_HEAD]))
+# Per document, not "any read happened".
+check("ccr, a get of a DIFFERENT class -> DENY", "DENY", srcgate410(_C410, [_OTHER]))
+# Accepted so nothing needs changing when iris-interop-dev#417 exposes the tool. Not reachable
+# today: iris_source_control is not one of the 32 names in INTEROP_TOOLS.
+check("ccr, a checkout (pending #417) -> ALLOW", "ALLOW", srcgate410(_C410, [_CHECKOUT]))
+# Must fail OPEN: denying because the hook could not look is the failure this mode removes.
+check("ccr, unreadable transcript -> ALLOW", "ALLOW",
+      srcgate410(_C410, transcript_path="/nonexistent/x.jsonl"))
+
+# --- NON-REGRESSION: files mode is exactly what it was before #410
+check("files, no file on disk -> DENY", "DENY",
+      srcgate410(_C410, ccr=False, files=("src/Other/BO/Keep.cls",)))
+check("files, file on disk -> ALLOW", "ALLOW",
+      srcgate410(_C410, ccr=False, files=("src/Diet/BO/Login.cls",)))
+# ...and the transcript is irrelevant in files mode, or the two modes have merged.
+check("files ignores transcript evidence", "DENY",
+      srcgate410(_C410, [_GET], ccr=False, files=("src/Other/BO/Keep.cls",)))
+
+# --- the naming rule: deny in files, advisory under CCR (brownfield renaming is delete+add)
+def naming410(ccr):
+    root = _proj410()
+    payload = {"tool_name": "mcp__iris__iris_doc",
+               "tool_input": {"mode": "put", "name": "Demo.Service.Send.cls",
+                              "content": "Class Demo.Service.Send Extends Ens.BusinessOperation\n{\n}"},
+               "cwd": root}
+    p = subprocess.run([sys.executable, CG_410], input=json.dumps(payload),
+                       capture_output=True, text=True, env=_scm_env(ccr, root))
+    if not p.stdout.strip():
+        return "SILENT"
+    out = json.loads(p.stdout)["hookSpecificOutput"]
+    return out.get("permissionDecision") or ("advisory" if out.get("additionalContext") else "?")
+
+
+check("naming rule denies in files mode", "deny", naming410(False))
+check("naming rule only ADVISES under ccr", "advisory", naming410(True))
+
+# --- drift guard: silent under CCR, because both its warnings assume git
+_dg_root = _proj410(files=("src/Demo/MSG/PatientReq.cls",))
+with open(os.path.join(_dg_root, "src/Demo/MSG/PatientReq.cls"), "w") as _fh:
+    _fh.write(_SRC_V1)
+
+
+def drift410(ccr):
+    payload = doc_post("put", _SRC_V2, _OK_RESULT)
+    payload["cwd"] = _dg_root
+    p = subprocess.run([sys.executable, DRIFT], input=json.dumps(payload),
+                       capture_output=True, text=True, env=_scm_env(ccr, _dg_root))
+    return "WARN" if p.stdout.strip() else "SILENT"
+
+
+check("drift guard warns in files mode", "WARN", drift410(False))
+check("drift guard is silent under ccr", "SILENT", drift410(True))
+
+# --- CR-12 is skipped under CCR, and the put list rides on the review block instead
+def stop410(ccr, root):
+    t = transcript([rec_id(-300, "iris_doc", PUT_GHOST, "tu_c"),
+                    res(-299, "tu_c", [{"type": "text", "text": json.dumps(
+                        {"name": "Demo.BO.Ghost.cls", "open_uri": "isfs://APP/Demo.BO.Ghost.cls",
+                         "storage_stripped": False, "success": True})}])])
+    clear(t)
+    p = subprocess.run([sys.executable, STOP],
+                       input=json.dumps({"transcript_path": t, "cwd": root}),
+                       capture_output=True, text=True, env=_scm_env(ccr, root))
+    if not p.stdout.strip():
+        return "ALLOW", ""
+    reason = json.loads(p.stdout)["reason"]
+    return ("BLOCK/orphan" if "CR-12 —" in reason else "BLOCK/no-review"), reason
+
+
+_files_verdict, _ = stop410(False, _proj410(files=("src/Other/BO/Keep.cls",)))
+check("files mode still blocks on CR-12", "BLOCK/orphan", _files_verdict)
+_ccr_verdict, _ccr_reason410 = stop410(True, _proj410(files=("src/Other/BO/Keep.cls",)))
+check("ccr mode does NOT block on CR-12", "BLOCK/no-review", _ccr_verdict)
+check("...and lists the puts to reconcile", True, "CCR uncommitted-changes queue" in _ccr_reason410)
+check("...naming the document", True, "Demo.BO.Ghost" in _ccr_reason410)
+# The git message must be byte-identical to before: no CCR text leaks into files mode.
+check("no CCR text in the files-mode block", False, "CCR" in _files_verdict)
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:

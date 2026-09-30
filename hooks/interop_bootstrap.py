@@ -6,7 +6,7 @@ having to choose to call the Skill tool (observed: a Haiku run never invoked any
 being installed + instructed). This is the "make it available up front" half; the PreToolUse gate
 (interop_conformance_gate) is the "make it binding" half.
 """
-import sys, json
+import sys, json, os
 
 # Stable marker (#162): prepended, never woven into the prose. #115 detects "did any
 # hook run in this CLI at all" from this very message -- 318/318 claude runs carry it,
@@ -14,8 +14,42 @@ import sys, json
 # measurement and must stay greppable across rewordings.
 MARKER = "[IIS-BOOTSTRAP] "
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import iis_scm
+except Exception:
+    iis_scm = None      # a broken sibling must leave the default (git) wording, never no wording
 
-MSG = (
+
+# RULE 7 IS THE ONE RULE THAT INVERTS UNDER CCR (#410), so it is the one the bootstrap swaps.
+# Everything else in this message -- namespace= on every call, no class loading through
+# iris_execute, superclasses, router plus rule, TDD, the conformance pass -- is unaffected and is
+# stated identically in both modes.
+RULE7_FILES = (
+    "(7) THE FILESYSTEM IS THE SOURCE OF TRUTH — never let a class exist only in the IRIS "
+    "namespace. Write src/<Pkg>/<Tipo>/<Name>.cls FIRST, then iris_doc(mode=put) the same "
+    "content; a PreToolUse gate BLOCKS a put whose class has no file on disk. Classes generated "
+    "by IRIS (RecordMap .Record, SOAP WSC.*) are the exception — export them with "
+    "iris_doc(mode=get) right after generating; "
+)
+
+# Deliberately does NOT tell the model to write src/ first, because under CCR that is the defect:
+# a stale local copy put back over a checked-out server version loses the server's work silently.
+RULE7_CCR = (
+    "(7) " + (iis_scm.MARKER if iis_scm else "") +
+    "THIS PROJECT USES CCR, SO THE IRIS BASE NAMESPACE IS THE SOURCE OF TRUTH — "
+    "the opposite of this plugin's default, and a local src/ is invisible to CCR. Before editing an "
+    "existing document: check it out, then iris_doc(mode=get) it, THEN edit and iris_doc(mode=put). "
+    "A get in this session is what the PreToolUse gate looks for, so do not skip it — putting a "
+    "local copy over a version you have not read is how the server's work disappears. Undo the "
+    "check-out on anything you did not actually change. NEVER Bundle, Upload, move a CCR through "
+    "its workflow, peer-review your own change, %Disconnect or TakeOwnership — those are the "
+    "human's, always. There is no local commit: the human bundles in the CCR UI; "
+)
+
+def _msg(root=None):
+    RULE7 = RULE7_CCR if (iis_scm and iis_scm.is_ccr(root)) else RULE7_FILES
+    return (
     "iris-interop-skills active. For ANY IRIS Interoperability work, BEFORE writing classes: load "
     "Skill(iris-interop-skills:interop) (router) + Skill(iris-interop-skills:component-map) + "
     "Skill(iris-interop-skills:tdd). To build or modify a whole component end-to-end, hand it to "
@@ -46,12 +80,8 @@ MSG = (
     "is almost never the interop namespace, and a run can finish green in the wrong one). On "
     "iris_production / iris_production_item / iris_credential_* / iris_lookup_* omitting it also "
     "fails ~95% of the time with an internal error that never names the cause (<CLASS DOES NOT "
-    "EXIST> Ens.Director, or Table 'ENS_CONFIG.CREDENTIALS' not found); "
-    "(7) THE FILESYSTEM IS THE SOURCE OF TRUTH — never let a class exist only in the IRIS "
-    "namespace. Write src/<Pkg>/<Tipo>/<Name>.cls FIRST, then iris_doc(mode=put) the same "
-    "content; a PreToolUse gate BLOCKS a put whose class has no file on disk. Classes generated "
-    "by IRIS (RecordMap .Record, SOAP WSC.*) are the exception — export them with "
-    "iris_doc(mode=get) right after generating; "
+    "EXIST> Ens.Director, or Table 'ENS_CONFIG.CREDENTIALS' not found); " +
+    RULE7 +
     "(8) BEFORE DECLARING DONE, run the conformance pass — hand the finished production to "
     "Agent(subagent_type=\"iris-interop-skills:conformance-reviewer\"). Only if you cannot "
     "delegate, load Skill(iris-interop-skills:conformance-review) and check the seventeen criteria "
@@ -69,15 +99,32 @@ MSG = (
 )
 
 
+def _root(data):
+    """The project dir, for iis_scm's .claude/iis-scm fallback.
+
+    `cwd` is present on the SessionStart payload -- verified against real captured payloads, where
+    it appears on every hook event -- and CLAUDE_PROJECT_DIR is the documented env fallback.
+    """
+    if isinstance(data, dict) and data.get("cwd"):
+        return data["cwd"]
+    return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+
+
 def main():
-    # SessionStart payload is read (and ignored) so stdin doesn't block the wrapper.
+    # The SessionStart payload was read and ignored so stdin would not block the wrapper. It is
+    # now also the best source of the project directory: `cwd` is present on every real hook
+    # payload, and iis_scm needs a root for its .claude/iis-scm fallback (#410). Still tolerant --
+    # a payload that will not parse must not cost the session its conventions.
+    data = {}
     try:
-        json.load(sys.stdin)
+        parsed = json.load(sys.stdin)
+        if isinstance(parsed, dict):
+            data = parsed
     except Exception:
         pass
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "SessionStart",
-        "additionalContext": MARKER + MSG}}))
+        "additionalContext": MARKER + _msg(_root(data))}}))
 
 
 if __name__ == "__main__":

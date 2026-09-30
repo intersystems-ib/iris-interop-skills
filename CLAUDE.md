@@ -107,6 +107,15 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   do. How a match is DECIDED is deliberately still per-hook — CR-12 reads the class name out of the
   file, because this bank names files by topic and a path-only check called 25 of 25 real classes
   missing.
+  `hooks/iis_scm.py` is **not a hook** either — it answers "which source-control model is this
+  project on", `files` (default) or `ccr`, from `IRIS_INTEROP_SCM` or a `.claude/iis-scm` fallback
+  (#410). Under CCR the IRIS BASE namespace is the source of truth, so the disk-first gates invert:
+  `src_before_iris` asks whether the session has READ the document instead of whether a file
+  exists, CR-12 is skipped, the drift guard is silent, and the naming rule becomes advisory. **An
+  unrecognised value means `files`** — this decides whether BLOCKING gates run, so a typo must
+  leave enforcement exactly as it is rather than silently switch it off. There is no
+  auto-detection: a hook cannot reach IRIS to ask. Every CCR check reads the session transcript,
+  which is sound because `transcript_path` is present on 24 of 24 real PreToolUse payloads.
 - **Required user setting:** raise the skill-listing budget (`skillListingBudgetFraction: 0.03`,
   `skillListingMaxDescChars: 2048`) in `~/.claude/settings.json` so `interop`/`tdd` don't get evicted.
 - `BestPractices/` — the worked-example bank the skills cite:
