@@ -402,10 +402,17 @@ native Windows IRIS (never probe for it), and never mix bash `&&`/syntax in the 
 the default (git) and is WRONG under CCR.** Do it by reading, not by assuming — in this order, first
 answer wins:
 
-1. `check_config` — if it reports an SCM mode, that is the answer.
+1. `check_config` — but **only if it says the mode was actually SET** (`scm_mode_source: env`).
+   If it reports `files` as a *default*, or reports no source at all, it has not answered: the MCP
+   runs as a subprocess with no `CLAUDE_PROJECT_DIR`, so **it cannot see the file in step 3**. Keep
+   going.
 2. the `IRIS_INTEROP_SCM` environment variable.
 3. a `.claude/iis-scm` file in the project (one word: `files` or `ccr`).
 4. nothing found, or anything unrecognised → **`files`**, the default below.
+
+So if `check_config` says `files` and a `.claude/iis-scm` says `ccr`, **`ccr` wins** — the file is
+the one thing only this side can read, and the hooks are already enforcing it. Reading step 1 as
+final is how you end up following git guidance while a gate refuses every put.
 
 **If it is `ccr`, the IRIS BASE namespace is the source of truth and this section does not apply.**
 Check the document out, `iris_doc(mode=get)` it, edit, put — and never put a local copy over a

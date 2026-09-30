@@ -1810,6 +1810,17 @@ for _n, _src in (("check_config", "`check_config`"), ("env var", "`IRIS_INTEROP_
                  ("the file", "`.claude/iis-scm`")):
     check("...naming %s as a source" % _n, True, _src in _router)
 check("...and defaulting to files", True, "unrecognised → **`files`**" in _router_flat)
+# check_config is NOT authoritative on its own: it runs as an MCP subprocess with no
+# CLAUDE_PROJECT_DIR (checked on the MCP side, not assumed), so it cannot see .claude/iis-scm. A
+# project that sets only the dotfile gets `files` from check_config while the hooks enforce `ccr`
+# -- the model then follows git guidance while every put is refused. The first draft of this
+# precedence said "if it reports an SCM mode, that is the answer" and had exactly that hole.
+check("check_config is conditional, not final", True,
+      "only if it says the mode was actually SET" in _router_flat)
+check("...and says WHY it can be blind", True,
+      "cannot see the file in step 3" in _router_flat)
+check("...and resolves the conflict explicitly", True,
+      "says `ccr`, **`ccr` wins**" in _router_flat)
 # The operative instruction, not just the switch: an unread put is the harm.
 check("...and the never-overwrite-unread rule", True,
       "never put a local copy over a version you have not read" in _router_flat)
