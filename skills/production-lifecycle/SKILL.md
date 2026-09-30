@@ -10,6 +10,8 @@ The Production is the runtime container. It's a class extending `Ens.Production`
 
 **Code lives on disk and gets pushed to IRIS, not the other way around.** A workshop is shipped over git; the `.cls` files in `src/` are canonical. IRIS is a runtime mirror — reinstall it tomorrow and you should be able to reload everything from disk.
 
+**Under CCR this is inverted** (`IRIS_INTEROP_SCM=ccr`, see the README): the IRIS BASE namespace is the source of truth, you check out and `iris_doc(mode=get)` before editing, and the production is exported **decomposed into PTD items** by the source-control hooks — there is no local `Production.cls` to keep canonical. Never put a local copy over a version you have not read in this session; the disk-first gate denies exactly that.
+
 > **Enforced, not merely advised.** A PreToolUse gate **denies** `iris_doc(mode=put)` when the
 > class has no file under the project: write `src/<Pkg>/<Tipo>/<Name>.cls` first, then put the
 > same content. Classes generated *by* IRIS — RecordMap `.Record`, SOAP-wizard `WSC.*` — are

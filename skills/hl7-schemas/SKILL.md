@@ -38,6 +38,7 @@ Custom HL7 schemas edited via the Management Portal are stored **in the namespac
 
 1. Export the schema explicitly from the portal to the SCM root.
 2. Commit the exported file alongside the related class changes.
+   **Under CCR** (`IRIS_INTEROP_SCM=ccr`): there is no local commit. The export has to go out through the source-control hooks so it lands in the CCR workspace, and the human includes it in the bundle. A schema exported to a path CCR does not watch is lost the same way an unexported one is.
 
 Failure to export is a **silent loss-of-work risk**: on the next namespace refresh (DB restore, container rebuild, environment refresh from PROD baseline), the in-portal edits disappear and nobody notices until a message fails to parse weeks later.
 
