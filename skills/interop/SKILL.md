@@ -398,6 +398,27 @@ native Windows IRIS (never probe for it), and never mix bash `&&`/syntax in the 
 
 ## Scaffold the build on local disk BEFORE implementing
 
+**FIRST, ESTABLISH WHICH SOURCE-CONTROL MODEL THIS PROJECT USES. Everything in this section assumes
+the default (git) and is WRONG under CCR.** Do it by reading, not by assuming — in this order, first
+answer wins:
+
+1. `check_config` — if it reports an SCM mode, that is the answer.
+2. the `IRIS_INTEROP_SCM` environment variable.
+3. a `.claude/iis-scm` file in the project (one word: `files` or `ccr`).
+4. nothing found, or anything unrecognised → **`files`**, the default below.
+
+**If it is `ccr`, the IRIS BASE namespace is the source of truth and this section does not apply.**
+Check the document out, `iris_doc(mode=get)` it, edit, put — and never put a local copy over a
+version you have not read in this session, which is how work that exists only on the server
+disappears. `iris_doc(mode=head)` is how you confirm a document is genuinely new. The per-topic
+detail is in `production-lifecycle`, `hl7-schemas` and `conformance-review` (CR-12), each marked
+"Under CCR"; the full comparison is in the plugin README.
+
+On Claude Code a hook also injects the mode and a gate refuses an unread put. **Hooks do not run on
+codex or opencode**, so there this paragraph is the only thing between a CCR project and a stale
+overwrite — do the check, do not wait to be stopped.
+
+
 Before writing any logic, turn the component plan (from `component-map`) into a **local-disk scaffold** so
 compiles never hit missing-dependency errors and `iris_test` is always called with exact, compiled names.
 This is disk-only work; **execution stays MCP-only**. See `component-map` for the full recipe. In short:
