@@ -328,6 +328,69 @@ the mechanism belongs to the host.
 Not installing as a plugin? Add the equivalent `hooks` block to your `settings.json`, pointing at
 the `hooks/*.sh` wrappers.
 
+## Source control: git (default) vs CCR
+
+The plugin assumes **file-based** source control. If your project uses **CCR** — InterSystems' own
+change control — the model is reversed and four gates have to invert with it (#410).
+
+| | git (default: `IRIS_INTEROP_SCM` unset or `files`) | CCR (`IRIS_INTEROP_SCM=ccr`) |
+|---|---|---|
+| Source of truth | `src/` on disk, committed to git | **The IRIS BASE namespace** |
+| Edit loop | write `src/…cls` → `iris_doc put` → compile → test → commit | check out → `iris_doc get` → edit → `iris_doc put` → compile → test → undo the check-out on untouched items |
+| "Commit" | git commit and PR | Bundle and Upload into a CCR, in the CCR UI, **by the human** |
+| Local `src/` | canonical | a scratch copy for reading diffs; refresh it from IRIS, never over it |
+| Gates that change | — | `src_before_iris`, CR-12, `src_drift_guard`, the naming rule |
+| Gates that stay | all | namespace discipline, no class loading via `iris_execute`, superclass and routing rules, TDD, the rest of the conformance criteria |
+
+### Turning it on
+
+Either source works; the environment variable wins when both are set.
+
+```jsonc
+// .claude/settings.json — applies to hooks only once the folder is TRUSTED
+{ "env": { "IRIS_INTEROP_SCM": "ccr" } }
+```
+
+```
+.claude/iis-scm        a file containing `ccr`. Works in an untrusted folder, or when the
+                       session was started without the variable.
+```
+
+Set the same variable in the MCP server's `env` in `.mcp.json`, because the MCP reads it too
+(`intersystems-ib/iris-interop-dev#417`).
+
+**An unrecognised value means `files`.** This decides whether *blocking* gates run, so a typo leaves
+enforcement exactly as it is rather than silently switching it off. There is no auto-detection: a
+hook cannot reach IRIS to ask which source-control class a namespace uses.
+
+### What changes, and why
+
+- **`src_before_iris`** stops asking "is there a `.cls` on disk?" — under CCR that question is both
+  wrong (the namespace is the truth) and unanswerable, since CCR exports classes as **XML** by
+  default while the gate only ever matched `.cls`. It asks instead whether **this session has read
+  the document**, and denies a put that has not: an unread put can replace work that exists only on
+  the server, with no local copy to notice afterwards. Either call clears it —
+  `iris_doc(mode=get)` if the document exists, `iris_doc(mode=head)` if you believe it does not.
+- **CR-12 is skipped.** It asks the namespace and `src/` to agree byte for byte; under CCR that is
+  an instruction to put the stale local copy back. The Stop gate instead lists the documents the
+  session wrote, for the human to reconcile against the CCR uncommitted-changes queue — it cannot
+  read that queue itself.
+- **`src_drift_guard` is silent.** Both its warnings assume git, and CCR exports productions
+  decomposed into PTD items rather than a local `Production.cls`. Inverting them ("your local copy
+  is behind the server") would need server state a hook cannot see.
+- **The naming rule becomes advisory.** CCR work is mostly brownfield: an existing system with its
+  own conventions. Renaming under CCR is a delete plus an add — a bigger change record and every
+  production reference broken — so the rule keeps teaching and stops refusing.
+
+Because a hook cannot reach IRIS, every CCR check reads the **session transcript**. A check-out made
+outside the session is invisible to it, and the fix is always the same: read the document in this
+session first.
+
+### What the agent must not do under CCR
+
+Bundle or Upload, move a CCR through its workflow, peer-review its own change, `%Disconnect`, or
+`TakeOwnership`. Those are the human's, always.
+
 ## Decision log
 
 - **Skill names are bare** (`tdd`, `messages`, …) and internally consistent — directory name =
