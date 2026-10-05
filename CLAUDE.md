@@ -1,6 +1,6 @@
 # iris-interop-skills
 
-A standalone plugin of **20 skills** for building InterSystems IRIS For Health
+A standalone plugin of **21 skills** for building InterSystems IRIS For Health
 Interoperability productions with Claude, plus a best-practices + worked-examples
 bank under `BestPractices/`. Start at the `interop` router; load `component-map`
 right after it to pick the right component/adapter for the task at hand.
@@ -78,7 +78,7 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
 
 ## Layout
 
-- `skills/*/SKILL.md` — the 20 skills. Each is a single `SKILL.md`.
+- `skills/*/SKILL.md` — the 21 skills. Each is a single `SKILL.md`.
   The router (`interop`) refers to its siblings by their **plugin-qualified id**
   `iris-interop-skills:<name>` (e.g. `iris-interop-skills:messages`), not by bare
   name or path — a bare `Skill("messages")` errors with "Unknown skill".
@@ -116,6 +116,10 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   leave enforcement exactly as it is rather than silently switch it off. There is no
   auto-detection: a hook cannot reach IRIS to ask. Every CCR check reads the session transcript,
   which is sound because `transcript_path` is present on 24 of 24 real PreToolUse payloads.
+  **The CCR procedure itself lives in `skills/ccr-workflow`** (check-out, `%AddToSourceControl`,
+  the hand-off the human submits). The mode only inverts the gates; four channels name the skill —
+  the CCR rule 7 of the bootstrap, the route hook, the `interop` router, and the `interop-builder` /
+  `conformance-reviewer` agents — and `test_hooks.py` asserts each one.
 - **Required user setting:** raise the skill-listing budget (`skillListingBudgetFraction: 0.03`,
   `skillListingMaxDescChars: 2048`) in `~/.claude/settings.json` so `interop`/`tdd` don't get evicted.
 - `BestPractices/` — the worked-example bank the skills cite:

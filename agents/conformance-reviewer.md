@@ -41,6 +41,11 @@ guidance, not recollection: `iris-interop-skills:interop` (naming/router) plus `
    classes only in IRIS (outside git, gone with the instance) and classes only on disk (never compiled,
    or deleted from the namespace — so the running production is not what the tree claims). Wizard and
    generator output is the usual source of the first kind, since it never passes through `iris_doc`.
+
+   **Under CCR** (`IRIS_INTEROP_SCM=ccr`, or the caller says so) skip this diff: the namespace is the
+   source of truth, and `src/` proves nothing. Instead read the CCR uncommitted queue with the query in
+   `skills/ccr-workflow/references/probes.md`, and report every class of the build that is missing from
+   it: a new class that is not there was never added to source control, and will not reach the CCR.
 4. **Separate verdicts from judgment calls.** Some "violations" are defensible (the criteria table marks
    P2/P3 nuance). Do not inflate. Report what is genuinely off.
 

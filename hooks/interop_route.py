@@ -29,6 +29,11 @@ MAX = 3
 
 # (skill, trigger alternation). EN + ES: the triggers in every frontmatter are bilingual.
 TOPICS = [
+    # ccr-workflow is FIRST because ties keep declaration order: a CCR prompt usually names the CCR
+    # once and the components several times, and the procedure is the one skill a CCR turn cannot
+    # do without. Only CCR-specific vocabulary -- "check out" and "check in" are left to the skill's
+    # own description, because on a git project they mean a branch or a commit.
+    ("ccr-workflow", r"\bCCR\b|change\s+control|control\s+de\s+cambios|%buildccr|\bItemSet\b|\bPerforce\b|uncommitted\s+(queue|changes?)|cola\s+de\s+cambios|Bundle\s+and\s+Upload|IRIS_INTEROP_SCM|\bIn_BASE\b|mark(PREP|BASE)Complete"),
     ("hl7-schemas", r"\bZ-?segment|segmento\s+Z|\bZ[A-Z]{2}\b|custom\s+HL7\s+schema|esquema\s+HL7|DocType|MessageStructure|EnsLib\.HL7|\bADT[_^]?[A-Z]?\d*\b|\bORU[_^]?[A-Z]?\d*\b|\bMSH\b"),
     ("transformations", r"\bDTL\b|data\s*transform|transformaci|subtransform|mapear|GetValueAt|\{[A-Z0-9]{3}:"),
     ("business-services", r"RecordMap|Record\s+Map(per)?|\bCSV\b|inbound|business\s+service|servicio\s+de\s+entrada|fichero\s+de\s+entrada|MLLP|web\s+app|CSP\s+app|AutheEnabled|sin\s+credenciales"),

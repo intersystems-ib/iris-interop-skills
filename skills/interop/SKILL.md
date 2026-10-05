@@ -323,6 +323,7 @@ On `SQLCODE -30` (Table not found), the next call is introspection — never ano
 | Production class structure, start/stop, settings, deployment, migration | `iris-interop-skills:production-lifecycle` |
 | Custom HL7 schemas, Z-segments, schema editor | `iris-interop-skills:hl7-schemas` |
 | Lookup tables (creating, loading, using in DTL) | `iris-interop-skills:lookup-tables` |
+| Editing under **CCR** change control (check-out, check-in, hand-off) | `iris-interop-skills:ccr-workflow` |
 | **Looking at a RUNNING production for any reason** — did it arrive, how many rows landed, what did session N do, resend a message, queue depth, Visual Trace, Event Log, testing live components, SOAP tracing, purge. **Verifying a run that worked counts — not just debugging one that didn't.** | **`iris-interop-skills:message-search-debug`** — load it *before* writing any query against `Ens.MessageHeader` / `Ens_Util.Log` |
 | **Writing SQL against any class/table not created this session** — resolving real class, table, and column names | §"Resolving real names" above (universal recipe); `iris-interop-skills:business-operations` for the SQL-BO worked flow |
 | **FHIR work** — Façade vs Repository, OAuth2 PKCE, FHIR R4 Bundles, FHIR SQL Builder | `iris-interop-skills:fhir` |
@@ -411,15 +412,14 @@ answer wins:
 4. nothing found, or anything unrecognised → **`files`**, the default below.
 
 So if `check_config` says `files` and a `.claude/iis-scm` says `ccr`, **`ccr` wins** — the file is
-the one thing only this side can read, and the hooks are already enforcing it. Reading step 1 as
-final is how you end up following git guidance while a gate refuses every put.
+the one thing only this side can read, and the hooks are already enforcing it.
 
 **If it is `ccr`, the IRIS BASE namespace is the source of truth and this section does not apply.**
-Check the document out, `iris_doc(mode=get)` it, edit, put — and never put a local copy over a
-version you have not read in this session, which is how work that exists only on the server
-disappears. `iris_doc(mode=head)` is how you confirm a document is genuinely new. The per-topic
-detail is in `production-lifecycle`, `hl7-schemas` and `conformance-review` (CR-12), each marked
-"Under CCR"; the full comparison is in the plugin README.
+Before the first check-out, load `iris-interop-skills:ccr-workflow` (no Skill tool: read
+`skills/ccr-workflow/SKILL.md`): the loop, the probes, the hand-off. Check out,
+`iris_doc(mode=get)`, edit, put — never put a local copy over a version you have not read in this
+session. `iris_doc(mode=head)` confirms a document is new. "Under CCR" notes:
+`production-lifecycle`, `hl7-schemas`, `conformance-review` (CR-12).
 
 On Claude Code a hook also injects the mode and a gate refuses an unread put. **Hooks do not run on
 codex or opencode**, so there this paragraph is the only thing between a CCR project and a stale

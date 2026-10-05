@@ -118,11 +118,17 @@ def is_ccr(root=None):
 # payloads captured from a live project: `transcript_path` is present on PreToolUse, PostToolUse,
 # Stop, SubagentStop, SessionStart and UserPromptSubmit alike, so a PreToolUse gate can read it.
 #
-# THE CHECKOUT BRANCH IS NOT REACHABLE TODAY AND THAT IS DELIBERATE. `iris_source_control` exists
-# in the MCP (crates/.../src/tools/scm.rs) but is NOT in `INTEROP_TOOLS`, which
-# is the profile this plugin targets -- exposing it is iris-interop-dev#417. So no transcript can
-# contain a checkout call yet. It is accepted here anyway so that the day #417 lands nothing needs
-# changing, and every message this mode writes prescribes `iris_doc(mode=get)`, which works now.
+# THE CHECKOUT BRANCH NEEDS THE FULL TOOLSET. `iris_source_control` exists in the MCP
+# (crates/.../src/tools/scm.rs) but is NOT in `INTEROP_TOOLS`, the default profile -- exposing it
+# there is iris-interop-dev#417. With `IRIS_TOOLSET=baseline` it is exposed, and that is what
+# skills/ccr-workflow tells a CCR project to set: check-out, add and undo through it were measured
+# on a connected BASE (2026-10-04). Every message this mode writes still prescribes
+# `iris_doc(mode=get)`, which works on either profile.
+#
+# THE TOOL NAMES ITS DOCUMENT `document`, NOT `name` (ScmParams.document, scm.rs). This branch
+# read only `name`/`names` until the ccr-workflow merge, so a real check-out never counted as
+# evidence -- and its test passed, because the test built the call with `name`, a shape the MCP
+# never sends. `_line_shows_read` now reads `document` too, and the test uses the real shape.
 CHECKOUT_TOOL = "iris_source_control"
 CHECKOUT_ACTIONS = ("checkout", "check_out", "execute")
 
@@ -131,9 +137,9 @@ def seen_document(transcript_path, cls):
     """True when THIS session already read or checked out `cls`.
 
     Accepts, in the order they became available:
-      * iris_doc(mode=get) naming it            <- the only one reachable today
+      * iris_doc(mode=get) naming it            <- works on every MCP profile
       * iris_doc(mode=head) naming it           <- and this is how you clear the gate for a NEW one
-      * iris_source_control(action=checkout)    <- pending #417
+      * iris_source_control(action=checkout)    <- needs IRIS_TOOLSET=baseline until #417
       * a put that carried an elicitation id    <- the MCP's check-out dialog was answered
 
     WHY `head` COUNTS, and it closes a gap in #410 as filed. That design says to deny a put of an
@@ -205,7 +211,8 @@ def _line_shows_read(line, want):
         inp = b.get("input") or {}
         if not isinstance(inp, dict):
             continue
-        names = [inp.get("name")] + list(inp.get("names") or [])
+        # `document` is iris_source_control's key; `name`/`names` are iris_doc's.
+        names = [inp.get("name"), inp.get("document")] + list(inp.get("names") or [])
         named = any(isinstance(n, str) and want == _strip(n) for n in names)
         if not named:
             continue

@@ -674,9 +674,11 @@ def _ccr_put_list(ccr, put):
     more = "\n  ... and {} more".format(len(put) - 20) if len(put) > 20 else ""
     return ("\n\n" + iis_scm.MARKER + "CR-12 is skipped in CCR mode: the namespace is the source of "
             "truth, so comparing it against `src/` would ask you to put a stale local copy back. "
-            "Instead, these {} document(s) were written into IRIS this session — the human should "
-            "confirm each one appears in the CCR uncommitted-changes queue, and undo the check-out "
-            "on anything not actually changed. This hook cannot read that queue.\n\n{}{}"
+            "Instead, these {} document(s) were written into IRIS this session — confirm each one "
+            "appears in the CCR uncommitted-changes queue (the queue query in "
+            "skills/ccr-workflow/references/probes.md; a new class missing from it was never added "
+            "to source control), and undo the check-out on anything not actually changed. This hook "
+            "cannot read that queue.\n\n{}{}"
             .format(len(put), listed, more))
 
 

@@ -38,7 +38,9 @@ RULE7_FILES = (
 RULE7_CCR = (
     "(7) " + (iis_scm.MARKER if iis_scm else "") +
     "THIS PROJECT USES CCR, SO THE IRIS BASE NAMESPACE IS THE SOURCE OF TRUTH — "
-    "the opposite of this plugin's default, and a local src/ is invisible to CCR. Before editing an "
+    "the opposite of this plugin's default, and a local src/ is invisible to CCR. Load "
+    "Skill(iris-interop-skills:ccr-workflow) before the first check-out: it carries the per-item "
+    "loop, the read-only probes and the check-in hand-off. Before editing an "
     "existing document: check it out, then iris_doc(mode=get) it, THEN edit and iris_doc(mode=put). "
     "A get in this session is what the PreToolUse gate looks for, so do not skip it — putting a "
     "local copy over a version you have not read is how the server's work disappears. Undo the "
