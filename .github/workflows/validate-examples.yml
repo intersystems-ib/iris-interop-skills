@@ -19,17 +19,27 @@ on:
   push:
     paths:
       - 'BestPractices/**'
-      - 'skills/**/SKILL.md'
+      # skills/**, not skills/**/SKILL.md: tier 3, C9 and C19 read every skills/*/*.md and
+      # skills/*/*/*.md (references/, assets/), and tier 2 compiles skills/*/assets/*.cls. Under the
+      # SKILL.md-only filter an edit to a reference file or a skill asset alone compiled nothing.
+      - 'skills/**'
       - 'scripts/validate_examples.py'
       - 'scripts/examples_baseline.json'
+      - 'scripts/external_baseline.json'
+      - 'scripts/snippets_baseline.json'
       - 'scripts/atelier_fixtures.json'
       - '.github/workflows/validate-examples.yml'
   pull_request:
     paths:
       - 'BestPractices/**'
-      - 'skills/**/SKILL.md'
+      # skills/**, not skills/**/SKILL.md: tier 3, C9 and C19 read every skills/*/*.md and
+      # skills/*/*/*.md (references/, assets/), and tier 2 compiles skills/*/assets/*.cls. Under the
+      # SKILL.md-only filter an edit to a reference file or a skill asset alone compiled nothing.
+      - 'skills/**'
       - 'scripts/validate_examples.py'
       - 'scripts/examples_baseline.json'
+      - 'scripts/external_baseline.json'
+      - 'scripts/snippets_baseline.json'
       - 'scripts/atelier_fixtures.json'
       - '.github/workflows/validate-examples.yml'
   workflow_dispatch:

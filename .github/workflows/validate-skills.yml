@@ -13,11 +13,25 @@ on:
   push:
     paths:
       - 'skills/**'
+      # The other files the validator opens. Without them a release PR -- which edits nothing but
+      # the two manifests -- ran no check at all, though S10 exists to catch a half-bumped version.
+      - '.claude-plugin/plugin.json'      # S6 hook count, S10 version
+      - '.claude-plugin/marketplace.json' # S6 hook count, S10 version (both fields)
+      - 'hooks/hooks.json'                # S6 hook count
+      - 'README.md'                       # S6 hook table
+      - 'scripts/skills_baseline.json'    # S8 token ratchet
       - 'scripts/validate_skills.py'
       - '.github/workflows/validate-skills.yml'
   pull_request:
     paths:
       - 'skills/**'
+      # The other files the validator opens. Without them a release PR -- which edits nothing but
+      # the two manifests -- ran no check at all, though S10 exists to catch a half-bumped version.
+      - '.claude-plugin/plugin.json'      # S6 hook count, S10 version
+      - '.claude-plugin/marketplace.json' # S6 hook count, S10 version (both fields)
+      - 'hooks/hooks.json'                # S6 hook count
+      - 'README.md'                       # S6 hook table
+      - 'scripts/skills_baseline.json'    # S8 token ratchet
       - 'scripts/validate_skills.py'
       - '.github/workflows/validate-skills.yml'
   workflow_dispatch:
