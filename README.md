@@ -104,7 +104,7 @@ self-contained binary.
    /plugin install iris-interop-skills@iris-interop-skills
    ```
 
-   This installs everything that ships with the plugin: the **20 skills**, the eleven **hooks**
+   This installs everything that ships with the plugin: the **21 skills**, the eleven **hooks**
    (a SessionStart conventions bootstrap, a UserPromptSubmit topic router, two PreToolUse gates that
    can block non-conformant calls, six PostToolUse guards, and a blocking Stop gate — auto-enabled;
    see *Hooks* below), and
@@ -202,6 +202,7 @@ call (e.g. `check_config`) runs without a prompt.
 | `tdd` | TDD-first workflow (companion skill — load it alongside the others). |
 | `unit-tests` | `%UnitTest` framework reference. |
 | `conformance-review` | Post-build best-practice review (criteria CR-1…CR-17) — run it once a build is TDD-green. |
+| `ccr-workflow` | Working in an IRIS BASE namespace under **CCR** change control: environment check, check-out → get → edit → test, undo untouched check-outs, and the check-in or bundle hand-off that the human submits. Loaded in CCR mode (see *Source control* below). |
 | `report-issue` | Optionally propose a **deduped, user-confirmed** GitHub issue for a confirmed compliance violation or a reproducible MCP/skill defect (never auto-files; batches findings). |
 
 ### Agents (`agents/`)
@@ -265,7 +266,7 @@ guards are advisory.
 
 | Hook | Event | Fires on | What it does |
 |---|---|---|---|
-| `interop-bootstrap` | `SessionStart` | every session | Injects the core interop conventions (naming, adapter rule, router rule, MCP-only, TDD) so they hold even before any skill loads. |
+| `interop-bootstrap` | `SessionStart` | every session | Injects the core interop conventions (naming, adapter rule, router rule, MCP-only, TDD) so they hold even before any skill loads. Under CCR, rule 7 is the CCR variant and names `ccr-workflow`. |
 | `interop-route` | `UserPromptSubmit` | every user turn | Names the two or three skills that turn actually needs. SessionStart names three FIXED skills before the task is known, and its context never reaches a subagent (#218). |
 | `interop-conformance-gate` | `PreToolUse` (**blocking**) | IRIS write/execute tools (`iris_doc`, `iris_compile`, `iris_execute`, production / credential / lookup tools) | Blocks convention violations — wrong class naming, extending the adapter, hand-`OnRequest` routing — and class loads/compiles smuggled through `iris_execute`. |
 | `src-before-iris` | `PreToolUse` (**blocking**) | `iris_doc(mode=put)` | The filesystem is the source of truth: the class must exist under `src/` before it is pushed to the namespace. |
@@ -342,6 +343,13 @@ change control — the model is reversed and four gates have to invert with it (
 | Gates that change | — | `src_before_iris`, CR-12, `src_drift_guard`, the naming rule |
 | Gates that stay | all | namespace discipline, no class loading via `iris_execute`, superclass and routing rules, TDD, the rest of the conformance criteria |
 
+**The procedure lives in the `ccr-workflow` skill:** the environment check, the per-item loop
+(status → check-out → `iris_doc get` → edit → put → compile → test), `%AddToSourceControl` for a new
+item, verifying the effect after every "yes", undoing untouched check-outs, and the check-in or bundle
+hand-off that the human submits. In CCR mode the bootstrap names it at session start, the per-turn
+router names it on CCR vocabulary, and the `interop` router points at it — the one channel that also
+reaches codex and opencode.
+
 ### Turning it on
 
 Either source works; the environment variable wins when both are set.
@@ -356,12 +364,162 @@ Either source works; the environment variable wins when both are set.
                        session was started without the variable.
 ```
 
-Set the same variable in the MCP server's `env` in `.mcp.json`, because the MCP reads it too
-(`intersystems-ib/iris-interop-dev#417`).
+Set the same variable in the MCP server's `env` in `.mcp.json` too. The MCP reads it once
+`intersystems-ib/iris-interop-dev#417` ships, and ignores it before that.
 
 **An unrecognised value means `files`.** This decides whether *blocking* gates run, so a typo leaves
 enforcement exactly as it is rather than silently switching it off. There is no auto-detection: a
 hook cannot reach IRIS to ask which source-control class a namespace uses.
+
+### Setting up a CCR project for the agent
+
+The agent works **as you**: CCR attributes every check-out and change to the IRIS user the MCP
+connects as, and on a connected BASE that user is also your Perforce identity. Never connect it as
+`_SYSTEM` or a shared account.
+
+#### 1. The MCP connection
+
+Declare the server in the project's `.mcp.json` with **no secret in the file**. Claude Code replaces
+`${VAR}` with the environment variable, so the file can be committed:
+
+```json
+{
+  "mcpServers": {
+    "iris-interop-dev": {
+      "command": "iris-interop-dev",
+      "args": ["mcp"],
+      "env": {
+        "IRIS_HOST": "${IRIS_HOST}",
+        "IRIS_WEB_PORT": "${IRIS_WEB_PORT:-443}",
+        "IRIS_SCHEME": "${IRIS_SCHEME:-https}",
+        "IRIS_WEB_PREFIX": "${IRIS_WEB_PREFIX:-}",
+        "IRIS_USERNAME": "${IRIS_USERNAME}",
+        "IRIS_PASSWORD": "${IRIS_PASSWORD}",
+        "IRIS_NAMESPACE": "${IRIS_NAMESPACE}",
+        "IRIS_TOOLSET": "baseline",
+        "IRIS_INTEROP_SCM": "ccr"
+      }
+    }
+  }
+}
+```
+
+| Variable | What to put | Why |
+|---|---|---|
+| `IRIS_USERNAME` | **Your own** IRIS user on the BASE | CCR records check-outs per IRIS user; with a shared Perforce workspace it is also your Perforce user |
+| `IRIS_PASSWORD` | From your OS secret store (below) | — |
+| `IRIS_NAMESPACE` | The BASE namespace | The skills still pass `namespace=` on every call |
+| `IRIS_TOOLSET` | `baseline` (`iris-interop-dev` only) | The default `interop` toolset hides `iris_source_control`, which the CCR loop needs, until `intersystems-ib/iris-interop-dev#417` ships |
+| `IRIS_INTEROP_SCM` | `ccr` | Read by the MCP once #417 ships; ignored before that |
+
+Do not also keep credentials in an `.iris-agentic-dev.toml` in the project (that file takes
+precedence over the environment), and avoid `claude mcp add --env IRIS_PASSWORD=…`, which writes
+the password in plain text to `~/.claude.json`.
+
+#### 2. Credentials: what, where, who
+
+| Secret | Where it lives | Who enters it | Never |
+|---|---|---|---|
+| IRIS password (the BASE) | Your OS secret store, exported as `IRIS_PASSWORD` before you start `claude` | You, once | in `.mcp.json`, a repo, or the chat |
+| Perforce password (connected BASE) | Nowhere. You type it once in the CCR login page; the BASE stores a **ticket** for your IRIS user | You, when the ticket expires | in the chat, a file, or an environment variable |
+| CCR access token (disconnected BASE) | Nowhere. You type it in the Bundle screen when uploading | You, per upload | in the chat or a file |
+
+The agent never needs the Perforce password or the CCR token. If it asks for one, answer no.
+
+#### 3. Storing the IRIS password
+
+Store it once in the OS secret store and have your shell export it; then start `claude` from that
+shell.
+
+```bash
+# macOS (Keychain)
+security add-generic-password -a "$USER" -s iris-ccr-base -w                # prompts for it
+# ~/.zshrc
+export IRIS_HOST=base.example.com IRIS_USERNAME=jdoe IRIS_NAMESPACE=APPBASE
+export IRIS_PASSWORD="$(security find-generic-password -a "$USER" -s iris-ccr-base -w)"
+```
+
+```bash
+# Linux desktop (libsecret)
+secret-tool store --label="IRIS CCR BASE" service iris-ccr-base user "$USER"  # prompts for it
+# ~/.bashrc
+export IRIS_HOST=base.example.com IRIS_USERNAME=jdoe IRIS_NAMESPACE=APPBASE
+export IRIS_PASSWORD="$(secret-tool lookup service iris-ccr-base user "$USER")"
+
+# Linux headless or WSL: a file only you can read
+mkdir -p ~/.config/iris-ccr && chmod 700 ~/.config/iris-ccr
+printf 'IRIS_HOST=base.example.com\nIRIS_USERNAME=jdoe\nIRIS_NAMESPACE=APPBASE\nIRIS_PASSWORD=\n' > ~/.config/iris-ccr/env
+chmod 600 ~/.config/iris-ccr/env && ${EDITOR:-vi} ~/.config/iris-ccr/env       # type it there
+# ~/.bashrc
+set -a; . ~/.config/iris-ccr/env; set +a
+```
+
+```powershell
+# Windows (SecretManagement, encrypted per user)
+Install-Module Microsoft.PowerShell.SecretManagement, Microsoft.PowerShell.SecretStore -Scope CurrentUser
+Register-SecretVault -Name LocalStore -ModuleName Microsoft.PowerShell.SecretStore -DefaultVault
+Set-Secret -Name IRIS_PASSWORD                                                   # prompts for it
+# In $PROFILE:
+$env:IRIS_HOST = 'base.example.com'; $env:IRIS_USERNAME = 'jdoe'; $env:IRIS_NAMESPACE = 'APPBASE'
+$env:IRIS_PASSWORD = Get-Secret -Name IRIS_PASSWORD -AsPlainText
+```
+
+On Windows, `command` in `.mcp.json` is the full path to the executable. The shortcut
+`[Environment]::SetEnvironmentVariable('IRIS_PASSWORD','…','User')` stores the password unencrypted
+in the registry.
+
+#### 4. Perforce on a connected BASE
+
+The CCR client tools run `p4` **on the IRIS server**, as the operating-system account that runs IRIS.
+Nothing Perforce-related is needed on your laptop.
+
+**Administrator, once per BASE:**
+- `p4` is on the `PATH` of the IRIS OS account, and `P4PORT` points at the Perforce server for that
+  account (`p4 set P4PORT=…` on Windows; the instance owner's environment or a `P4ENVIRO` file on
+  Linux). For an `ssl:` server, also run `p4 trust -y` as that account.
+- `Do Configure^%buildccr` in the BASE namespace: the workspace root, the CCR System's Perforce
+  branch, environment `BASE`, **Connected**. Choose the **multi-developer (shared workspace)** setup,
+  then map each IRIS user to their Perforce user **once**:
+  ```objectscript
+  Do ##class(%Studio.SourceControl.ISC).SetCredentials($ListBuild("<IRIS user>","<Perforce user>"))
+  ```
+  Running it again stores the mapping with an empty password, which **wipes that user's stored
+  ticket**.
+- Avoid "default credentials" (one Perforce user for the whole instance): every change would be
+  attributed to that user, and the login page does not store a per-user ticket.
+- If the BASE runs in a container, keep the workspace root on the container's own filesystem. On a
+  macOS Docker bind mount IRIS sees read-only files as writable, which breaks CCR's rule
+  "read-only = not checked out".
+
+**Each developer, when the ticket expires (often every 12 hours):**
+1. Open `https://<base-host>/isc/studio/templates/%25Studio.SourceControl.UI.cls?action=Login&Namespace=<BASE ns>`
+   in a browser signed in as **your** IRIS user. The parameter is `Namespace=`; with `$NAMESPACE=`
+   the page runs in `%SYS` and answers "^Sources is not defined in %SYS". The same page opens by
+   itself the first time a check-out needs Perforce.
+2. Before typing, check the header shows your namespace and **your** IRIS user, and the prompt names
+   your Perforce user. If it shows `_SYSTEM` or another account, sign out or use a private window:
+   the ticket is stored for whoever is signed in.
+3. Enter your Perforce password. The client tools run `p4 login` and store a ticket, not the
+   password. When the agent reports "no valid Perforce ticket", or a check-out turns into a login
+   page, log in again.
+
+#### 5. Disconnected BASE
+
+No Perforce access is needed: *Source Control → Commit Changes via ItemSet* uploads through the CCR
+server, with the CCR ID and the **Access Token** from the CCR's Perforce Details, typed by you. The
+value shown next to the CCR in some lists (`dev<CCR>-<server>`) is not the token.
+
+#### 6. Check that it works
+
+Open a new terminal, start `claude` in the project, and run `/mcp`: `iris-interop-dev` should be
+connected. Then ask:
+
+```text
+Check the CCR environment of namespace <BASE ns> and tell me what you would need to start on CCR <ID>.
+```
+
+It should report `Env=BASE`, `Org` and `Sys`, connected or disconnected, **your** IRIS user, the
+Perforce ticket (connected), and the CCR's state. It edits only when the CCR is In_BASE.
 
 ### What changes, and why
 
@@ -369,8 +527,9 @@ hook cannot reach IRIS to ask which source-control class a namespace uses.
   wrong (the namespace is the truth) and unanswerable, since CCR exports classes as **XML** by
   default while the gate only ever matched `.cls`. It asks instead whether **this session has read
   the document**, and denies a put that has not: an unread put can replace work that exists only on
-  the server, with no local copy to notice afterwards. Either call clears it —
-  `iris_doc(mode=get)` if the document exists, `iris_doc(mode=head)` if you believe it does not.
+  the server, with no local copy to notice afterwards. Any of these clears it —
+  `iris_doc(mode=get)` if the document exists, `iris_doc(mode=head)` if you believe it does not, or
+  an `iris_source_control` check-out of it.
 - **CR-12 is skipped.** It asks the namespace and `src/` to agree byte for byte; under CCR that is
   an instruction to put the stale local copy back. The Stop gate instead lists the documents the
   session wrote, for the human to reconcile against the CCR uncommitted-changes queue — it cannot
@@ -388,8 +547,8 @@ session first.
 
 ### What the agent must not do under CCR
 
-Bundle or Upload, move a CCR through its workflow, peer-review its own change, `%Disconnect`, or
-`TakeOwnership`. Those are the human's, always.
+Submit a Perforce check-in, Bundle or Upload, move a CCR through its workflow, peer-review its own
+change, `%Disconnect`, `%Reconnect`, or `TakeOwnership`. Those are the human's, always.
 
 ## Decision log
 

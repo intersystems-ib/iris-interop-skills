@@ -1668,7 +1668,10 @@ _C410 = "Diet.BO.Login"
 _GET = ("mcp__iris__iris_doc", {"mode": "get", "name": _C410 + ".cls"})
 _HEAD = ("mcp__iris__iris_doc", {"mode": "head", "name": _C410 + ".cls"})
 _OTHER = ("mcp__iris__iris_doc", {"mode": "get", "name": "Other.BO.X.cls"})
-_CHECKOUT = ("iris_source_control", {"action": "checkout", "name": _C410 + ".cls"})
+# `document`, not `name`: that is the key iris_source_control actually sends (ScmParams.document).
+# This was `name` until the ccr-workflow merge, and the gate passed it while a real check-out --
+# keyed `document` -- never counted.
+_CHECKOUT = ("iris_source_control", {"action": "checkout", "document": _C410 + ".cls"})
 
 # --- mode resolution
 check("default mode is files", "files", iis_scm.scm_mode(_proj410()))
@@ -1704,10 +1707,15 @@ check("ccr, an earlier iris_doc get -> ALLOW", "ALLOW", srcgate410(_C410, [_GET]
 check("ccr, an earlier iris_doc head -> ALLOW", "ALLOW", srcgate410(_C410, [_HEAD]))
 # Per document, not "any read happened".
 check("ccr, a get of a DIFFERENT class -> DENY", "DENY", srcgate410(_C410, [_OTHER]))
-# Accepted so nothing needs changing when iris-interop-dev#417 exposes the tool. Not reachable
-# today: iris_source_control is not in INTEROP_TOOLS. (No count here -- it is about to become 33
-# as the MCP exposes the tool, and a number in prose always rots. Read the list.)
-check("ccr, a checkout (pending #417) -> ALLOW", "ALLOW", srcgate410(_C410, [_CHECKOUT]))
+# Reachable with IRIS_TOOLSET=baseline (what ccr-workflow prescribes); not in INTEROP_TOOLS until
+# iris-interop-dev#417. (No count here -- a number in prose always rots. Read the list.)
+check("ccr, a checkout of it -> ALLOW", "ALLOW", srcgate410(_C410, [_CHECKOUT]))
+# The status call names the document too, but reading a lock state is not reading the source.
+check("ccr, only a status call -> DENY", "DENY",
+      srcgate410(_C410, [("iris_source_control", {"action": "status", "document": _C410 + ".cls"})]))
+# A check-out of ANOTHER document does not clear this one.
+check("ccr, a checkout of a DIFFERENT class -> DENY", "DENY",
+      srcgate410(_C410, [("iris_source_control", {"action": "checkout", "document": "Other.BO.Keep.cls"})]))
 # Must fail OPEN: denying because the hook could not look is the failure this mode removes.
 check("ccr, unreadable transcript -> ALLOW", "ALLOW",
       srcgate410(_C410, transcript_path="/nonexistent/x.jsonl"))
@@ -1830,6 +1838,60 @@ check("...and that hooks do not run on codex", True,
 # Pointers to where the per-topic detail lives -- the three skills #411 changed.
 for _sk in ("production-lifecycle", "hl7-schemas", "conformance-review"):
     check("...pointing at %s" % _sk, True, "`" + _sk + "`" in _router)
+
+# --------------------------------------------------------------------------------------
+print("\nccr-workflow  the CCR procedure skill, and every channel that must name it")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# The mode (#410) inverts the gates, but until this skill the per-item procedure -- check-out,
+# %AddToSourceControl for a new class, verifying after every "yes", the hand-off -- lived nowhere
+# a model could load. A skill nothing names is a skill nothing loads, so each channel is asserted:
+# the bootstrap (Claude only), the per-turn router (Claude only), the interop router SKILL.md (the
+# one channel codex/opencode get, #115), and the two agents a CCR build gets delegated to.
+#
+# COVERAGE: these assert the pointers exist and name a real skill. They cannot assert a model
+# follows the loop; the CCR behaviour itself was measured on a connected BASE, not here.
+check("the skill exists", True,
+      os.path.isfile(os.path.join(ROOT, "skills", "ccr-workflow", "SKILL.md")))
+
+# 1. Bootstrap: named in CCR mode only -- files-mode text must stay byte-identical to before.
+_boot_ccr = _boot._msg(_proj410(iis_scm="ccr\n"))
+check("bootstrap names it under ccr", True,
+      "Skill(iris-interop-skills:ccr-workflow)" in _boot_ccr)
+check("...and not in files mode", False, "ccr-workflow" in _boot._msg(_proj410()))
+
+# 2. Per-turn router: CCR vocabulary routes, git vocabulary does not.
+for _label, _prompt in [
+        ("EN CCR prompt routes", "implement the census flow under CCR ABCD0123"),
+        ("ES CCR prompt routes", "prepara el control de cambios para subir al CCR"),
+        ("Perforce ticket routes", "the Perforce ticket expired, what now?"),
+        ("uncommitted queue routes", "show me the uncommitted queue for this namespace"),
+]:
+    check(_label, True, "ccr-workflow" in _route(_prompt).split(","))
+# "check out" / "check in" are deliberately NOT routed: on a git project they mean a branch or a
+# commit, and the skill's own first step would then have to talk the model back out of CCR.
+check("git 'check out the branch' does not route", False,
+      "ccr-workflow" in _route("check out the feature branch and check in the fix").split(","))
+# Ties keep declaration order, so a CCR prompt that also names three components keeps the skill.
+_crowded = _route("under CCR: change the DTL, the BPL router and the business operation").split(",")
+check("survives MAX on a crowded prompt", True, "ccr-workflow" in _crowded)
+
+# 3. The interop router, the portable channel.
+check("interop router points at it", True,
+      "`iris-interop-skills:ccr-workflow`" in _router and "skills/ccr-workflow/SKILL.md" in _router)
+
+# 4. The agents a CCR build is delegated to.
+for _ag in ("interop-builder", "conformance-reviewer"):
+    _txt = io.open(os.path.join(ROOT, "agents", _ag + ".md"), encoding="utf-8").read()
+    check("agent %s has the CCR clause" % _ag, True, "ccr-workflow" in _txt)
+
+# 5. The Stop gate's CCR list points at a query that exists.
+_probes = os.path.join(ROOT, "skills", "ccr-workflow", "references", "probes.md")
+check("...stop gate names the queue probe", True,
+      "skills/ccr-workflow/references/probes.md" in _ccr_reason410)
+check("...and the probe file has the queue query", True,
+      os.path.isfile(_probes)
+      and "%Studio_SourceControl.Change" in io.open(_probes, encoding="utf-8").read())
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:

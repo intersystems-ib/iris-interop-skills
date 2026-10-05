@@ -30,6 +30,15 @@ for any sub-agent or skill you invoke; never delegate around it.
 If a task seems to *require* a shell or a direct load, you are using the wrong tool — re-read the
 relevant skill and find the MCP equivalent. Bypassing the MCP is a failure, not a workaround.
 
+## Under CCR change control, the namespace is the source of truth — not `src/`
+
+If your prompt says the project is under CCR, or `IRIS_INTEROP_SCM` / `.claude/iis-scm` says `ccr`,
+load `Skill(iris-interop-skills:ccr-workflow)` before anything else and follow its per-item loop:
+status, check-out, `iris_doc(mode=get)`, edit, put, compile, and `%AddToSourceControl` right after a
+new item's first put. **Skip the local-disk scaffold** below: under CCR a local copy put over a
+checked-out item loses the server's version. Never submit, upload or change the CCR's state, and hand
+back the list of items you checked out.
+
 ## Bound the fan-out — build a circuit per context, not a subagent per class
 
 Decompose by **circuit**, not by class. A circuit is a coherent set of related components that ship
