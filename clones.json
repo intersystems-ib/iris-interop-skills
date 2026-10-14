@@ -255,9 +255,13 @@
     "2026-10-12": {
       "count": 2,
       "uniques": 1
+    },
+    "2026-10-13": {
+      "count": 22,
+      "uniques": 12
     }
   },
-  "total_count": 5026,
-  "daily_uniques_sum": 1276,
-  "updated_at": "2026-10-13T10:40:18+00:00"
+  "total_count": 5048,
+  "daily_uniques_sum": 1288,
+  "updated_at": "2026-10-14T08:46:30+00:00"
 }
