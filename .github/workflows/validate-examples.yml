@@ -55,6 +55,15 @@ jobs:
       - name: Tier 1 — structural checks
         run: python3 scripts/validate_examples.py
 
+      # Link 1 of the #418 path-filter gate. Tier 1 ONLY, deliberately: it runs
+      # validate_examples.py with no --compile, so it needs no IRIS and sits in the fast job
+      # rather than behind the container. Tier 2 reads no path outside the globs tier 1
+      # already covers (checked: BestPractices/external/**/*.cls, skills/*/assets/*.cls and
+      # the two baselines are all inside BestPractices/** and scripts/*), so tracing tier 1
+      # is enough to police the declaration — see scripts/validate_ci_paths.py.
+      - name: CI path-filter coverage (link 1 — trace validate_examples.py)
+        run: python3 scripts/validate_ci_paths.py --trace scripts/validate_examples.py
+
   compile:
     runs-on: ubuntu-latest
     needs: structural

@@ -5,8 +5,25 @@
 # none — and a hook that stops firing fails OPEN: no deny, no warning, no log line, and the
 # next run looks clean because nothing was ever checked.
 #
-# These run in ~2s with no IRIS and no network. See scripts/test_hooks.py for what each
+# These run in ~4s with no IRIS and no network. See scripts/test_hooks.py for what each
 # case was before its fix.
+#
+# THE FILTER BELOW IS ALMOST THE WHOLE REPO, AND THAT IS NOT AN ACCIDENT (#418).
+# scripts/test_hooks.py does not only test hooks. Two of its checks walk the entire tree:
+# the CR-16 secret sweep at :1314 reads every tracked .cls/.md/.xml/.json/.py/.sh, and
+# :1425 asserts that iis_scope's os.walk still sees the whole bank. Measured by audit hook
+# on 2026-10-16 over this tree: 296 tracked files, of which 275 were matched by NO entry in
+# this list before this change — so a secret committed anywhere under BestPractices/ or
+# skills/ failed this suite in a job that no push and no PR would ever trigger. #421 fixed
+# validate-skills.yml and validate-examples.yml and reported "0 unwatched"; that was true
+# of those two files and wrong by 275 here, because this workflow was never looked at.
+#
+# The honest alternative is to SPLIT the suite — move the two whole-tree checks into a job
+# with no paths: filter and leave this one watching hooks/** plus the named subjects. That
+# trades this list for a second job. It was not taken because the job is 4 seconds and the
+# list, with a reason on every line, documents what the suite actually depends on. If the
+# job ever stops being cheap, split it; do not trim this list, because
+# scripts/validate_ci_paths.py derives it and will fail.
 
 name: test-hooks
 
@@ -22,6 +39,21 @@ on:
       - 'scripts/issue_fingerprint.py'
       - 'scripts/test_issue_fingerprint.py'
       - '.github/workflows/test-hooks.yml'
+      # Added in #418. Every line below is an input the audit-hook trace attributed to a
+      # named line of scripts/test_hooks.py; scripts/validate_ci_paths.py re-derives the
+      # whole list on every run and fails naming the (validator, workflow, path) triple.
+      - 'skills/**'                         # :1314 CR-16 sweep, :1808 the interop router, :1108 the TOPICS dirs, :1894 the ccr probe file
+      - 'agents/**'                         # :1885 the CCR clause in interop-builder.md and conformance-reviewer.md
+      - 'BestPractices/**'                  # :1314 CR-16 sweep reads every .cls/.md here
+      - 'scripts/**'                        # :1314 CR-16 sweep reads every .py/.json here, the four baselines included
+      - 'README.md'                         # :1314 CR-16 sweep
+      - 'CLAUDE.md'                         # :1314 CR-16 sweep
+      - 'settings.json'                     # :1314 CR-16 sweep
+      - 'LICENSE'                           # :1309 the sweep stats every glob hit before rejecting it on extension
+      - '.claude-plugin/**'                 # :1425 the iis_scope walk is an os.walk, so dot-directories are in scope (#95)
+      # The path-filter gate runs in this job, so it must not itself be path-filtered: with
+      # this line absent, deleting a filter entry from validate-skills.yml runs no job at all.
+      - '.github/**'                        # scripts/validate_ci_paths.py parses every workflow it maps
   pull_request:
     paths:
       - 'hooks/**'
@@ -33,6 +65,21 @@ on:
       - 'scripts/issue_fingerprint.py'
       - 'scripts/test_issue_fingerprint.py'
       - '.github/workflows/test-hooks.yml'
+      # Added in #418. Every line below is an input the audit-hook trace attributed to a
+      # named line of scripts/test_hooks.py; scripts/validate_ci_paths.py re-derives the
+      # whole list on every run and fails naming the (validator, workflow, path) triple.
+      - 'skills/**'                         # :1314 CR-16 sweep, :1808 the interop router, :1108 the TOPICS dirs, :1894 the ccr probe file
+      - 'agents/**'                         # :1885 the CCR clause in interop-builder.md and conformance-reviewer.md
+      - 'BestPractices/**'                  # :1314 CR-16 sweep reads every .cls/.md here
+      - 'scripts/**'                        # :1314 CR-16 sweep reads every .py/.json here, the four baselines included
+      - 'README.md'                         # :1314 CR-16 sweep
+      - 'CLAUDE.md'                         # :1314 CR-16 sweep
+      - 'settings.json'                     # :1314 CR-16 sweep
+      - 'LICENSE'                           # :1309 the sweep stats every glob hit before rejecting it on extension
+      - '.claude-plugin/**'                 # :1425 the iis_scope walk is an os.walk, so dot-directories are in scope (#95)
+      # The path-filter gate runs in this job, so it must not itself be path-filtered: with
+      # this line absent, deleting a filter entry from validate-skills.yml runs no job at all.
+      - '.github/**'                        # scripts/validate_ci_paths.py parses every workflow it maps
   workflow_dispatch:
 
 jobs:
@@ -48,3 +95,17 @@ jobs:
 
       - name: issue-fingerprint tests
         run: python3 scripts/test_issue_fingerprint.py
+
+      # Link 2 of the #418 gate, and the reason this workflow watches .github/**. It is also
+      # asserted from inside scripts/test_hooks.py, so a local run catches the same thing;
+      # this step exists so a failure is legible on the run page instead of arriving as one
+      # line in a 300-case table.
+      - name: CI path-filter coverage (link 2 — every declared input is watched)
+        run: python3 scripts/validate_ci_paths.py
+
+      # Link 1: declaration vs reality, for the two validators this job runs. A new read
+      # that no INPUTS glob covers fails HERE, in the job for the change that added it.
+      - name: CI path-filter coverage (link 1 — trace test_hooks.py)
+        run: python3 scripts/validate_ci_paths.py --trace scripts/test_hooks.py
+      - name: CI path-filter coverage (link 1 — trace test_issue_fingerprint.py)
+        run: python3 scripts/validate_ci_paths.py --trace scripts/test_issue_fingerprint.py

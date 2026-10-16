@@ -1893,6 +1893,274 @@ check("...and the probe file has the queue query", True,
       os.path.isfile(_probes)
       and "%Studio_SourceControl.Change" in io.open(_probes, encoding="utf-8").read())
 
+# --------------------------------------------------------------------------------------
+print("\n#418  does each validator's workflow WATCH every file that validator reads?")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# A `paths:` filter missing one of its validator's inputs makes that gate invisible for
+# exactly the change that needed it: the push lands, no job runs, and the run page is not
+# red — it is EMPTY. This repo has shipped that shape three times (1.15.1's
+# issue_fingerprint.py, #418's two workflows, and this workflow's own 275 files, which #421
+# did not look at), and a human caught it all three times.
+#
+# scripts/validate_ci_paths.py is the machine. It lives there and not here because it has
+# two halves and only one of them belongs in this suite: link 2 is pure text and runs here
+# on every push, link 1 runs each validator under an audit hook and rides in that
+# validator's own workflow. See that file for why one link cannot cover for the other.
+#
+# COVERAGE: this asserts pattern-matching between a declared input set and a workflow's
+# filter list. It cannot assert that GitHub then ran the job — a correct filter and a job
+# skipped by a concurrency cancel or a missing runner look the same from here.
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import validate_ci_paths as _cip  # noqa: E402
+
+_cip_findings, _cip_notes, _cip_parser = _cip.audit()
+# The parser first, and separately. #418's own measurement wrote one of these, left YAML
+# inline comments attached to the values, and manufactured five findings that read exactly
+# like real ones. A parser bug does not make the gate quiet, it makes it LOUD and wrong, so
+# its unit tests are a precondition for believing anything below.
+check("the filter parser passes its own tests", 0, len(_cip_parser))
+for _e in _cip_parser:
+    print("          - PARSER:", _e)
+# The population, not just the verdict: "0 unwatched" over an empty input set is the false
+# green this whole file is written against, so print what was measured over what.
+_cip_tracked = _cip.tracked_files()
+print("          (population: {} validators, {} declared tracked inputs over {} tracked "
+      "files)".format(
+          len(_cip.VALIDATORS),
+          sum(len(_cip.declared_files(_v, _cip_tracked)) for _v in _cip.VALIDATORS),
+          len(_cip_tracked)))
+check("every declared input is watched by its workflow", 0, len(_cip_findings))
+for _f in _cip_findings:
+    print("          -", _f)
+
+# --------------------------------------------------------------------------------------
+print("\n#422  resolve-once: the carve-out, and the cards that must stay dated")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# #422 shipped one permission and one reference file, and each has a half that is cheap to
+# lose. The permission -- "already introspected it this session? cite it, don't re-fetch" --
+# is the catchy half. Its carve-out -- "a class you created, edited or compiled CAN have
+# changed, re-read that one" -- is the half that keeps it safe, and an edit that trims the
+# rule to the catchy half leaves a model reasoning over stale source with nothing
+# downstream to notice: interop_conformance_gate.py:85 is explicit that it gates "what the
+# model AUTHORS, never what it reads", and :79-80 records that denying such a read was 4 of
+# 4 false positives. The loss is silent, and it is the dangerous direction, so the text is
+# the only place it can be asserted.
+#
+# These assertions pin MEANING, not wording: each is a pair of concept regexes measured
+# inside a window that is located, bounded and PRINTED. A guard that searches a window
+# wider than its claim passes on unrelated text, and one that pins a spelling forbids its
+# own improvement -- both shapes have shipped in this repo (the #418 parser's five false
+# findings, one section up). A reworded carve-out keeps passing; a deleted one does not.
+#
+# COVERAGE: this asserts the two channels that STATE the rule still state both halves. It
+# cannot assert a model obeys it -- no hook can, because the harm is a read, not a write --
+# and it cannot assert the carve-out is reachable in a context window it was evicted from.
+
+_R422_LOOKUP = _re.compile(
+    r"\bre-?(?:read|introspect|fetch|get|resolv|quer)\w*"
+    r"|\b(?:read|introspect|fetch|get|resolv|quer)\w*(?:\s+\S+){0,3}?\s+again\b", _re.I)
+_R422_OWN = _re.compile(r"\b(?:creat|edit|compil|wrote|writ|author|modif|save)\w*", _re.I)
+# What makes the re-read due. Searched FORWARD of the own-work verb only: the grant half
+# says prebuilt names "cannot change under you", so a two-sided window is answered by the
+# sentence the carve-out exists to limit -- that is why "chang" is absent from _R422_OWN
+# above. "every time"/"always" count too, or this would reject a STRONGER carve-out than
+# the one shipped, and a guard that forbids its own improvement is a bug this repo has had.
+_R422_TRIG = _re.compile(r"\bchang\w*|\bevery time\b|\beach time\b|\balways\b"
+                         r"|\bwhenever\b|\bbefore (?:every|each)\b", _re.I)
+# "chang" is deliberately NOT an own-work verb: the permission half already says prebuilt
+# names "cannot change under you", so admitting it would let the grant satisfy the guard on
+# its own -- the sibling call site answering for the one under test.
+_R422_NEG = _re.compile(r"\bnot\b|n[’']t\b|\bnever\b|rather than|no need|\bavoid"
+                        r"|\bskip|\bwithout\b|instead of", _re.I)
+
+
+def _r422_carveout(path):
+    """Locate the resolve-once rule in one channel and measure its carve-out.
+
+    Located by the concept pair ("this session" + a look-it-up-again verb) rather than by a
+    sentence, because any honest rewording keeps both and a paragraph that keeps neither is
+    not this rule any more. The window is the granting paragraph plus the next one: the two
+    channels place the carve-out differently -- same paragraph in the router, its own
+    paragraph in the agent -- and nothing wider, so an unrelated "re-read" elsewhere in a
+    34k-character file cannot stand in for the carve-out.
+
+    Returns (granting paragraphs, window size, own-work verbs, AFFIRMATIVE lookup-again
+    verbs, the closest gap between the two, re-read triggers found forward of own-work).
+    """
+    _flat = [_re.sub(r"\s+", " ", p).strip()
+             for p in _re.split(r"\n\s*\n", io.open(path, encoding="utf-8").read())]
+    _grants = [i for i, p in enumerate(_flat)
+               if "session" in p.lower() and _R422_LOOKUP.search(p)]
+    if not _grants:
+        return 0, 0, [], [], None
+    _win = " ".join(_flat[_grants[0]:_grants[0] + 2])
+    _own = list(_R422_OWN.finditer(_win))
+    # Affirmative matches only. The grant half IS a re-fetch token ("don't re-fetch"), so a
+    # bare search for one is satisfied by the very sentence the carve-out limits. Rejecting
+    # a negated match also kills an INVERTED carve-out ("...you need not re-read it").
+    _aff = [m for m in _R422_LOOKUP.finditer(_win)
+            if not _R422_NEG.search(_win[max(0, m.start() - 28):m.start()])]
+    _dist = min([abs(o.start() - a.start()) for o in _own for a in _aff], default=None)
+    _trig = [m.group(0) for o in _own
+             for m in _R422_TRIG.finditer(_win[o.start():o.start() + 240])]
+    return (len(_grants), len(_win), [m.group(0) for m in _own],
+            [m.group(0) for m in _aff], _dist, _trig)
+
+
+for _c422_chan, _c422_rel in (("router", "skills/interop/SKILL.md"),
+                              ("agent", "agents/introspect-dont-guess.md")):
+    _g, _wl, _own422, _aff422, _d422, _t422 = _r422_carveout(os.path.join(ROOT, _c422_rel))
+    print("          ({}: {} granting para, {}-char window, own-work {}, affirmative {} "
+          "{} chars apart, trigger {})".format(_c422_chan, _g, _wl, _own422, _aff422,
+                                               _d422, _t422))
+    check("%s states the resolve-once rule" % _c422_chan, True, _g >= 1)
+    check("...carve-out names its own work", True, bool(_own422))
+    check("...and orders those re-read", True, _d422 is not None and _d422 <= 240)
+    check("...on every change to one", True, bool(_t422))
+
+# ---- the signature cards: a verified claim without a version rots into an undated one ----
+#
+# Every signature in skills/fhir/references/prebuilt-hs-classes.md is a 2026.1 snapshot and
+# the file says so once, in the block that scopes all five cards. Drop that version and the
+# cards do not become wrong -- they become UNDATED, which is worse, because the reader has
+# no way to tell a stale signature from a current one and the file's own instruction to
+# re-introspect loses its reason. No other check reads its PROSE: C9 scans
+# skills/*/*/*.md for `objectscript` fences holding a complete `Class ... Extends`, this
+# file deliberately has none (measured on it -- appending one turns C9 red), and a fence is
+# all C9 looks at. The version claim has no other witness.
+_R422_DOC = os.path.join(ROOT, "skills", "fhir", "references", "prebuilt-hs-classes.md")
+_R422_QUOTE = _re.compile(u"[“\"][^\"”]{0,400}[”\"]")
+_R422_VERIF = _re.compile(r"\bverif(?:y|ied|ies|ication)\b", _re.I)
+_R422_VER = _re.compile(r"\b20\d\d\.\d+\b")
+_R422_UNMEAS = _re.compile(r"\bunmeasured\b|\bunverified\b|\bnot probed\b"
+                           r"|\bnot (?:been |yet )?measured\b|\bnever measured\b", _re.I)
+# Three dotted segments minimum: a card name has at least that many, and the short
+# backticked tokens around a flag (`Data`, `Origin`, `GetSDA`) are not class names.
+_R422_CLASS = _re.compile(r"`(%?[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*){2,})`")
+_R422_COUNT = _re.compile(r"\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)"
+                          r"\s+classes\b", _re.I)
+_R422_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+             "eight": 8, "nine": 9, "ten": 10}
+
+
+def _r422_claims(flat):
+    """The verification claims a block MAKES, plus the text they were read from.
+
+    Quoted spans are dropped first. This file quotes foundation-install.md's "kept verified
+    because tier 3 compiles the class below" in order to REJECT it, and scoring a quotation
+    as a claim is the markdown version of a /// comment that names the forbidden string --
+    the commonest false witness there is. A negation in the preceding 60 characters of the
+    block drops it too, for the same reason.
+    """
+    _txt = _R422_QUOTE.sub(" ", flat)
+    return ([m.group(0) for m in _R422_VERIF.finditer(_txt)
+             if not _R422_NEG.search(_txt[max(0, m.start() - 60):m.start()])], _txt)
+
+
+# A missing file reads as "no claims and no cards", which is a pass-shaped answer, so the
+# existence check comes first and the read falls back to "" rather than crashing -- every
+# check below then fails loudly instead of being skipped.
+check("the signature-card file exists", True, os.path.isfile(_R422_DOC))
+_c422_doc = (io.open(_R422_DOC, encoding="utf-8").read()
+             if os.path.isfile(_R422_DOC) else "")
+_c422_cards = [(m.start(), m.group(1)) for m in _re.finditer(r"^## `([^`]+)`", _c422_doc, _re.M)]
+_c422_first = _c422_cards[0][0] if _c422_cards else len(_c422_doc)
+
+# The roster count, machine-checked against the cards. A count stated in prose always rots,
+# in both directions; the fix is not a fresher number but an assertion that re-derives it,
+# and it is what catches a SIXTH card quietly joining a roster verified for five.
+_c422_counts = [_R422_NUM.get(m.group(1).lower(), m.group(1))
+                for m in _R422_COUNT.finditer(_c422_doc[:_c422_first])]
+check("the roster count matches the cards", str(len(_c422_cards)),
+      ",".join(str(c) for c in _c422_counts) or "none stated")
+
+# The product and the version, CO-LOCATED in one header block. A version token loose in
+# the header is not evidence: the blockquote above also says "2026.1", so "a version
+# appears somewhere" survives deleting the sentence that dates the signatures. Searching
+# for the pair instead is also what keeps this from pinning a spelling -- the first draft
+# of this check required the word "verified" and went red on a rewording that said "read
+# off a live IRIS for Health Community 2026.1 instance", which is the same claim. The
+# distance is printed, because a guard whose window is not measured grows past its claim.
+_c422_hdr = [_re.sub(r"\s+", " ", b).strip()
+             for b in _re.split(r"\n\s*\n", _c422_doc[:_c422_first])]
+_c422_pairs = []
+for _b422 in _c422_hdr:
+    _t422 = _r422_claims(_b422)[1]          # quoted spans already dropped
+    _c422_pairs += [abs(_v422.start() - _i422)
+                    for _i422 in (m.start() for m in _re.finditer(r"\bIRIS\b", _t422))
+                    for _v422 in _R422_VER.finditer(_t422)
+                    if abs(_v422.start() - _i422) <= 120]
+_c422_claimed = [b for b in _c422_hdr if _r422_claims(b)[0]]
+print("          (header: {} block(s) claim verification, closest IRIS-to-version gap {} "
+      "chars)".format(len(_c422_claimed),
+                      min(_c422_pairs) if _c422_pairs else "none"))
+check("the cards name the IRIS version", True, bool(_c422_pairs))
+# And no header block may CLAIM verification without a date. Narrow vocabulary on purpose:
+# this one rides on the word, so it goes quiet rather than noisy if the file stops using it
+# -- the check above is the one that carries the weight either way.
+_c422_bare = [b for b in _c422_claimed if not _R422_VER.search(_r422_claims(b)[1])]
+check("...and no header claim is undated", 0, len(_c422_bare))
+for _b422 in _c422_bare:
+    print("          - UNDATED CLAIM:", _b422[:100])
+
+# Per card, for the one that arrives later carrying its own claim.
+_c422_own_claim, _c422_undated = [], []
+for _i422, (_s422, _n422) in enumerate(_c422_cards):
+    _e422 = _c422_cards[_i422 + 1][0] if _i422 + 1 < len(_c422_cards) else len(_c422_doc)
+    _cl422, _tx422 = _r422_claims(_re.sub(r"\s+", " ", _c422_doc[_s422:_e422]))
+    if _cl422:
+        _c422_own_claim.append(_n422)
+        if not _R422_VER.search(_tx422):
+            _c422_undated.append(_n422)
+print("          ({} cards, {} carrying their own verification claim)".format(
+    len(_c422_cards), len(_c422_own_claim)))
+check("no card is verified-but-undated", 0, len(_c422_undated))
+for _n422 in _c422_undated:
+    print("          - UNDATED CARD:", _n422)
+
+# ---- and no absent class is presented as verified ----
+#
+# The file names a class it did NOT measure: the sibling HS.Hub.Standalone.HL7.HL7ToSDA3,
+# whose probe ran after the endpoint died, so its empty result is a failed call and not an
+# absence. Promoting such a name to a card -- or leaving the flag on a name that has become
+# one -- is exactly how an unmeasured class ends up inside a roster the header calls
+# verified. The flag is read from the marker's own sentence plus the one before it, which is
+# where the name sits, and NOT from the whole card block: the Operation card says "its body
+# is unmeasured" about an XData payload, and a block-wide window would read that as the card
+# class itself being unmeasured.
+def _r422_flagged(text):
+    """Classes named as unmeasured: the marker's own sentence plus the one before it."""
+    sents = _re.split(r"(?<=[.!?])\s+", _re.sub(r"\s+", " ", text))
+    named = []
+    for i, s in enumerate(sents):
+        if _R422_UNMEAS.search(s):
+            named += _R422_CLASS.findall((sents[i - 1] if i else "") + " " + s)
+    return sents, named
+
+
+_c422_sent, _c422_flagged = _r422_flagged(_c422_doc)
+print("          ({} unmeasured flag(s), naming {})".format(
+    sum(1 for s in _c422_sent if _R422_UNMEAS.search(s)),
+    sorted(set(_c422_flagged)) or "nothing"))
+# An intersection with the empty set is empty whatever the cards say, so "no overlap" is
+# evidence only once the extractor is known to fire. The control used to be the document
+# itself -- "an unmeasured flag names a class" -- which inverted the incentive: measuring
+# the last flagged class turned the gate red, and the only way back to green was to leave
+# something unmeasured or to delete the check. It fired on 2026-10-16 for exactly that
+# reason, when HS.Hub.Standalone.HL7.HL7ToSDA3 was measured and promoted. The control now
+# runs on a FIXTURE, so the cards may become fully measured while the matcher stays proven.
+_c422_fix = _r422_flagged("Whether `Pkg.Sub.Thing` exposes it was not measured.")[1]
+check("the unmeasured-flag matcher fires", "Pkg.Sub.Thing", ",".join(_c422_fix))
+# ...and the negative half, so a matcher that fires on EVERYTHING cannot pass either.
+_c422_fix0 = _r422_flagged("`Pkg.Sub.Thing` was measured live on a running instance.")[1]
+check("...and not on a measured sentence", "", ",".join(_c422_fix0))
+_c422_both = sorted(set(_c422_flagged) & set(n for _, n in _c422_cards))
+check("no flagged-unmeasured class is a card", 0, len(_c422_both))
+for _n422 in _c422_both:
+    print("          - FLAGGED UNMEASURED YET CARDED:", _n422)
+
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
     print("  FAILED:", f)
