@@ -6,8 +6,10 @@ it when standing a namespace up, not while building components.
 The prerequisite — `HS.Util.Installer.Foundation.Install("<NS>")` — runs in **HSLIB**, not in the
 target namespace, which is why it is a separate call (see the skill).
 
-Signatures verified live against IRIS for Health 2026.1 before this was written, and **kept** verified
-because tier 3 compiles the class below on every release:
+Signatures verified live against IRIS for Health 2026.1 before this was written. Tier 3 compiles the
+class below on every release, which catches a *vanished class* — it does **not** keep a signature
+verified: a call-through to a missing method, and a wrong arity, both compile clean (measured twice in
+the bank, see `references/prebuilt-hs-classes.md`). Re-introspect before relying on the shape:
 
 | call | signature |
 |---|---|

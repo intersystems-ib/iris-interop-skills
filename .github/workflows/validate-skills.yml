@@ -46,3 +46,11 @@ jobs:
           python-version: '3.11'
       - name: skill frontmatter checks
         run: python3 scripts/validate_skills.py
+
+      # Link 1 of the #418 path-filter gate: run the validator under an audit hook and fail
+      # if it touched a tracked file that its declared INPUTS do not cover. A NEW read is the
+      # one thing no static deriver can be trusted with — when a deriver stops recognising a
+      # call site it reports a SMALLER set, and "0 unwatched" is what a dead deriver says.
+      # This is the job for the change that added the read, which is why it runs here.
+      - name: CI path-filter coverage (link 1 — trace validate_skills.py)
+        run: python3 scripts/validate_ci_paths.py --trace scripts/validate_skills.py

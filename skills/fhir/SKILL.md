@@ -40,8 +40,8 @@ iris_execute(namespace="HSLIB", code="Do ##class(HS.Util.Installer.Foundation).I
 Then the FHIR server itself, per HXFHIRINS section 2.3.1:
 
 **Before installing a Foundation namespace, read
-[references/foundation-install.md](references/foundation-install.md)** — compiled by the gate, so
-its three `HS.*` signatures cannot rot.
+[references/foundation-install.md](references/foundation-install.md)** — the three `HS.*` install
+signatures, verified on 2026.1.
 
 Two things that surprise people afterwards: `Install()` also creates a
 `<NS>PKG.FoundationProduction`, so a production you did not write shows up in
@@ -49,6 +49,11 @@ Two things that surprise people afterwards: `Install()` also creates a
 schema separately (AFNS section 4, Management Portal → Health → *namespace* → Schema Documentation).
 
 **Before wiring the interop side, read `assets/production-fhir-facade.cls`** — compile-gated.
+
+**Before calling a prebuilt `HS.*` or `EnsLib.*` class, read
+`references/prebuilt-hs-classes.md`** — measured 2026.1 specs for `HL7ToSDA3.GetSDA`, the SDA3→FHIR
+process, `Interop.Operation` and `EnsLib.HL7.Message.OutputToString`, and which members are instance
+methods rather than class methods.
 
 ## Decision tree — Façade vs Repository
 
@@ -196,10 +201,7 @@ These map to standard Interop alerting (`alerting`) plus a couple of FHIR-specif
 
 - **Choosing Repository when Façade would do** — locks IRIS into being the system of record for data that has an authoritative home elsewhere. Hard to reverse.
 - **Implicit grant or `client_credentials` for mobile clients** — wrong grant type. Auth code + PKCE is the only correct choice.
-- **Holding PHI on a public FHIR Façade** — defeats the privacy-preserving design. Use opaque per-program identifiers.
 - **Skipping the SOW out-of-scope checklist** — the EMR API not being ready on go-live day is the single most common escalation.
-- **Hardcoding FHIR DSTU2/STU3** in 2024+ work — default to R4 unless a partner contract pins an older version.
-- **Treating FHIR SQL Builder as GA without checking** — verify against current release notes; it was introduced as an early-access feature.
 
 ## When NOT to use this skill — fall back to docs
 
