@@ -263,9 +263,17 @@
     "2026-10-14": {
       "count": 21,
       "uniques": 13
+    },
+    "2026-10-15": {
+      "count": 3,
+      "uniques": 2
+    },
+    "2026-10-16": {
+      "count": 18,
+      "uniques": 5
     }
   },
-  "total_count": 5069,
-  "daily_uniques_sum": 1301,
-  "updated_at": "2026-10-16T08:13:53+00:00"
+  "total_count": 5090,
+  "daily_uniques_sum": 1308,
+  "updated_at": "2026-10-17T07:50:59+00:00"
 }
