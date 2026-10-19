@@ -228,7 +228,7 @@ Drivers for splitting an estate (vs. a single `INTEROP` namespace with categorie
 3. **Security boundary** — external integrations isolated from internal ones for tighter access control.
 4. **Regulatory boundary** — data-residency or differential-audit requirements.
 
-Both shapes (split or consolidated) are valid. Consolidation simplifies deployment at the cost of weaker access boundaries. Do **not** split for cosmetic reasons — every split adds its own monitor, alert circuit, settings, source-control branch, and deploy pipeline.
+Both shapes are valid; consolidation simplifies deployment at the cost of weaker access boundaries. Do **not** split for cosmetic reasons — every split adds its own monitor, alert circuit, settings, source-control branch, and deploy pipeline.
 
 Detailed migration patterns, the deployment tool, and the multi-environment configuration strategy live in `production-lifecycle`.
 
@@ -252,6 +252,10 @@ System Default Settings are the **only** layer that does NOT migrate via a produ
 Before the first SQL statement (or class reference) against anything not created in this session,
 resolve the real names with tools — never from the prompt, the class name, or memory.
 
+**Already introspected it this session? Cite it — don’t re-fetch.** Prebuilt names (`HS.*`,
+`Ens*`, `EnsLib.*`, `%*`) and their tables, columns and HL7 schemas cannot change under you. A class
+you created, edited or compiled CAN — re-read that one after every change.
+
 **Step 0 — first ask whether it is a table at all.** Part of the interop configuration surface is
 not projected to SQL anywhere. For those names no amount of introspection finds anything: the
 answer is a typed tool, and the `-30` is final rather than a cue to guess again.
@@ -259,7 +263,7 @@ answer is a typed tool, and the `-30` is final rather than a cue to guess again.
 | What you were about to `SELECT` from | Reality | Call this instead |
 |---|---|---|
 | `Ens_Config.Setting` | **Not a table** (`SQLCODE -30`, measured). Settings are embedded inside the production definition's XData. | `iris_production_item(action=get_settings, item="<Item>", namespace=…)`; from ObjectScript, `##class(Ens.Config.Production).%OpenId("<Pkg>.Production")` then iterate `tProd.Items` and read each item's `Settings`. |
-| `Ens_Config.Item` — **CORRECTED 2026-09-18** | **It IS a queryable table.** This row used to say it was not, citing `SQLCODE -30`. Measured on 2026.1: `SELECT Name, ClassName FROM Ens_Config.Item WHERE Production='<Pkg>.Production'` returns the items, and the count agrees exactly with `tProd.Items.Count()` from the object API. The `-30` comes from querying the **class** name: `Ens.Config.Item` fails with `Table 'CONFIG.ITEM' not found`, which is the dots→underscores rule two sections below, not a missing table. | Either works. **But note the real hazard:** the table is populated for REGISTERED productions, so one whose class merely compiles reads as **0 rows, not an error** — an empty answer that looks like "no items". When you need certainty that you are reading a deployed production, prefer `iris_production(action=status, namespace=…)` or the object API, whose emptiness you can distinguish from absence. |
+| `Ens_Config.Item` | **It IS a queryable table**, measured on 2026.1: `SELECT Name, ClassName FROM Ens_Config.Item WHERE Production='<Pkg>.Production'` returns the items, and the count agrees exactly with `tProd.Items.Count()`. The `-30` comes from querying the **class** name `Ens.Config.Item` — the dots→underscores rule two sections below, not a missing table. | Either works. **Hazard:** only REGISTERED productions populate it, so one whose class merely compiles reads as **0 rows, not an error** — an empty answer that looks like "no items". For certainty, `iris_production(action=status, namespace=…)` or the object API, whose emptiness you can tell from absence. |
 | `Ens_Util.Queue` | **Not a table** (`SQLCODE -30`). | `iris_interop_query(what=queues, namespace=…)` |
 | `%Library.SQLConnection`, `Config.SQLConnections` | **Not those names.** The SQL-Gateway connection list is the table `%Library.sys_SQLConnection`, in `%SYS` (BSQG §2). | `business-operations` §"Diagnose a named SQL Gateway connection without the Portal"; `check_config` for the MCP's own connection. |
 | `%SYS.Namespace`, `Config.Namespaces` | Not a SQL table. | `check_config` |

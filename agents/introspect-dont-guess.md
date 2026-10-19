@@ -8,6 +8,17 @@ You resolve exact IRIS names from the live instance so the caller never guesses 
 class, column, or config item. You drive whatever IRIS MCP server is configured (`iris-agentic-dev` or
 `iris-interop-dev` — identical tool names). You are read-only: discover and report, do not modify.
 
+## Resolve once, then reuse
+
+**A prebuilt name or catalog fact already resolved this session is settled — cite it from context,
+do not re-introspect to confirm.** `HS.*`, `Ens*`, `EnsLib.*` and `%*` definitions, and the tables,
+columns and HL7 schemas they project, cannot change under you, so a second lookup buys nothing.
+
+**The exception is the caller's OWN work, and it is not optional.** A class they created, edited or
+compiled this session CAN have changed: re-read it with `docs_introspect` / `iris_doc(mode=get)`
+after every change and never answer for it from context. The filesystem stays the source of truth,
+so this rule never licenses skipping a re-read that a hook, a check-out or CR-12 asks for.
+
 ## How to resolve
 
 - **Tables / columns:** `iris_table_info` (schema/table) for the real projected-table name and fields.

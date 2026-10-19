@@ -379,9 +379,8 @@ Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Ru
 
 - **Defaulting to Create=New** when source and target shapes match → costly rebuilding of every segment.
 - **Forgetting to compile before testing** → the editor lies (runs the previous compiled version).
-- **Calling a utility function bare in a DTL** (`ConvertDateTime(...)`, `Lookup(...)`) → compiles
-  clean, throws `<UNDEFINED>` on the first `Transform()`. DTL needs `..Func()`; the bare form is the
-  *business rule* syntax. See the syntax rule above.
+- **Calling a utility function bare in a DTL** (`Lookup(...)`) → compiles clean, throws
+  `<UNDEFINED>` on the first `Transform()`. DTL needs `..Func()`; see the syntax rule above.
 - **`..Lookup()` without a default parameter** → silent "" on miss, hard to debug.
 - **Validation lists / `In()` checks that don't tolerate diacritic and case variants** → `"Diabetica"` ≠ `"Diabética"` ≠ `"diabética"`; a hardcoded literal list rejects legitimate input silently. Normalize **both sides** before comparing — see `NormalizeKey` in the FunctionSet section above (called `##class(...)`-qualified); normalized lookup-table keys: `lookup-tables`.
 - **Switch cases ordered generic-to-specific** → generic case matches first, specific cases never run.
@@ -389,9 +388,9 @@ Keep the validation predicates in a reusable `App.UTL.FunctionSet Extends Ens.Ru
 - **Bounding a repeating-segment loop with `AL1Count`** → returns `""` on schemas that don't expose it; the loop runs zero times and the transform "succeeds" having processed nothing. See "Iterating repeating segments" in [references/hl7-paths.md](references/hl7-paths.md) for the safe pattern.
 - **DTL doing DB lookups in `code` actions** that block the BP — move to a method that can be cached.
 - **CDA in DTL** — almost always wrong; switch to XSLT.
-- **Hand-rolling date conversion in `<code>` blocks** (`$ZDATEH(source.X, 4, , , , , , , -1)` etc.) → prefer `ConvertDateTime` from the function picker, or wrap the logic in a project FunctionSet subclass (see above). Inline `$ZDATEH` with positional empty args is unreadable and not reusable.
-- **Treating `$$$LOGINFO(...)` inside a `<code>` action as a "side-effect to remove"** → log calls inside DTL are acceptable. The entry correlates with the message in Visual Trace without an extra routing rule or transform. Promote to a separate rule only when there is a real action (send/transform/store), not just observability.
-- **Defaulting to `$$$Text(...)` for error strings** for "future localization" → not required in monolingual projects. Hardcoded literals (Spanish, English, whatever the team works in) are fine. Switch to `$$$Text` only when i18n is an actual requirement.
+- **Hand-rolling date conversion in `<code>` blocks** (`$ZDATEH(source.X, 4, , , , , , , -1)` etc.) → prefer `ConvertDateTime` from the function picker, or a project FunctionSet subclass (see above). Positional empty args are unreadable and not reusable.
+- **Treating `$$$LOGINFO(...)` inside a `<code>` action as a "side-effect to remove"** → log calls inside DTL are acceptable, and correlate with the message in Visual Trace. Promote to a separate rule only for a real action (send/transform/store), not observability.
+- **Defaulting to `$$$Text(...)` for error strings** for "future localization" → not required in monolingual projects; hardcoded literals are fine. Switch to `$$$Text` only when i18n is an actual requirement.
 
 ## HL7-specific patterns — fields, segments, paths
 
@@ -422,7 +421,9 @@ When dropping to ObjectScript inside a DTL `<code>` activity (or a helper method
 
 ## When NOT to use this skill — fall back to docs
 
-- FHIR resource transformations — different patterns (`HS.FHIR.DTL.*`); see `fhir`.
+- FHIR/SDA3 resource transformations — different patterns (`HS.FHIR.DTL.*`); see `fhir`. **Before
+  writing one, read `../fhir/references/prebuilt-hs-classes.md`** — measured 2026.1
+  `HL7ToSDA3.GetSDA` and SDA3→FHIR process signatures, and which members are instance methods.
 - Procedural orchestration (multi-step workflows with side effects) — that's a BPL job, see `bpl`.
 
 ## See also
@@ -431,5 +432,5 @@ When dropping to ObjectScript inside a DTL `<code>` activity (or a helper method
 - `lookup-tables` — Lookup() function source data
 - `hl7-schemas` — when source/target HL7 needs custom Z-segments; escape special characters when building HL7 strings by hand
 - `bpl` — when "transformation" is really orchestration
-- `fhir` — FHIR DTL patterns (`HS.FHIR.DTL.*`)
+- `fhir` — FHIR DTL patterns (`HS.FHIR.DTL.*`); prebuilt `HS.*` signatures
 - `business-operations` — lab device integration DT both directions; port pair documentation

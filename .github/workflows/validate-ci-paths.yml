@@ -1,0 +1,35 @@
+# Link 2 of the #418 path-filter gate, in the one workflow that has NO paths: filter.
+#
+# WHY THIS FILE EXISTS SEPARATELY. Link 2 also runs inside test-hooks.yml, which is cheaper
+# and gives a better failure message. But test-hooks.yml is itself path-filtered, and a gate
+# that polices path filters must not be reachable only through one. Measured on 2026-10-16:
+# of 305 tracked files, test-hooks.yml's 15-entry filter matches 304 — .gitignore is the only
+# miss, so the hole looks academic. It is not, and the reason is the shape of the next
+# omission rather than today's file list: a commit that adds a NEW top-level file or
+# directory matches no entry either, and the check that would have said "that path is
+# unwatched" is the one the filter just skipped. That is the bootstrap trap this gate exists
+# to close, so one job runs unconditionally.
+#
+# Keep this job filter-less and keep it pure text: no execution, no IRIS, no network, under a
+# second. Link 1 (run the validator under an audit hook) stays in each validator's own
+# workflow, because it must fail in the job for the change that added the read.
+
+name: validate-ci-paths
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: every declared validator input is watched by its workflow
+        run: python3 scripts/validate_ci_paths.py
+      - name: the filter parser's own unit tests
+        run: python3 scripts/validate_ci_paths.py --self-test
