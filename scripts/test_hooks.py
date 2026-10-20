@@ -1140,6 +1140,120 @@ check("no interop content is silent", "NOTHING", _route("what is the weather lik
 
 
 # --------------------------------------------------------------------------------------
+print("\n#423  a body already in context is cited, not reloaded")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# The router re-emits "load X NOW" on every matching turn. That is right on a fresh session; on a
+# --resume or fix-loop the SKILL.md bodies loaded earlier are replayed into context and the
+# imperative pulls a 6-9k-token body back in for nothing.
+#
+# transcript_path IS available to this hook: iis_scm.py records it present on PreToolUse,
+# PostToolUse, Stop, SubagentStop, SessionStart and UserPromptSubmit alike, verified against 24 of
+# 24 live payloads. So the suppression is evidence-based rather than a request in prose.
+#
+# THE TRAP THIS SUITE EXISTS FOR, and #423 names it: a dedup keyed on "have I advised this before"
+# rather than "is the body present" silences the first legitimate recommendation after a topic
+# change and sends the model back to blind API probing. The router's OWN output contains the
+# literal "Skill(iris-interop-skills:fhir)" and is replayed in the transcript -- so a substring
+# search over the transcript implements the WRONG one of those two, and (b) is the only case here
+# that can tell them apart. Every other case passes either way.
+#
+# How large that difference is, measured on a real one-day transcript rather than on these
+# fixtures: the substring form finds 12+ skills "loaded" (conformance-review named 270x,
+# component-map 74x, interop 65x, and on) where exactly ONE had been. Mutation N1 of the suite
+# applies that form and is killed by (b) ALONE -- so if (b) is ever deleted as redundant, nothing
+# here still separates the implementation this issue asks for from the one it forbids.
+
+
+def _tx(*records):
+    """A transcript file holding these JSONL records; returns its path."""
+    fd, _p = tempfile.mkstemp(suffix=".jsonl")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        for r in records:
+            fh.write(json.dumps(r) + "\n")
+    return _p
+
+
+def _skill_load(name):
+    """What the transcript holds after Skill(iris-interop-skills:<name>) actually ran."""
+    return {"type": "assistant", "message": {"role": "assistant", "content": [
+        {"type": "tool_use", "name": "Skill",
+         "input": {"skill": "iris-interop-skills:" + name}}]}}
+
+
+def _router_advice(name):
+    """What the transcript holds after the ROUTER advised it. Advice, not a load."""
+    return {"type": "user", "message": {"role": "user", "content": [
+        {"type": "text", "text": "[IIS-ROUTE] This turn is about: %s. Call "
+                                 "Skill(iris-interop-skills:%s) NOW, in this turn." % (name, name)}]}}
+
+
+def _ctx(prompt, transcript=None):
+    """The router's additionalContext for this prompt, or '' when it stays silent."""
+    payload = {"prompt": prompt}
+    if transcript is not None:
+        payload["transcript_path"] = transcript
+    pr = subprocess.run([sys.executable, _ROUTE], input=json.dumps(payload),
+                        capture_output=True, text=True)
+    if pr.returncode != 0 or pr.stderr.strip():
+        return "CRASH"
+    if not pr.stdout.strip():
+        return ""
+    try:
+        return json.loads(pr.stdout)["hookSpecificOutput"]["additionalContext"]
+    except Exception:
+        return "UNPARSEABLE"
+
+
+_FHIR = "build the FHIR facade"
+_NOW = "Skill(iris-interop-skills:fhir) NOW"
+
+# (a) a real load is evidence: drop the imperative, keep NAMING the skill so the model knows
+#     which context to cite instead.
+_a423 = _ctx(_FHIR, _tx(_skill_load("fhir")))
+check("loaded body: no reload order", False, _NOW in _a423)
+check("...the skill is still named", True, "iris-interop-skills:fhir" in _a423)
+check("...and it says to cite it", True, "cite" in _a423.lower())
+
+# (b) THE DISCRIMINATOR. Only the router's own prior advice is in the transcript, so nothing was
+#     loaded and the imperative must survive.
+check("advice alone is not a load", True, _NOW in _ctx(_FHIR, _tx(_router_advice("fhir"))))
+
+# (c) fail OPEN. The polarity is the OPPOSITE of iis_scm.seen_document, which returns True on
+#     doubt to avoid DENYING; here "seen" means "say less", so doubt must mean "say everything".
+check("no transcript_path: advises", True, _NOW in _ctx(_FHIR))
+check("missing transcript: advises", True,
+      _NOW in _ctx(_FHIR, os.path.join(tempfile.mkdtemp(), "absent.jsonl")))
+check("unparseable transcript: advises", True, _NOW in _ctx(_FHIR, _tx({"not": "a message"})))
+
+# (d) topic drift -- do-not-regress #1. fhir is loaded; a DICOM prompt must still be advised, or
+#     the router stops doing the one job it was built for.
+check("a new topic is still advised", True,
+      "Skill(iris-interop-skills:dicom) NOW" in _ctx("set up DICOM C-STORE", _tx(_skill_load("fhir"))))
+
+# (e) a same-named skill from another plugin is not ours.
+check("another plugin is not ours", True,
+      _NOW in _ctx(_FHIR, _tx({"type": "assistant", "message": {"role": "assistant", "content": [
+          {"type": "tool_use", "name": "Skill",
+           "input": {"skill": "other-plugin:fhir"}}]}})))
+
+# (f) do-not-regress #2. Subagents get no SessionStart context AND do not inherit the parent's
+#     loaded bodies, so the delegation clause must survive suppression -- and must now cover the
+#     already-loaded skills too, which the old message did not: it named only what it advised.
+check("subagent clause survives", True, "subagent" in _a423.lower())
+
+# (g) a subagent's OWN transcript must not suppress for the parent. iis_scm walks
+#     <transcript>/subagents/ deliberately, because a delegated EDIT is still this session's edit;
+#     a delegated LOAD is not this session's load, so this must read the main file only.
+_main423 = _tx(_router_advice("fhir"))
+_sub423 = os.path.join(_main423[:-6], "subagents")
+os.makedirs(_sub423, exist_ok=True)
+with io.open(os.path.join(_sub423, "a.jsonl"), "w", encoding="utf-8") as _fh423:
+    _fh423.write(json.dumps(_skill_load("fhir")) + "\n")
+check("a subagent's load is not ours", True, _NOW in _ctx(_FHIR, _main423))
+
+
+# --------------------------------------------------------------------------------------
 print("\n#336  the iris_execute rules read CODE, not comments")
 print("  {:<52}{:<10}{:<10}{}".format("case", "want", "got", ""))
 
