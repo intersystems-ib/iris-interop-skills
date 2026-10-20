@@ -140,6 +140,21 @@ VALIDATORS = (
         note="tier 1 only; --compile adds no path outside these globs",
     ),
     Validator(
+        "scripts/validate_signatures.py", "validate-examples.yml",
+        inputs=(
+            # The ONLY repo file it reads. The signature cards are its oracle: it parses the
+            # document's own tables and compares them to %Dictionary.CompiledMethod on a live
+            # instance, so an edit to the document is an edit to the expectations.
+            "skills/fhir/references/prebuilt-hs-classes.md",
+            "scripts/validate_signatures.py",  # itself
+        ),
+        # Two inputs is a weak floor by comparison with the others, and it is still the control
+        # that matters: a dead audit hook traces ZERO, and 0 < 2 fails. Raise it if the script
+        # ever grows a baseline file -- do not lower it to accommodate a trace that shrank.
+        floor=2,
+        note="needs a live IRIS, so its trace runs in the compile job, not the structural one",
+    ),
+    Validator(
         "scripts/test_hooks.py", "test-hooks.yml",
         inputs=(
             "hooks/**",                         # the subjects

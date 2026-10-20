@@ -24,6 +24,10 @@ on:
       # SKILL.md-only filter an edit to a reference file or a skill asset alone compiled nothing.
       - 'skills/**'
       - 'scripts/validate_examples.py'
+      # The signature oracle (#425) runs in the compile job below: it reads the
+      # prebuilt-hs-classes.md cards (covered by skills/**) and compares them to
+      # %Dictionary.CompiledMethod on the live instance.
+      - 'scripts/validate_signatures.py'
       - 'scripts/examples_baseline.json'
       - 'scripts/external_baseline.json'
       - 'scripts/snippets_baseline.json'
@@ -37,6 +41,10 @@ on:
       # SKILL.md-only filter an edit to a reference file or a skill asset alone compiled nothing.
       - 'skills/**'
       - 'scripts/validate_examples.py'
+      # The signature oracle (#425) runs in the compile job below: it reads the
+      # prebuilt-hs-classes.md cards (covered by skills/**) and compares them to
+      # %Dictionary.CompiledMethod on the live instance.
+      - 'scripts/validate_signatures.py'
       - 'scripts/examples_baseline.json'
       - 'scripts/external_baseline.json'
       - 'scripts/snippets_baseline.json'
@@ -61,6 +69,8 @@ jobs:
       # already covers (checked: BestPractices/external/**/*.cls, skills/*/assets/*.cls and
       # the two baselines are all inside BestPractices/** and scripts/*), so tracing tier 1
       # is enough to police the declaration — see scripts/validate_ci_paths.py.
+      - name: Signature-card parser self-test
+        run: python3 scripts/validate_signatures.py --self-test
       - name: CI path-filter coverage (link 1 — trace validate_examples.py)
         run: python3 scripts/validate_ci_paths.py --trace scripts/validate_examples.py
 
@@ -176,6 +186,15 @@ jobs:
       - name: Tier 2 — compile every example
         run: python3 scripts/validate_examples.py --compile
 
+      # #425. The cards in skills/fhir/references/prebuilt-hs-classes.md are prose,
+      # and a compile pins neither method existence nor arity (measured twice in the
+      # bank). This reads %Dictionary.CompiledMethod back and compares it to the
+      # document's own tables, so a signature that drifts reddens the release that
+      # drifts it instead of rotting in a reference file.
+      - name: Signature cards match the live instance
+        run: python3 scripts/validate_signatures.py
+      - name: CI path-filter coverage (link 1 — trace validate_signatures.py)
+        run: python3 scripts/validate_ci_paths.py --trace scripts/validate_signatures.py
       - name: IRIS logs (on failure)
         if: failure()
         run: |
