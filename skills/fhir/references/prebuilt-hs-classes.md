@@ -15,19 +15,31 @@ and both a nonexistent class and a nonexistent method returned a well-formed emp
 (negative) — so an absence here is distinguishable from a dead endpoint, which answers with a blank
 body instead.
 
-> **WHAT HOLDS THESE SIGNATURES: nothing. Re-introspect before you ship against them.**
-> This file is prose and markdown tables. No tier compiles it, and no check reads it — tier 3 only
-> stages `objectscript` fences holding a complete `Class … Extends`, and there is no such fence
-> here. Do not read the wording in `foundation-install.md` ("kept verified because tier 3 compiles
-> the class below") as applying here; it does not, and it overstates even its own case, because a
-> compile pins neither method existence nor arity. The repo has measured that twice:
+> **WHAT HOLDS THESE SIGNATURES: `scripts/validate_signatures.py`, on every push (#425).**
+> It parses the member tables below — the ones you are about to read — and compares each claim to
+> `%Dictionary.CompiledMethod` on a live instance, in the `compile` job of `validate-examples.yml`
+> against the pinned `intersystemsdc/irishealth-community:2026.1` image. Gated: **33 member claims**
+> (existence, `ClassMethod`, `FormalSpec`, `ReturnType`) plus the **15 `On<Streamlet>()` callbacks**
+> (existence, `ClassMethod`, empty `FormalSpec`, own `Origin`). Editing a shape here edits the
+> expectation, because there is no second copy: this text IS the oracle. Run it yourself with
+> `IRIS_PORT=… IRIS_NAMESPACE=… python3 scripts/validate_signatures.py`.
+>
+> **What it does NOT gate**, and the run prints each exclusion with its reason so the gap is visible
+> rather than absent: the population counts in the prose (157 / 118 / 832 / 23 / 38 / 330 …), the
+> property-and-initial tables, and the `Required` flags. Those are 2026.1 measurements that no check
+> re-derives. **And the gate proves these cards match the pinned image, not that they match YOUR
+> instance** — on a different version or an unmapped namespace it fails loudly rather than quietly
+> passing, but your namespace is still yours to introspect.
+>
+> A compile would not have done this job, and that is measured rather than assumed: it pins neither
+> method existence nor arity. Twice —
 > `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch04_fhir/tdd-fhirsql-setup-existence.cls` ("a call-through to a missing
 > method compiles clean") and `${CLAUDE_PLUGIN_ROOT}/BestPractices/examples/ch06_adapters/tdd-wsdl-reader-signature.cls`
 > ("a typed `#Dim` gates neither arity nor even method existence, because ObjectScript resolves
-> instance-method calls at run time"). The only instrument that makes a signature claim falsifiable
-> is a `%UnitTest` oracle reading `%Dictionary.CompiledMethod.FormalSpec` — seven bank files do it.
-> **A follow-up should add one for the cards below; until then, treat every card as a 2026.1
-> snapshot and introspect in your own namespace.**
+> instance-method calls at run time"). So do not read `foundation-install.md`'s older wording ("kept
+> verified because tier 3 compiles the class below") as applying here. Seven bank files make the same
+> check as a `%UnitTest` oracle over `FormalSpec`; nothing in this repo's CI *runs* a `%UnitTest`,
+> which is why the gate is a validator and not an eighth.
 
 > **INSTRUMENT HAZARD — do not put `ORDER BY` on an OR-of-`LIKE` against `%Dictionary.*`.**
 > Measured on IRIS for Health community 2026.1 on 2026-10-16, and it silently truncated two
@@ -131,7 +143,7 @@ with `Origin` = this class), not a selection:
 | `ProcessFHIRResponse` | no — instance | `(pFHIRResponse As HS.Message.FHIR.Response, ByRef pFHIRSC As %Status, pSchema As HS.FHIRServer.Schema) As %Status` |
 | `OnInit` | no — instance | `() As %Status` |
 | `CreateAndSendInteropMessage` | no — instance | `(pFHIRObj As %Library.DynamicObject, pSchema As HS.FHIRServer.Schema, pContentType As %String, pFormatter As %JSON.Formatter, pIndentChars As %String, pLineTerminator As %String, pSessionApplication As %String, pSessionId As %String)` — no return type |
-| `CreateAndSendFHIRMessage` | no — instance | as above plus `pLocalHostAndPort As %String` after `pSchema` — no return type |
+| `CreateAndSendFHIRMessage` | no — instance | `(pFHIRObj As %Library.DynamicObject, pSchema As HS.FHIRServer.Schema, pLocalHostAndPort As %String, pContentType As %String, pFormatter As %JSON.Formatter, pIndentChars As %String, pLineTerminator As %String, pSessionApplication As %String, pSessionId As %String)` — no return type; `pLocalHostAndPort` is the only difference from the row above, and it sits after `pSchema` |
 | `GetResourceStream` | **yes** | `(pResourceObj, pFHIRFormat, pFormatFHIROutput, pSchema, pFormatter, pIndentChars, pLineTerminator) As %Stream.Object` |
 | `GetHostAndPort` | **yes** | `(Output pHost As %String, Output pPort As %String)` — no return type |
 
@@ -172,7 +184,8 @@ Consequences, which is the whole reason this card exists:
 | `DispatchRequest` | **`HS.FHIRServer.Interop.Host`**, *not* this class | instance, `(pInteropRequest As HS.FHIRServer.Interop.Request, Output pInteropResponse As HS.FHIRServer.Interop.Response) As %Status` |
 | `OnMessage` | `Ens.BusinessOperation` — **not overridden here** | instance, `(pRequest As %Library.Persistent, Output pResponse As %Library.Persistent) As %Status` |
 | `OnInit`, `OnTearDown` | `Ens.Host` | instance, `() As %Status` |
-| `HSTrace` / `BuildTraceRequest` | `HS.HC.Util.Trace.Helper` | `(pCurrentClass, pMethod, pArgList…)`; `HSTrace` instance, `BuildTraceRequest` class method |
+| `HSTrace` | `HS.HC.Util.Trace.Helper` | instance, `(pCurrentClass, pMethod, pArgList...)` — no return type |
+| `BuildTraceRequest` | `HS.HC.Util.Trace.Helper` | **ClassMethod** `(pCurrentClass, pMethod, pArgList...)` — no return type |
 
 - `DispatchRequest` is the only FHIR-specific member, and **attributing it to
   `HS.FHIRServer.Interop.Operation` is wrong about `Origin`.**
