@@ -25,6 +25,7 @@ escape hatch for environments with no Skill tool.
 import sys, json, re
 
 MARKER = "[IIS-ROUTE] "
+PREFIX = "iris-interop-skills:"
 MAX = 3
 
 # (skill, trigger alternation). EN + ES: the triggers in every frontmatter are bilingual.
@@ -52,6 +53,62 @@ TOPICS = [
 ]
 
 
+def _loaded_skills(transcript_path):
+    """The skills whose BODY is already in THIS session's context (#423).
+
+    Evidence is a Skill tool INVOCATION, parsed as JSON -- never a substring match. This hook's
+    own additionalContext contains the literal "Skill(iris-interop-skills:fhir)" and is replayed
+    into the transcript, so a substring search would key on "have I advised this before" instead
+    of "is the body present". That distinction is the whole of #423: the wrong one silences the
+    first legitimate recommendation after a topic change and sends the model back to the blind
+    API probing this router was built to stop (#218).
+
+    MEASURED ON A REAL TRANSCRIPT, not a fixture (2026-10-20, a one-day session): the substring
+    form reports 12+ skills as already-loaded -- conformance-review named 270 times, component-map
+    74, interop 65, plus dicom, messages, report-issue and more -- because SessionStart, this very
+    hook and ordinary prose all name skills in text. Exactly ONE of them had actually been loaded,
+    and parsing tool_use returns that one. So the forbidden form does not misfire at the margin:
+    in a long session it would suppress nearly every route.
+
+    FAILS OPEN. No path, no file, unreadable, unparseable -> empty set, nothing suppressed. The
+    polarity is the OPPOSITE of iis_scm.seen_document, which returns True on doubt because there
+    "seen" avoids a DENY; here "seen" means "say less", so doubt has to mean "say everything".
+
+    MAIN TRANSCRIPT ONLY, and deliberately so: iis_scm walks <transcript>/subagents/ because a
+    delegated EDIT is still this session's edit, but a body loaded inside a subagent sits in the
+    SUBAGENT's context. Suppressing on that would strip the very line subagents depend on.
+    """
+    if not transcript_path:
+        return set()
+    found = set()
+    try:
+        with open(transcript_path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if PREFIX not in line:
+                    continue                      # cheap reject before the JSON parse
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                content = (rec.get("message") or {}).get("content")
+                if not isinstance(content, list):
+                    continue
+                for b in content:
+                    if not isinstance(b, dict) or b.get("type") != "tool_use":
+                        continue
+                    if "skill" not in str(b.get("name") or "").lower():
+                        continue
+                    inp = b.get("input") or {}
+                    if not isinstance(inp, dict):
+                        continue
+                    name = str(inp.get("skill") or "")
+                    if name.startswith(PREFIX):
+                        found.add(name[len(PREFIX):])
+    except OSError:
+        return set()
+    return found
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -69,14 +126,31 @@ def main():
     hits = [s for _, _, s in sorted(scored, reverse=True)][:MAX]
     if not hits:
         return
-    calls = ", ".join("Skill(iris-interop-skills:%s)" % s for s in hits)
-    msg = (
-        "This turn is about: " + ", ".join(hits) + ". Call " + calls + " NOW, in this turn, "
-        "before writing or running any code -- the API answers you are about to guess at are in "
-        "them. If you delegate this work to a subagent, repeat the same Skill(...) calls inside "
-        "the subagent's prompt: session-start context does NOT reach subagents, and a subagent "
-        "that Reads a SKILL.md gives you a summary, not a loaded skill."
-    )
+    # Split by what is already in context. Only the reload imperative is suppressed; the topic
+    # line, the names and the delegation clause survive for every hit.
+    loaded = _loaded_skills(data.get("transcript_path"))
+    fresh = [s for s in hits if s not in loaded]
+    already = [s for s in hits if s in loaded]
+
+    parts = ["This turn is about: " + ", ".join(hits) + "."]
+    if fresh:
+        calls = ", ".join("Skill(%s%s)" % (PREFIX, s) for s in fresh)
+        parts.append("Call " + calls + " NOW, in this turn, before writing or running any code -- "
+                     "the API answers you are about to guess at are in them.")
+    if already:
+        parts.append("Already loaded earlier in this session: "
+                     + ", ".join(PREFIX + s for s in already)
+                     + " -- cite them from the context you already hold; do NOT re-invoke Skill() "
+                     "to pull the same body in again.")
+    # EVERY hit, including the already-loaded ones: a subagent inherits neither session-start
+    # context nor this session's loaded bodies. The old message named only what it advised, which
+    # was the same set -- now it is not, so this clause has to say so explicitly.
+    parts.append("If you delegate this work to a subagent, repeat Skill(...) inside the subagent's "
+                 "prompt for EVERY skill named above, including any already loaded here: "
+                 "session-start context does NOT reach subagents, your own loaded bodies do not "
+                 "either, and a subagent that Reads a SKILL.md gives you a summary, not a loaded "
+                 "skill.")
+    msg = " ".join(parts)
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "UserPromptSubmit",
         "additionalContext": MARKER + msg}}))
