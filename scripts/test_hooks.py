@@ -1095,7 +1095,7 @@ def _route(prompt):
         ctx = json.loads(pr.stdout)["hookSpecificOutput"]["additionalContext"]
     except Exception:
         return "UNPARSEABLE"
-    return ",".join(_re.findall(r"iris-interop-skills:([a-z-]+)", ctx))
+    return ",".join(_re.findall(r"iris-interop-skills:([a-z0-9-]+)", ctx))  # 0-9: hl7-schemas (#429)
 
 
 print("\n#243 interop_route coverage")
@@ -2274,6 +2274,58 @@ _c422_both = sorted(set(_c422_flagged) & set(n for _, n in _c422_cards))
 check("no flagged-unmeasured class is a card", 0, len(_c422_both))
 for _n422 in _c422_both:
     print("          - FLAGGED UNMEASURED YET CARDED:", _n422)
+
+
+# --------------------------------------------------------------------------------------
+print("\n#429  a named skill routes; a name that merely CONTAINS a topic word does not")
+print("  {:<38}{:<16}{:<16}{}".format("case", "want", "got", ""))
+
+# Two defects, one fix, and the fix for the first is only safe because of the second.
+# (1) `\bproduction\b` matched inside `...-to-production` and `docs/PRODUCTION.md` -- in Python re
+#     a hyphen and a slash are word boundaries -- so a repo, directory or file name alone routed to
+#     production-lifecycle: 19 of 65 such routes in 1,578 real prompts, 8 of them on turns
+#     unrelated to IRIS where it was the only route.
+# (2) Naming a skill routed it for only 7 of the 16, and production-lifecycle was one of the 7
+#     THROUGH that same `\bproduction\b`. Guarding (1) alone would have broken (2) for it.
+# Replayed over the same 1,578 prompts (2026-10-22), the fix changes 25 routes: the 19 drop, 5
+# gain a skill the prompt names, 1 reorders. Nothing else moves.
+#
+# `_route` above extracted names with `[a-z-]+`, which reads `hl7-schemas` as `hl` -- no test had
+# ever routed to it. (a) is the first that does, which is why that helper changed in this issue.
+
+# (a) every routed skill fires on its own NAME, in every form. Iterated from TOPICS rather than
+#     listed, so a new entry is covered without anyone remembering to add a case. In-process via
+#     _hits(): 88 cases through a subprocess each would triple this job's runtime. (e) below is the
+#     end-to-end proof that main() uses _hits().
+for _s429, _ in _ir.TOPICS:
+    _f429 = ["iris-interop-skills:" + _s429, "Skill(iris-interop-skills:%s)" % _s429,
+             "edit skills/%s/SKILL.md" % _s429, "use the %s skill" % _s429,
+             "carga la skill " + _s429]
+    if "-" in _s429:
+        _f429.append(_s429 + " please")
+    check("named: " + _s429, "[]", str([f for f in _f429 if _s429 not in _ir._hits(f)]))
+
+# (b) the misfires, and the four single-word ids used as ordinary words. A bare single-word id
+#     is deliberately NOT a name; these must stay silent end-to-end.
+for _p429 in ["Trust acme/workshop-from-prompt-to-production too", "see docs/PRODUCTION.md",
+              "fix the commit messages", "do a security review of the branch",
+              "alerting rules in Grafana", "pandas transformations"]:
+    check("silent: " + _p429[:28], "NOTHING", _route(_p429))
+
+# (c) and the word itself must keep routing: bare, dotted, and hyphenated AFTER it. `.` is not in
+#     the guarded set precisely so the two dotted forms survive.
+for _p429 in ["start the production", "check Ens.Production settings", "Demo.Production.Main",
+              "make it production-ready"]:
+    check("routes: " + _p429[:28], True, "production-lifecycle" in _route(_p429).split(","))
+
+# (d) a named skill is never sliced off by MAX. Four topics match here (bpl and soap-bo twice,
+#     transformations and tdd once); lookup-tables, declared 9th, matches only by name. Ranked
+#     with the topics it would be cut; named-first keeps it, and keeps it first.
+_d429 = _route("use the lookup-tables skill to fix the DTL, the BPL router, the SOAP WSDL and a test")
+check("named survives MAX, first", "lookup-tables", _d429.split(",")[0])
+
+# (e) end to end: main() routes on a name that no topic vocabulary matches.
+check("e2e: hl7-schemas by name", "hl7-schemas", _route("use the hl7-schemas skill"))
 
 print("\n{} failure(s)".format(len(failures)))
 for f in failures:
