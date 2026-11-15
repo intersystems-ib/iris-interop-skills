@@ -383,9 +383,13 @@
     "2026-11-13": {
       "count": 13,
       "uniques": 8
+    },
+    "2026-11-14": {
+      "count": 3,
+      "uniques": 2
     }
   },
-  "total_count": 5472,
-  "daily_uniques_sum": 1472,
-  "updated_at": "2026-11-14T10:30:36+00:00"
+  "total_count": 5475,
+  "daily_uniques_sum": 1474,
+  "updated_at": "2026-11-15T10:59:19+00:00"
 }
