@@ -84,6 +84,10 @@ sibling skill for each task. Always load `iris-interop-skills:tdd` as a companio
   name or path — a bare `Skill("messages")` errors with "Unknown skill".
 - `agents/*.md` — four bundled subagents (`interop-builder`, `deploy-smoke-test`,
   `introspect-dont-guess`, `conformance-reviewer`) that auto-register on install. MCP-server-agnostic (no server pinned).
+  `interop-builder` and `deploy-smoke-test` deliberately have no `model:` line: Claude Code then uses
+  `CLAUDE_CODE_SUBAGENT_MODEL` when the user sets it, else the session model. Do not add
+  `model: inherit` back — `inherit` ignores that variable, so a user could not move the two costliest
+  agents off Opus without `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, which also moves forks.
 - `hooks/` — eleven hooks auto-registered via `hooks/hooks.json`: a SessionStart conventions
   bootstrap, a **UserPromptSubmit** topic router (`interop-route`) that names the two or three
   skills the turn actually needs — SessionStart names three FIXED skills before the task is known,

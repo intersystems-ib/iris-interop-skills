@@ -220,6 +220,12 @@ Claude delegate based on the task description:
 The agents are **MCP-server-agnostic** (no server name pinned in their tools), so they work with either
 the `iris-agentic-dev` or `iris-interop-dev` MCP.
 
+**Which model they run on.** `interop-builder` and `deploy-smoke-test` name no model, so they run on
+your session's model unless you set `CLAUDE_CODE_SUBAGENT_MODEL` — for example
+`"env": {"CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"}` in `~/.claude/settings.json` to keep Opus on the main
+thread and build on Sonnet. `introspect-dont-guess` and `conformance-reviewer` say `model: inherit`
+and always run on your session's model.
+
 ### Best practices & worked examples (`BestPractices/`)
 
 - `BestPractices_Interop_IRIS.md` — a synthesis of interoperability patterns,
