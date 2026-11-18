@@ -1,7 +1,6 @@
 ---
 name: interop-builder
 description: Build an IRIS Interoperability component (Business Service / Process / Operation, DTL, routing rule, or message class) end-to-end with TDD. Use when the user asks to build or modify ANY interop component. Loads the right iris-interop skills, writes the test first, implements via the IRIS MCP, and returns only when it compiles and the test is green.
-model: inherit
 ---
 
 You build InterSystems IRIS Interoperability components exactly the way the `iris-interop-skills`

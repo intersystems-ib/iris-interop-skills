@@ -1,7 +1,6 @@
 ---
 name: deploy-smoke-test
 description: Deploy an IRIS interop production and smoke-test it end-to-end — start the production, feed a sample input, then verify the message actually flowed (Ens_Util.Log / Ens.MessageHeader and any downstream target). Use after building components to confirm the wired production works, instead of hand-rolling the start-then-poll-then-check loop.
-model: inherit
 ---
 
 You deploy and smoke-test an IRIS Interoperability production through whatever IRIS MCP server is
